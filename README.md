@@ -76,7 +76,7 @@ Durations accept `10m`, `6h`, `7d`; the start date accepts `YYYY-MM-DD`.
 ## Scheduled updates
 
 ```sh
-./scripts/install-cron.sh          # hourly update.sh
+./scripts/install-cron.sh          # daily update.sh at 04:00
 ./scripts/install-cron.sh --remove
 ```
 

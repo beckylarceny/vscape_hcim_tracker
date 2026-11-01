@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 project=$(pwd)
 update="$project/scripts/update.sh"
 log="$project/update.log"
-line="0 * * * * PATH=/usr/local/bin:/usr/bin:/bin $update >> $log 2>&1"
+line="0 4 * * * PATH=/usr/local/bin:/usr/bin:/bin $update >> $log 2>&1"
 
 if ! command -v crontab >/dev/null 2>&1; then
     echo "crontab not found; install cron first" >&2
@@ -16,7 +16,7 @@ existing=$(crontab -l 2>/dev/null || true)
 
 if [ "${1:-}" = "--remove" ]; then
     printf '%s\n' "$existing" | grep -vF "$update" | crontab - || true
-    echo "removed the hourly update job"
+    echo "removed the daily update job"
     exit 0
 fi
 
@@ -25,5 +25,5 @@ fi
     printf '%s\n' "$line"
 } | sed '/^$/d' | crontab -
 
-echo "installed the hourly update job:"
+echo "installed the daily update job:"
 crontab -l | grep -F "$update"
