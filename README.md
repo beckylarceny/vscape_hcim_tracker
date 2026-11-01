@@ -51,6 +51,10 @@ docker compose exec db psql -U xp_tracker -d xp_tracker \
   -c "ALTER ROLE xp_tracker PASSWORD 'new-password';"
 ```
 
+`reports/` is bind-mounted. The container entrypoint fixes its ownership to
+uid 1000 on startup, so a directory created by Docker as root does not block
+report writes.
+
 ## API rate limits
 
 No quota is documented and `/api/highscores/player/...` returns no rate-limit
