@@ -168,7 +168,7 @@ class RenderTest(unittest.TestCase):
         self.assertIn("&lt;bob&gt;", page)
         self.assertNotIn("<bob>", page)
 
-    def test_skill_links_are_under_the_header(self) -> None:
+    def test_skill_tabs_are_below_the_current_table(self) -> None:
         page = render_player_page(fake_data())
         self.assertIn(
             '<div class="tabs" id="skill-tabs" role="tablist">', page
@@ -177,8 +177,12 @@ class RenderTest(unittest.TestCase):
         self.assertIn('aria-selected="true">overall</button>', page)
         self.assertNotIn('<nav class="skill-nav">', page)
         self.assertLess(
+            page.index('<table class="current">'),
             page.index('id="skill-tabs"'),
-            page.index('<div class="stats">'),
+        )
+        self.assertLess(
+            page.index('id="skill-tabs"'),
+            page.index('<section id="skill-overall"'),
         )
         self.assertIn(".tabs{display:flex", page)
         self.assertIn(".tab-panel[hidden]{display:none}", page)

@@ -261,6 +261,26 @@ class PageTest(unittest.TestCase):
         self.assertIn(".tab-panel[hidden]{display:none}", page)
         self.assertNotIn('<nav class="skill-nav">', page)
 
+    def test_flat_skills_are_grey_tabs(self) -> None:
+        data = self.make_data()
+        flat_chart = ChartData(
+            NOW - 86400,
+            NOW,
+            [(NOW - 86400, 100), (NOW, 100)],
+            [(NOW, 0.0)],
+        )
+        charts = dict(data.charts)
+        charts["attack"] = flat_chart
+        page = render_priority_page(data._replace(charts=charts))
+        self.assertIn(
+            'class="tab flat" type="button" role="tab" id="tab-attack"',
+            page,
+        )
+        self.assertIn(
+            'class="tab" type="button" role="tab" id="tab-overall"', page
+        )
+        self.assertIn(".tab.flat{color:#888}", page)
+
     def test_regular_data_is_marked_and_coloured(self) -> None:
         data = self.make_data()
         chart = ChartData(

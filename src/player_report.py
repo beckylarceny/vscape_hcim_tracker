@@ -634,7 +634,7 @@ h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;overflow:hidden}
-.coverage span{flex:1;background:#A890D0;min-width:1px}
+.coverage span{flex:1;background:#9079B6;min-width:1px}
 .coverage span.zero{background:#8883}
 .range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
 table{width:auto;max-width:100%;border-collapse:collapse;
@@ -661,25 +661,25 @@ figcaption{font-size:.8rem;color:#888;margin-bottom:.25rem}
 .key{font-size:.7rem;color:#888;margin-left:.45rem}
 .key::before{content:"";display:inline-block;width:.55em;height:.55em;
              margin-right:.25em}
-.line-key::before{background:#A890D0}
+.line-key::before{background:#9079B6}
 .area-key::before{background:#7BB59A}
 svg{display:block;width:100%;height:auto}
 svg .grid{stroke:#8884;stroke-width:.5}
-svg .line{fill:none;stroke:#A890D0;stroke-width:1.5;
+svg .line{fill:none;stroke:#9079B6;stroke-width:1.5;
           vector-effect:non-scaling-stroke}
 svg .area{fill:#7BB59A33;stroke:#7BB59A33;stroke-width:1;
           vector-effect:non-scaling-stroke}
-svg .dot{fill:#A890D0}
+svg .dot{fill:#9079B6}
 svg text{fill:#888;font-size:9px}
-svg text.xp{fill:#A890D0}
+svg text.xp{fill:#9079B6}
 svg text.gain{fill:#7BB59A}
 .empty{color:#888;margin:.2rem 0}
 a{color:#7BB59A}
 .to-top{position:fixed;right:1rem;bottom:1rem;z-index:10;padding:.45rem .7rem;
-        background:#A890D0;color:#fff;font-size:.85rem;line-height:1;
+        background:#9079B6;color:#fff;font-size:.85rem;line-height:1;
         text-decoration:none;border:1px solid #8886;border-radius:0;
         box-shadow:0 1px 4px #0003}
-.to-top:hover{background:#8F74BD;color:#fff}
+.to-top:hover{background:#7B659C;color:#fff}
 @media (max-width:52rem){
   .charts,.gain-tables{grid-template-columns:1fr}
 }
@@ -748,7 +748,8 @@ SKILL_TABS_CSS = """
 .tabs{display:flex;flex-wrap:wrap;gap:.3rem;margin:1rem 0 1.5rem}
 .tab{font:inherit;font-size:.85rem;padding:.35rem .8rem;border:1px solid #8886;
      border-radius:0;background:transparent;color:inherit;cursor:pointer}
-.tab[aria-selected="true"]{background:#A890D0;color:#fff;border-color:#A890D0}
+.tab.flat{color:#888}
+.tab[aria-selected="true"]{background:#9079B6;color:#fff;border-color:#9079B6}
 .tab-panel[hidden]{display:none}
 .tab-panel>h2:first-child{margin-top:.6rem}
 """
@@ -777,9 +778,10 @@ SKILL_TAB_SCRIPT = (
 )
 
 
-def skill_tabs_html() -> str:
+def skill_tabs_html(flat: frozenset[str] | set[str] = frozenset()) -> str:
     buttons = "".join(
-        f'<button class="tab" type="button" role="tab" '
+        f'<button class="tab{" flat" if skill in flat else ""}" '
+        f'type="button" role="tab" '
         f'id="tab-{_esc(skill)}" data-skill="{_esc(skill)}" '
         f'aria-controls="skill-{_esc(skill)}" '
         f'aria-selected="{"true" if index == 0 else "false"}">'
@@ -821,10 +823,10 @@ def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
         ),
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         _coverage_bar(data),
-        skill_tabs_html(),
         '<div class="stats">',
         "<h2>Current xp</h2>",
         _current_table(data),
+        skill_tabs_html(),
     ]
 
     for index, skill in enumerate(SKILLS):

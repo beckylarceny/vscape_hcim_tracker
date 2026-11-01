@@ -386,6 +386,11 @@ def render_priority_page(data: PriorityData) -> str:
     feed_href = f"{urllib.parse.quote(slug)}.xml"
     page_href = f"{urllib.parse.quote(slug)}.html"
     player_href = f"../players/{urllib.parse.quote(slug)}.html"
+    flat = {
+        skill
+        for skill in SKILLS
+        if not any(rate for _, rate in data.charts[skill].gains)
+    }
     parts: list[str] = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
@@ -405,7 +410,7 @@ def render_priority_page(data: PriorityData) -> str:
         f'<h2 class="subheading"><a href="{_esc(feed_href)}">rss feed</a></h2>',
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         '<p class="meta">priority report: 10-minute updates, last 24 hours</p>',
-        skill_tabs_html(),
+        skill_tabs_html(flat),
         '<div class="stats">',
     ]
 
