@@ -33,8 +33,8 @@ docker compose up -d --force-recreate
 - logs: `docker compose logs -f collector` or `docker compose logs -f web`
 - stop: `docker compose down` keeps the database
 - delete data: `docker compose down -v`
-- update: `./update.sh` pulls, rebuilds the image and recreates `collector` and
-  `web`; the database container is left running
+- update: `./scripts/update.sh` pulls, rebuilds the image and recreates
+  `collector` and `web`; the database container is left running
 
 Three containers: `db` (PostgreSQL with the `pgdata` volume), `collector` (API
 to database), and `web` (reports and HTTP on port 8000). Only `web` is
@@ -57,10 +57,21 @@ docker compose exec db psql -U xp_tracker -d xp_tracker \
 uid 1000 on startup, so a directory created by Docker as root does not block
 report writes.
 
+## Scheduled updates
+
+```sh
+./scripts/install-cron.sh
+```
+
+Adds one crontab entry that runs `scripts/update.sh` at the start of every
+hour and appends the output to `update.log`. Re-running replaces the entry
+instead of duplicating it. `./scripts/install-cron.sh --remove` deletes it.
+Cron must be installed and the user must be able to run `docker`.
+
 ## Backups
 
 ```sh
-./backup.sh
+./scripts/backup.sh
 ```
 
 Writes a compressed custom-format `pg_dump` to `backups/` on the host. The `db`
@@ -69,7 +80,7 @@ service must be running. Set `BACKUP_DIR` to use another output directory.
 Restore the newest dump in `backups/`:
 
 ```sh
-./restore.sh
+./scripts/restore.sh
 ```
 
 - Copies `backups/` into `/tmp/restore` inside the `db` container.
@@ -80,7 +91,7 @@ Restore the newest dump in `backups/`:
 Restore a specific dump:
 
 ```sh
-./restore.sh backups/xp_tracker_20261101T085521Z.dump
+./scripts/restore.sh backups/xp_tracker_20261101T085521Z.dump
 ```
 
 Environment overrides:
