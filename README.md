@@ -29,7 +29,8 @@ docker compose up -d --build
 
 - page: <http://localhost:8000/>
 - text report: `reports/latest.txt`
-- start/stop: `./scripts/start.sh`, `./scripts/stop.sh`
+- start/stop/restart: `./scripts/start.sh`, `./scripts/stop.sh`,
+  `./scripts/restart.sh`
 - update: `./scripts/update.sh` pulls, rebuilds and recreates `collector` and
   `web`; `db` keeps running
 - logs: `docker compose logs -f collector` or `docker compose logs -f web`
