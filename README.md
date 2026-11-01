@@ -3,6 +3,11 @@
 Builds a PostgreSQL database of hardcore ironman (HCIM) experience history and
 writes a plain-text ranking report.
 
+> **Disclaimer:** This project is entirely AI-generated. It was written by
+> **DeepSeek V4.1 Flash** (`opencode-go/deepseek-v4.1-flash`) running in the
+> OpenCode agent harness. No human wrote the implementation. Review the code
+> before running it against anything you care about.
+
 ## How the history is derived
 
 `GET /api/tracker/player/{username}?time={seconds}` returns how much xp a
@@ -270,3 +275,7 @@ VSCAPE_HCIM_TRACKER_TEST_DSN=postgresql:///xp_tracker_test python -m unittest di
 ```
 
 Cron runs the same command as `--loop` does; use one or the other, not both.
+
+## License
+
+MIT. See `LICENSE`.
