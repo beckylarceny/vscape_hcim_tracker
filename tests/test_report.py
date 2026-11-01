@@ -196,6 +196,16 @@ class HtmlReportTest(unittest.TestCase):
             "padding-bottom:1.25rem;border-bottom:1px solid #8884", page
         )
 
+    def test_player_columns_do_not_squish(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn("minmax(min(32rem,100%),1fr)", page)
+        self.assertIn(
+            "table.past td:nth-child(2),table.best td:nth-child(2)"
+            "{white-space:nowrap}",
+            page,
+        )
+        self.assertIn("@media (max-width:48rem)", page)
+
     def test_no_rounded_corners(self) -> None:
         page = render_html(self.make_data())
         self.assertFalse(re.search(r"border-radius:\s*(?!0\b)\d", page))

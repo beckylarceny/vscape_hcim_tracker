@@ -268,7 +268,7 @@ nav{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.5rem 0 1rem;font-size:.85rem
 h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:uppercase;
    letter-spacing:.04em}
 .tables{display:grid;align-items:start;
-        grid-template-columns:repeat(auto-fit,minmax(min(28rem,100%),1fr));
+        grid-template-columns:repeat(auto-fit,minmax(min(32rem,100%),1fr));
         gap:.75rem 2rem}
 .tables>div{min-width:0;overflow-x:auto}
 table{width:100%;border-collapse:collapse;margin:.25rem 0 1rem;
@@ -281,6 +281,7 @@ th.num{text-align:right}
 td.date{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 table.past th:nth-child(1),table.past td:nth-child(1){width:6%}
 table.past th:nth-child(2),table.past td:nth-child(2){width:56%}
+table.past td:nth-child(2),table.best td:nth-child(2){white-space:nowrap}
 table.past th:nth-child(3),table.past td:nth-child(3){width:38%}
 table.best th:nth-child(1),table.best td:nth-child(1){width:6%}
 table.best th:nth-child(3),table.best td:nth-child(3){width:26%}
@@ -293,7 +294,7 @@ td.rank{width:2.5rem;color:#888}
 tr:nth-child(even) td{background:#8881}
 td.empty{text-align:center;color:#888}
 a{color:inherit}
-@media (max-width:40rem){
+@media (max-width:48rem){
   table{font-size:.85em}
   th,td{padding:.2rem .4rem}
 }
