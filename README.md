@@ -64,15 +64,31 @@ report writes.
 Writes a compressed custom-format `pg_dump` to `backups/` on the host. The `db`
 service must be running. Set `BACKUP_DIR` to use another output directory.
 
-Restore:
+Restore the newest dump in `backups/`:
 
 ```sh
-docker compose exec -T db sh -c \
-  'PGPASSWORD="$POSTGRES_PASSWORD" pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
-  < backups/<file>.dump
+./restore.sh
 ```
 
-Omit `--clean --if-exists` when restoring into an empty database.
+- Copies `backups/` into `/tmp/restore` inside the `db` container.
+- Stops `collector` and `web` for the duration, then starts them again.
+- Runs `pg_restore --clean --if-exists --no-owner --no-privileges`.
+- Prints the restored player and snapshot counts, then removes the staging copy.
+
+Restore a specific dump:
+
+```sh
+./restore.sh backups/xp_tracker_20261101T085521Z.dump
+```
+
+Environment overrides:
+
+- `BACKUP_DIR` - source directory, default `backups`.
+- `RESTORE_DB` - target database, default `$POSTGRES_DB`.
+- `RESTORE_KEEP_SERVICES=1` - leave `collector` and `web` running.
+
+`pg_restore` drops and recreates every object in the target database, so any
+data written after the dump is lost.
 
 ## API rate limits
 
