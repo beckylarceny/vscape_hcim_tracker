@@ -253,6 +253,10 @@ def _chart_data(
         previous_xp = xp
         previous_time = timestamp
 
+    if line and line[-1][0] < now_epoch:
+        # No later observations: hold the last known xp flat to the right edge.
+        line.append((now_epoch, line[-1][1]))
+
     return ChartData(
         start, now_epoch, _thin(line, 180), _thin(gains, 180)
     )

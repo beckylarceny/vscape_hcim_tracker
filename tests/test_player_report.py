@@ -320,6 +320,20 @@ class CollectTest(unittest.TestCase):
         self.assertAlmostEqual(rates[1], 400 / 24)
         self.assertAlmostEqual(rates[0], rates[1])
 
+    def test_total_xp_line_stays_flat_without_new_points(self) -> None:
+        conn = FakeConn(rows(
+            ("overall", NOW - 3 * DAY, 1000),
+            ("overall", NOW - DAY, 2000),
+        ))
+        chart = self.collect(conn).charts["overall"]["week"]
+        self.assertEqual(chart.xp[-1], (NOW, 2000))
+        self.assertEqual(chart.xp[-2], (NOW - DAY, 2000))
+
+    def test_total_xp_line_is_flat_with_one_point(self) -> None:
+        conn = FakeConn(rows(("overall", NOW - DAY, 500)))
+        chart = self.collect(conn).charts["overall"]["day"]
+        self.assertEqual(chart.xp, [(NOW - DAY, 500), (NOW, 500)])
+
     def test_skills_without_snapshots_are_absent(self) -> None:
         conn = FakeConn([])
         data = self.collect(conn)
