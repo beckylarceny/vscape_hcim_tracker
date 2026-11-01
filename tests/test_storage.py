@@ -8,9 +8,11 @@ import unittest
 from pathlib import Path
 
 from src import main, report, storage
-from src.config import SKILLS
+from src.config import SKILLS, build_dsn
 
-DSN = os.environ.get("VSCAPE_HCIM_TRACKER_TEST_DSN")
+DSN = os.environ.get("VSCAPE_HCIM_TRACKER_TEST_DSN") or build_dsn(
+    "xp_tracker_test"
+)
 T1 = 1_700_000_000
 T2 = T1 + 86400
 

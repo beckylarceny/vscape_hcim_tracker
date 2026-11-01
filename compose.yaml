@@ -7,8 +7,11 @@ x-app: &app
     context: .
     dockerfile: Dockerfile
   environment:
-    VSCAPE_HCIM_TRACKER_DSN: postgresql://${POSTGRES_USER:-xp_tracker}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-xp_tracker}
-    VSCAPE_HCIM_TRACKER_TEST_DSN: postgresql://${POSTGRES_USER:-xp_tracker}:${POSTGRES_PASSWORD}@db:5432/xp_tracker_test
+    PGHOST: db
+    PGPORT: "5432"
+    PGUSER: ${POSTGRES_USER:-xp_tracker}
+    PGPASSWORD: ${POSTGRES_PASSWORD}
+    PGDATABASE: ${POSTGRES_DB:-xp_tracker}
     VSCAPE_HCIM_TRACKER_LOG_LEVEL: ${VSCAPE_HCIM_TRACKER_LOG_LEVEL:-INFO}
     VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS: ${VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS:-}
     VSCAPE_HCIM_TRACKER_BASE_URL: ${VSCAPE_HCIM_TRACKER_BASE_URL:-http://localhost:8000}
@@ -32,7 +35,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "PGPASSWORD=\"$${POSTGRES_PASSWORD}\" psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -c 'SELECT 1' >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 12

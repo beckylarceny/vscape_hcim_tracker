@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import urllib.parse
 
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -30,6 +31,27 @@ SKILL_TRACKER_URL = (
     "https://vidyaplace.org/api/tracker/skill/{skill}/{page}"
     "?time={seconds}&ironman={ironman}"
 )
+
+
+def build_dsn(database: str | None = None) -> str | None:
+    """Connection string from DSN or PG* variables, with URI-safe quoting."""
+    if database is None:
+        explicit = os.environ.get("VSCAPE_HCIM_TRACKER_DSN")
+        if explicit:
+            return explicit
+    host = os.environ.get("PGHOST")
+    if not host:
+        return None
+    user = urllib.parse.quote(os.environ.get("PGUSER", ""), safe="")
+    password = urllib.parse.quote(
+        os.environ.get("PGPASSWORD", ""), safe=""
+    )
+    name = urllib.parse.quote(
+        database or os.environ.get("PGDATABASE", ""), safe=""
+    )
+    port = os.environ.get("PGPORT", "5432")
+    auth = f"{user}:{password}@" if user else ""
+    return f"postgresql://{auth}{host}:{port}/{name}"
 
 # Fixed durations, in seconds, used for the "current top gains" and record scans.
 SPANS: dict[str, int] = {

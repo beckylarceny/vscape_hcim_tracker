@@ -26,6 +26,7 @@ from .config import (
     DEFAULT_WORKERS,
     HCIM,
     SKILLS,
+    build_dsn,
     parse_priority_players,
 )
 
@@ -626,8 +627,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dsn",
-        default=os.environ.get("VSCAPE_HCIM_TRACKER_DSN"),
-        help="PostgreSQL connection string (default: $VSCAPE_HCIM_TRACKER_DSN)",
+        default=build_dsn(),
+        help=(
+            "PostgreSQL connection string "
+            "(default: $VSCAPE_HCIM_TRACKER_DSN or PGHOST/PGUSER/PGPASSWORD)"
+        ),
     )
     parser.add_argument(
         "--interval", type=parse_duration, default=DEFAULT_INTERVAL_SECONDS,
@@ -829,7 +833,10 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(message)s",
     )
     if not args.dsn:
-        log.error("no database configured: pass --dsn or set VSCAPE_HCIM_TRACKER_DSN")
+        log.error(
+            "no database configured: pass --dsn or set "
+            "VSCAPE_HCIM_TRACKER_DSN / PGHOST"
+        )
         return 2
 
     args.priority_players = parse_priority_players(args.priority)

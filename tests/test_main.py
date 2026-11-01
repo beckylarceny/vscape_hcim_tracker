@@ -15,6 +15,7 @@ from src.config import (
     HCIM,
     PRIORITY_FILE_ENV,
     SKILLS,
+    build_dsn,
     parse_priority_players,
 )
 
@@ -219,6 +220,50 @@ class ReportThreadTest(unittest.TestCase):
                 time.sleep(0.01)
             stop.set()
         self.assertGreaterEqual(writer.call_count, 1)
+
+
+class DsnTest(unittest.TestCase):
+    def test_explicit_dsn_wins(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"VSCAPE_HCIM_TRACKER_DSN": "postgresql:///x"},
+            clear=True,
+        ):
+            self.assertEqual(build_dsn(), "postgresql:///x")
+
+    def test_pg_variables_are_url_encoded(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "PGHOST": "db",
+                "PGPORT": "5432",
+                "PGUSER": "u",
+                "PGPASSWORD": "p@ss:word",
+                "PGDATABASE": "xp_tracker",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                build_dsn(),
+                "postgresql://u:p%40ss%3Aword@db:5432/xp_tracker",
+            )
+
+    def test_database_override_uses_pg_variables(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "VSCAPE_HCIM_TRACKER_DSN": "postgresql:///main",
+                "PGHOST": "db",
+                "PGUSER": "u",
+                "PGPASSWORD": "p@ss",
+                "PGDATABASE": "main",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                build_dsn("xp_tracker_test"),
+                "postgresql://u:p%40ss@db:5432/xp_tracker_test",
+            )
 
 
 class PriorityListTest(unittest.TestCase):

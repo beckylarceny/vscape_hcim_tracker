@@ -40,6 +40,17 @@ published. The first collector run backfills one year: about 136,000 requests,
 roughly 9.5 hours at the default 4 req/s. Later runs fetch the current 6h
 checkpoint plus retries. Reports regenerate every minute.
 
+Set `POSTGRES_PASSWORD` before the first start. Postgres applies it only when
+the `pgdata` volume is initialized. If the password changes later, reset the
+database or update the role:
+
+```sh
+docker compose down -v    # deletes stored xp
+# or, to keep the data:
+docker compose exec db psql -U xp_tracker -d xp_tracker \
+  -c "ALTER ROLE xp_tracker PASSWORD 'new-password';"
+```
+
 ## API rate limits
 
 No quota is documented and `/api/highscores/player/...` returns no rate-limit
