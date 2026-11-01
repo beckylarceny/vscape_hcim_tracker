@@ -218,7 +218,7 @@ def render_text(data: ReportData) -> str:
         ("backfill interval", _hours(data.interval)),
         ("live interval", _hours(data.collect_interval)),
         ("priority interval", f"{DEFAULT_PRIORITY_INTERVAL_SECONDS // 60} minutes"),
-        ("lookback", _years_months(data.lookback)),
+        ("lookback interval", _years_months(data.lookback)),
         ("players logged", _players_line(data)),
     ):
         lines.append(f"{name + ':':<20}{value}")
