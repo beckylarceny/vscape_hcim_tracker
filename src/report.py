@@ -258,7 +258,7 @@ h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
 .sub{margin:.2rem 0 .8rem;font-size:1.05rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;border-radius:0;overflow:hidden}
-.coverage span{flex:1;background:#3b82f6;min-width:1px}
+.coverage span{flex:1;background:#A890D0;min-width:1px}
 .coverage span.zero{background:#8883;opacity:1}
 .range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
 .find{display:flex;gap:.5rem;margin:1.25rem 0 2.5rem;
@@ -267,7 +267,7 @@ h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
             font:inherit;color:inherit;background:transparent;
             border:1px solid #8886;border-radius:0}
 .find button{padding:.4rem .9rem;font:inherit;border:1px solid #8886;
-             border-radius:0;background:#3b82f6;color:#fff;cursor:pointer}
+             border-radius:0;background:#A890D0;color:#fff;cursor:pointer}
 h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:lowercase;
    letter-spacing:.04em}
 h2,h3,h4{text-align:center}
@@ -297,12 +297,12 @@ table.best.day th:nth-child(4),table.best.day td:nth-child(4){width:26%}
 td.rank{width:2.5rem;color:#888}
 tr:nth-child(even) td{background:#8881}
 td.empty{text-align:center;color:#888}
-a{color:inherit}
+a{color:#7BB59A}
 .to-top{position:fixed;right:1rem;bottom:1rem;z-index:10;padding:.45rem .7rem;
-        background:#3b82f6;color:#fff;font-size:.85rem;line-height:1;
+        background:#A890D0;color:#fff;font-size:.85rem;line-height:1;
         text-decoration:none;border:1px solid #8886;border-radius:0;
         box-shadow:0 1px 4px #0003}
-.to-top:hover{background:#1d4ed8;color:#fff}
+.to-top:hover{background:#8F74BD;color:#fff}
 @media (max-width:48rem){
   table{font-size:.8em;table-layout:fixed;width:calc(100% - 2rem);
         margin-left:auto;margin-right:auto}
