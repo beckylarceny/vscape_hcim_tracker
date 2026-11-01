@@ -105,16 +105,16 @@ class DataTest(unittest.TestCase):
 
     def test_regular_point_inside_priority_interval_is_ignored(self) -> None:
         priority = rows(
-            ("overall", NOW - 1800, 1000),
+            ("overall", NOW - 600, 1000),
             ("overall", NOW, 1100),
         )
-        regular = rows(("overall", NOW - 900, 1050))
+        regular = rows(("overall", NOW - 300, 1050))
         conn = FakeConn(priority, regular=regular)
         chart = collect_priority_data(conn, "alice", NOW, "generated").charts[
             "overall"
         ]
-        self.assertNotIn(NOW - 900, chart.regular_xp)
-        self.assertNotIn(NOW - 900, [stamp for stamp, _ in chart.xp])
+        self.assertNotIn(NOW - 300, chart.regular_xp)
+        self.assertNotIn(NOW - 300, [stamp for stamp, _ in chart.xp])
 
 
 class EventTest(unittest.TestCase):
@@ -189,7 +189,7 @@ class PageTest(unittest.TestCase):
         page = render_priority_page(self.make_data())
         self.assertEqual(page.count("<svg"), len(SKILLS))
         self.assertIn('viewBox="0 0 720 200"', page)
-        self.assertIn("priority report: 30-minute updates", page)
+        self.assertIn("priority report: 10-minute updates", page)
         self.assertIn(
             '<h2 class="subheading"><a href="alice.xml">rss feed</a></h2>',
             page,

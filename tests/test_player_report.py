@@ -149,8 +149,7 @@ class RenderTest(unittest.TestCase):
         page = render_player_page(fake_data())
         # 23 real skills, each at 1,000 xp = level 9.
         self.assertIn(
-            '<a href="#skill-overall">overall</a></td>'
-            '<td class="num">207</td>', page
+            '<tr><td>overall</td><td class="num">207</td>', page
         )
         self.assertIn("current xp: 1,000 (total level 207)", page)
 
@@ -169,11 +168,21 @@ class RenderTest(unittest.TestCase):
         self.assertIn("&lt;bob&gt;", page)
         self.assertNotIn("<bob>", page)
 
-    def test_current_table_links_skills_to_sections(self) -> None:
+    def test_skill_links_are_under_the_header(self) -> None:
         page = render_player_page(fake_data())
+        self.assertIn('<nav class="skill-nav">', page)
         self.assertIn('<a href="#skill-attack">attack</a>', page)
         self.assertIn('<a href="#skill-overall">overall</a>', page)
-        self.assertIn('<section id="skill-attack">', page)
+        self.assertLess(
+            page.index('class="skill-nav"'),
+            page.index('<div class="stats">'),
+        )
+        self.assertIn(".skill-nav{display:flex", page)
+
+    def test_current_table_skills_are_not_links(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn("<tr><td>attack</td>", page)
+        self.assertNotIn('<tr><td><a href="#skill-attack">', page)
 
     def test_current_table_is_narrow(self) -> None:
         page = render_player_page(fake_data())
@@ -222,19 +231,19 @@ class RenderTest(unittest.TestCase):
             page.index("data coverage:"), page.index("<h2>Current xp</h2>")
         )
 
-    def test_all_rankings_link_is_separated(self) -> None:
+    def test_all_rankings_is_a_top_backlink(self) -> None:
         page = render_player_page(fake_data())
-        link = (
-            '<p class="sub"><a href="../latest.html">'
-            "all rankings</a></p>"
-        )
-        self.assertIn(link, page)
         self.assertIn(
-            ".sub{margin:1rem 0 1.5rem;padding-bottom:.9rem;", page
+            '<div class="backlinks"><p class="sub">'
+            '<a href="../latest.html">all rankings</a></p></div>',
+            page,
         )
-        self.assertIn("border-bottom:1px solid #8884}", page)
-        self.assertLess(page.index(link), page.index('<div class="stats">'))
-        self.assertNotIn('class="topnav"', page)
+        self.assertLess(
+            page.index('class="backlinks"'), page.index("<h1>")
+        )
+        self.assertIn(
+            ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
+        )
 
     def test_headings_after_current_xp_are_centered(self) -> None:
         page = render_player_page(fake_data())

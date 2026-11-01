@@ -106,7 +106,7 @@ windows still have exactly the nominal span.
 
 ## Priority players
 
-Priority players are fetched every 30 minutes, in addition to the normal 6h
+Priority players are fetched every 10 minutes, in addition to the normal 6h
 grid. The list lives in `priority_players.json` at the project root:
 
 ```json
@@ -114,7 +114,7 @@ grid. The list lives in `priority_players.json` at the project root:
 ```
 
 The default is `cojultad`. The collector re-reads the file before every
-30-minute fetch and the web container re-reads it every report cycle, so edits
+10-minute fetch and the web container re-reads it every report cycle, so edits
 apply without a restart. Compose bind-mounts the file into both services.
 
 Environment or CLI values override the file:
@@ -128,7 +128,7 @@ python -m src --priority alice --priority bob
 `VSCAPE_HCIM_TRACKER_PRIORITY_FILE` points at a different JSON file. The
 collector service must run with `--loop`. High-frequency rows go into
 `priority_snapshots` and `priority_checkpoints` and are deleted after 24 hours;
-normal history is untouched. At most 48 checkpoints and 48 x 24 snapshot rows
+normal history is untouched. At most 144 checkpoints and 144 x 24 snapshot rows
 are kept per priority player.
 
 Priority reports live under `reports/priority/` and are served at
@@ -138,9 +138,9 @@ Priority reports live under `reports/priority/` and are served at
   and feeds. The general report links here.
 - `<name>.html`: current xp and one large chart per skill for the last 24 hours,
   with the total xp line and the xp/hour area. Time ticks use `hh:mm`. Missing
-  30-minute samples are filled from the normal snapshot history and drawn in
+  10-minute samples are filled from the normal snapshot history and drawn in
   orange.
-- `<name>.xml`: RSS 2.0 feed with one item per 30-minute fetch where at least one
+- `<name>.xml`: RSS 2.0 feed with one item per 10-minute fetch where at least one
   xp value changed. The feed covers the retained day.
 
 Each priority player's normal player page also links to their priority report,

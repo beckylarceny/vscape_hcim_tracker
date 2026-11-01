@@ -224,7 +224,7 @@ def collect_priority_player(
     timestamp: int,
     limiter: RateLimiter,
 ) -> dict[str, int]:
-    """Fetch one 30-minute priority checkpoint and store it."""
+    """Fetch one 10-minute priority checkpoint and store it."""
     stats = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
     conn = storage.connect(dsn)
     try:
@@ -297,7 +297,7 @@ def collect_priority_player(
 def collect_priority_once(
     args: argparse.Namespace, dsn: str, limiter: RateLimiter
 ) -> dict[str, int]:
-    """Fetch the current 30-minute slot for every priority player, then prune."""
+    """Fetch the current 10-minute slot for every priority player, then prune."""
     totals = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
     names = list(getattr(args, "priority_players", ()))
 
@@ -360,7 +360,7 @@ def _priority_loop(
 def start_priority_thread(
     args: argparse.Namespace, dsn: str, limiter: RateLimiter
 ) -> threading.Event:
-    """Prune and collect priority players every 30 minutes."""
+    """Prune and collect priority players every 10 minutes."""
     stop = threading.Event()
     thread = threading.Thread(
         target=_priority_loop,

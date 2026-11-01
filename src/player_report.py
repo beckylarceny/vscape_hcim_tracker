@@ -555,7 +555,7 @@ def _current_table(data: PlayerData) -> str:
         else:
             level = str(level_for_xp(value))
         rows.append(
-            f'<tr><td><a href="#skill-{_esc(skill)}">{_esc(skill)}</a></td>'
+            f"<tr><td>{_esc(skill)}</td>"
             f'<td class="num">{level}</td>'
             f'<td class="num">{shown}</td></tr>'
         )
@@ -625,9 +625,14 @@ h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
 .stats h2,.stats h3,.stats h4{text-align:center}
 .sub{margin:1rem 0 1.5rem;padding-bottom:.9rem;
      border-bottom:1px solid #8884}
+.backlinks{margin:-2rem 0 1.75rem;text-align:center}
+.backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}
+.backlinks .sub + .sub{margin-top:.15rem}
 .subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
             border:0;padding:0}
 .priority-link{margin:.1rem 0 .9rem}
+.skill-nav{display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:1rem 0 1.5rem;
+           font-size:.85rem}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;overflow:hidden}
@@ -682,6 +687,7 @@ a{color:inherit}
 }
 @media (max-width:40rem){
   body{padding:1.25rem .85rem}
+  .backlinks{margin-top:-1.25rem}
   table{font-size:.85em}
   th,td{padding:.2rem .4rem}
 }
@@ -747,6 +753,9 @@ def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         f"<title>{_esc(data.username.lower())} - xp tracker</title>",
         f"<style>{_PLAYER_CSS}</style></head><body id=\"top\">",
+        '<div class="backlinks">'
+        '<p class="sub"><a href="../latest.html">all rankings</a></p>'
+        "</div>",
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
         "Vidyascape highscores</a></h2>",
@@ -760,7 +769,12 @@ def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
         ),
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         _coverage_bar(data),
-        '<p class="sub"><a href="../latest.html">all rankings</a></p>',
+        '<nav class="skill-nav">'
+        + " ".join(
+            f'<a href="#skill-{_esc(skill)}">{_esc(skill)}</a>'
+            for skill in SKILLS
+        )
+        + "</nav>",
         '<div class="stats">',
         "<h2>Current xp</h2>",
         _current_table(data),

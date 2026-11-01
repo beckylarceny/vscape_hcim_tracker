@@ -208,6 +208,27 @@ class HtmlReportTest(unittest.TestCase):
             '<a href="priority/index.html">priority players</a>', page
         )
 
+    def test_report_links_are_spaced_like_player_links(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn(
+            ".sub{margin:.2rem 0 .8rem;font-size:1.05rem}", page
+        )
+
+    def test_backlinks_are_at_the_top(self) -> None:
+        page = render_html(self.make_data())
+        self.assertLess(
+            page.index('class="backlinks"'), page.index("<h1>")
+        )
+        self.assertIn(
+            ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
+        )
+        self.assertIn(
+            '<a href="latest.txt">text report</a>', page
+        )
+        self.assertIn(
+            '<a href="priority/index.html">priority players</a>', page
+        )
+
     def test_player_columns_do_not_squish(self) -> None:
         page = render_html(self.make_data())
         self.assertIn("minmax(min(32rem,100%),1fr)", page)

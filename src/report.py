@@ -251,7 +251,10 @@ h2{font-size:1.5rem;margin:2.75rem 0 .6rem;border-bottom:1px solid #8884;
    padding-bottom:.3rem}
 h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
-.sub{margin:.25rem 0 1.3rem;font-size:1.05rem}
+.sub{margin:.2rem 0 .8rem;font-size:1.05rem}
+.backlinks{margin:-2rem 0 1.75rem;text-align:center}
+.backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}
+.backlinks .sub + .sub{margin-top:.15rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;border-radius:0;overflow:hidden}
 .coverage span{flex:1;background:#3b82f6;min-width:1px}
@@ -478,9 +481,11 @@ def render_html(data: ReportData) -> str:
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         f"<title>xp tracker - {_esc(_date(data.now_epoch))}</title>",
         f"<style>{_CSS}</style></head><body id=\"top\">",
+        '<div class="backlinks">'
+        '<p class="sub"><a href="latest.txt">text report</a></p>'
+        '<p class="sub"><a href="priority/index.html">priority players</a></p>'
+        "</div>",
         "<h1>XP Tracker</h1>",
-        '<p class="sub"><a href="latest.txt">text report</a></p>',
-        '<p class="sub"><a href="priority/index.html">priority players</a></p>',
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         f'<p class="meta">players: {data.player_count}'
         + (

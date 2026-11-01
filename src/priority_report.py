@@ -32,6 +32,9 @@ from .player_report import (
 from .storage import as_datetime, canonical_username
 
 WINDOW_SECONDS = DEFAULT_PRIORITY_RETENTION_SECONDS
+MAX_FEED_EVENTS = (
+    DEFAULT_PRIORITY_RETENTION_SECONDS // DEFAULT_PRIORITY_INTERVAL_SECONDS
+)
 
 
 class Event(NamedTuple):
@@ -242,7 +245,7 @@ def collect_events(
         if epoch >= start
     ]
     events.sort(reverse=True)
-    return events[:50]
+    return events[:MAX_FEED_EVENTS]
 
 
 def _gains_text(changes: tuple[tuple[str, int], ...]) -> str:
@@ -291,7 +294,7 @@ def render_feed(
         "<channel>"
         f"<title>{_esc(username)} priority xp</title>"
         f"<link>{_esc(page_url)}</link>"
-        f"<description>30-minute xp updates for {_esc(username)}</description>"
+        f"<description>10-minute xp updates for {_esc(username)}</description>"
         f"<lastBuildDate>{last_build}</lastBuildDate>"
         f'<atom:link href="{_esc(feed_url)}" rel="self" '
         'type="application/rss+xml"/>'
@@ -303,8 +306,6 @@ def render_feed(
 _PRIORITY_CSS = """
 figure.big{margin:.5rem 0 1.75rem;padding:.6rem .7rem .4rem}
 figure.big figcaption{text-align:center}
-.skill-nav{display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:1rem 0 1.5rem;
-           font-size:.85rem}
 svg .line.regular{stroke:#f59e0b;stroke-dasharray:4 3}
 svg .area.regular{fill:#f59e0b33;stroke:#f59e0b33}
 svg .dot.regular{fill:#f59e0b}
@@ -339,15 +340,15 @@ def render_priority_page(data: PriorityData) -> str:
         f'title="{_esc(data.username)} priority xp" href="{_esc(feed_href)}">',
         f"<style>{_PLAYER_CSS}{_PRIORITY_CSS}</style></head>"
         '<body id="top">',
+        '<div class="backlinks"><p class="sub">'
+        '<a href="../latest.html">all rankings</a> · '
+        f'<a href="{_esc(player_href)}">player page</a></p></div>',
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
         "vidyascape highscores</a></h2>",
         f'<h2 class="subheading"><a href="{_esc(feed_href)}">rss feed</a></h2>',
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
-        '<p class="meta">priority report: 30-minute updates, last 24 hours</p>',
-        '<p class="sub">'
-        '<a href="../latest.html">all rankings</a> · '
-        f'<a href="{_esc(player_href)}">player page</a></p>',
+        '<p class="meta">priority report: 10-minute updates, last 24 hours</p>',
         '<nav class="skill-nav">'
         + " ".join(
             f'<a href="#skill-{_esc(skill)}">{_esc(skill)}</a>'
@@ -417,8 +418,9 @@ def render_priority_index(players: list[str]) -> str:
         f"<style>{_PLAYER_CSS}"
         "ul{max-width:44rem;margin:1rem auto;padding-left:1.4rem}"
         "</style></head><body id=\"top\">",
+        '<div class="backlinks"><p class="sub">'
+        '<a href="../latest.html">all rankings</a></p></div>',
         "<h1>priority players</h1>",
-        '<p class="sub"><a href="../latest.html">all rankings</a></p>',
         f"<ul>{items}</ul>",
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>",
