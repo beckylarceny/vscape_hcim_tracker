@@ -552,7 +552,9 @@ h3{font-size:1rem;margin:1.2rem 0 .3rem;text-transform:lowercase;
    letter-spacing:.04em;color:#888}
 h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
    letter-spacing:.04em}
-.sub{margin:.25rem 0 1rem}
+.stats h2,.stats h3,.stats h4{text-align:center}
+.sub{margin:1rem 0 1.5rem;padding-bottom:.9rem;
+     border-bottom:1px solid #8884}
 .subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
             border:0;padding:0}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
@@ -680,6 +682,7 @@ def render_player_page(data: PlayerData) -> str:
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         _coverage_bar(data),
         '<p class="sub"><a href="../latest.html">all rankings</a></p>',
+        '<div class="stats">',
         "<h2>Current xp</h2>",
         _current_table(data),
     ]
@@ -723,6 +726,7 @@ def render_player_page(data: PlayerData) -> str:
         parts.append("</div>")
         parts.append("</section>")
 
+    parts.append("</div>")
     parts.append(
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"

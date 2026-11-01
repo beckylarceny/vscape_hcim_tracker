@@ -207,6 +207,25 @@ class RenderTest(unittest.TestCase):
             page.index("data coverage:"), page.index("<h2>Current xp</h2>")
         )
 
+    def test_all_rankings_link_is_separated(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn(
+            ".sub{margin:1rem 0 1.5rem;padding-bottom:.9rem;", page
+        )
+        self.assertIn("border-bottom:1px solid #8884}", page)
+
+    def test_headings_after_current_xp_are_centered(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn(".stats h2,.stats h3,.stats h4{text-align:center}", page)
+        self.assertLess(
+            page.index('<div class="stats">'),
+            page.index("<h2>Current xp</h2>"),
+        )
+        self.assertLess(
+            page.index('class="subheading"'),
+            page.index('<div class="stats">'),
+        )
+
     def test_empty_history_renders_no_data(self) -> None:
         data = fake_data()
         empty = data._replace(
