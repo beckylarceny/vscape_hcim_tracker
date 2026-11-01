@@ -264,7 +264,12 @@ h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
             border:1px solid #8886;border-radius:0}
 .find button{padding:.4rem .9rem;font:inherit;border:1px solid #8886;
              border-radius:0;background:#3b82f6;color:#fff;cursor:pointer}
-nav{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.5rem 0 1rem;font-size:.85rem}
+.tabs{display:flex;flex-wrap:wrap;gap:.3rem;margin:1.5rem 0 1rem}
+.tab{font:inherit;font-size:.85rem;padding:.35rem .8rem;border:1px solid #8886;
+     border-radius:0;background:transparent;color:inherit;cursor:pointer}
+.tab[aria-selected="true"]{background:#3b82f6;color:#fff;border-color:#3b82f6}
+.tab-panel[hidden]{display:none}
+.tab-panel>h2:first-child{margin-top:.6rem}
 h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:lowercase;
    letter-spacing:.04em}
 h2,h3,h4{text-align:center}
@@ -496,14 +501,23 @@ def render_html(data: ReportData) -> str:
         _player_finder(data),
     ]
 
-    nav = " ".join(
-        f'<a href="#skill-{_esc(skill)}">{_esc(skill)}</a>'
-        for skill in SKILLS
-    )
-    parts.append(f"<nav>{nav}</nav>")
+    parts.append('<div class="tabs" id="skill-tabs" role="tablist">')
+    for index, skill in enumerate(SKILLS):
+        selected = "true" if index == 0 else "false"
+        parts.append(
+            f'<button class="tab" type="button" role="tab" '
+            f'id="tab-{_esc(skill)}" data-skill="{_esc(skill)}" '
+            f'aria-controls="skill-{_esc(skill)}" '
+            f'aria-selected="{selected}">{_esc(skill)}</button>'
+        )
+    parts.append("</div>")
 
-    for skill in SKILLS:
-        parts.append(f'<section id="skill-{_esc(skill)}">')
+    for index, skill in enumerate(SKILLS):
+        hidden = "" if index == 0 else " hidden"
+        parts.append(
+            f'<section id="skill-{_esc(skill)}" class="tab-panel" '
+            f'role="tabpanel" aria-labelledby="tab-{_esc(skill)}"{hidden}>'
+        )
         parts.append(f"<h2>{_esc(skill)}</h2>")
         parts.append("<h3>Past</h3>")
         parts.append('<div class="tables">')
@@ -524,6 +538,28 @@ def render_html(data: ReportData) -> str:
         parts.append("</div>")
         parts.append("</section>")
 
+    parts.append(
+        "<script>"
+        "const TABS=document.querySelectorAll('[role=tab]');"
+        "const PANELS=document.querySelectorAll('.tab-panel');"
+        "function showSkill(name){"
+        "TABS.forEach(function(tab){"
+        "tab.setAttribute('aria-selected',"
+        "tab.dataset.skill===name?'true':'false');});"
+        "PANELS.forEach(function(panel){"
+        "panel.hidden=panel.id!=='skill-'+name;});"
+        "if(location.hash!=='#skill-'+name){"
+        "history.replaceState(null,'','#skill-'+name);}}"
+        "TABS.forEach(function(tab){"
+        "tab.addEventListener('click',function(){"
+        "showSkill(tab.dataset.skill);"
+        "const bar=document.getElementById('skill-tabs');"
+        "if(bar.getBoundingClientRect().top<0){bar.scrollIntoView();}"
+        "});});"
+        "var initial=(location.hash||'').replace('#skill-','');"
+        "if(document.getElementById('skill-'+initial)){showSkill(initial);}"
+        "</script>"
+    )
     parts.append(
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"

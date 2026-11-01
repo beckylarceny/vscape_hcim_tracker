@@ -200,6 +200,31 @@ class HtmlReportTest(unittest.TestCase):
             "padding-bottom:1.25rem;border-bottom:1px solid #8884", page
         )
 
+    def test_skills_are_tabs(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn(
+            '<div class="tabs" id="skill-tabs" role="tablist">', page
+        )
+        self.assertIn('data-skill="overall"', page)
+        self.assertIn('aria-selected="true">overall</button>', page)
+        self.assertNotIn("<nav>", page)
+        self.assertNotIn('<a href="#skill-overall">', page)
+
+    def test_only_the_first_tab_panel_is_visible(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn(
+            '<section id="skill-overall" class="tab-panel" '
+            'role="tabpanel" aria-labelledby="tab-overall">',
+            page,
+        )
+        self.assertIn(
+            '<section id="skill-attack" class="tab-panel" '
+            'role="tabpanel" aria-labelledby="tab-attack" hidden>',
+            page,
+        )
+        self.assertIn("function showSkill(name)", page)
+        self.assertIn(".tab-panel[hidden]{display:none}", page)
+
     def test_back_to_top_button(self) -> None:
         page = render_html(self.make_data())
         self.assertIn('<body id="top">', page)
