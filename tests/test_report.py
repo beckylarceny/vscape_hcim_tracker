@@ -206,6 +206,20 @@ class HtmlReportTest(unittest.TestCase):
         )
         self.assertIn("@media (max-width:48rem)", page)
 
+    def test_mobile_tables_fit_the_viewport(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn("table{font-size:.8em;table-layout:fixed}", page)
+        self.assertIn(
+            "table.past td:nth-child(2),table.best td:nth-child(2)"
+            "{white-space:normal}",
+            page,
+        )
+        self.assertIn(
+            "table.best.wide th:nth-child(3),"
+            "table.best.wide td:nth-child(3){width:28%}",
+            page,
+        )
+
     def test_no_rounded_corners(self) -> None:
         page = render_html(self.make_data())
         self.assertFalse(re.search(r"border-radius:\s*(?!0\b)\d", page))
