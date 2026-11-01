@@ -393,6 +393,7 @@ def render_priority_page(data: PriorityData) -> str:
         '<body id="top">',
         '<div class="backlinks"><p class="sub">'
         '<a href="../latest.html">all rankings</a> · '
+        '<a href="index.html">priority players</a> · '
         f'<a href="{_esc(player_href)}">player page</a></p></div>',
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'

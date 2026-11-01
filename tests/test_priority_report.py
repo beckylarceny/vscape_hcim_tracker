@@ -217,6 +217,9 @@ class PageTest(unittest.TestCase):
         )
         self.assertEqual(page.count('class="subheading"'), 2)
         self.assertIn('href="../players/alice.html"', page)
+        self.assertIn(
+            '<a href="index.html">priority players</a>', page
+        )
         self.assertIn('type="application/rss+xml"', page)
 
     def test_time_axis_uses_hh_mm_ticks(self) -> None:
