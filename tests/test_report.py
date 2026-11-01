@@ -208,7 +208,9 @@ class HtmlReportTest(unittest.TestCase):
 
     def test_mobile_tables_fit_the_viewport(self) -> None:
         page = render_html(self.make_data())
-        self.assertIn("table{font-size:.8em;table-layout:fixed}", page)
+        self.assertIn("table{font-size:.8em;table-layout:fixed;", page)
+        self.assertIn("width:calc(100% - 2rem)", page)
+        self.assertIn("margin-left:auto;margin-right:auto", page)
         self.assertIn(
             "table.past td:nth-child(2),table.best td:nth-child(2)"
             "{white-space:normal}",

@@ -295,7 +295,8 @@ tr:nth-child(even) td{background:#8881}
 td.empty{text-align:center;color:#888}
 a{color:inherit}
 @media (max-width:48rem){
-  table{font-size:.8em;table-layout:fixed}
+  table{font-size:.8em;table-layout:fixed;width:calc(100% - 2rem);
+        margin-left:auto;margin-right:auto}
   th,td{padding:.15rem .3rem}
   table.past td:nth-child(2),table.best td:nth-child(2){white-space:normal}
   table.best.wide th:nth-child(2),table.best.wide td:nth-child(2){width:20%}
