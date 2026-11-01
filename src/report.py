@@ -467,7 +467,7 @@ def _player_finder(data: ReportData) -> str:
         "const name=form.player.value.trim();"
         "const url=PLAYERS[name.toLowerCase()];"
         "if(!url){alert('unknown player: '+name);return false;}"
-        "window.location.href=url;return false;}</script>"
+        "window.open(url,'_blank','noopener');return false;}</script>"
     )
 
 

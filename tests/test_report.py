@@ -170,6 +170,10 @@ class HtmlReportTest(unittest.TestCase):
             '"fuck jagex": "players/Fuck_Jagex.html"',
             page,
         )
+        self.assertIn(
+            "window.open(url,'_blank','noopener')", page
+        )
+        self.assertNotIn("location.href", page)
 
     def test_coverage_bar_renders_runs(self) -> None:
         page = render_html(self.make_data())

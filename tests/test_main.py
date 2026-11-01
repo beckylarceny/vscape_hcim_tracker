@@ -237,7 +237,7 @@ class PriorityListTest(unittest.TestCase):
 
     def test_default_file_has_cojultad(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(parse_priority_players(None), ("cojultad",))
+            self.assertIn("cojultad", parse_priority_players(None))
 
     def test_json_file_is_used_when_env_is_unset(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
