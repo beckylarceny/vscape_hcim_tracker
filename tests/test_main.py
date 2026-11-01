@@ -89,107 +89,143 @@ class LookbackTest(unittest.TestCase):
         )
 
 
-class CollectPlayerTest(unittest.TestCase):
+class CollectAllTest(unittest.TestCase):
     def setUp(self) -> None:
         self.conn = MagicMock()
         self.conn.close = MagicMock()
         self.limiter = main.RateLimiter(0)
+        self.calls: list[tuple[str, int]] = []
 
-    def collect(self, fetched, gains, grid=(T1, T2), last_xp=None):
-        patches = [
-            patch.object(main.storage, "connect", return_value=self.conn),
-            patch.object(main.storage, "upsert_players"),
-            patch.object(
-                main.storage, "fetched_checkpoint_times", return_value=set()
-            ),
-            patch.object(
-                main.storage, "latest_xp_by_skill",
-                return_value=dict(last_xp or {}),
-            ),
-            patch.object(main.storage, "insert_snapshots"),
-            patch.object(main.storage, "insert_checkpoints"),
-            patch.object(main.api, "fetch_player_xp", return_value=fetched),
-            patch.object(main.api, "fetch_player_gains", side_effect=gains),
-        ]
-        with patches[0], patches[1] as upsert, patches[2], patches[3], \
-                patches[4] as insert, patches[5] as checkpoints, \
-                patches[6], patches[7]:
-            stats = main.collect_player(
-                "dsn", "alice", list(grid), self.limiter
+    def run_collect(
+        self, players, grid, fetch_xp, fetch_gains,
+        done=None, last=None,
+    ):
+        def gains(name, timestamp, limiter):
+            self.calls.append((name, timestamp))
+            return (name, fetch_gains(name, timestamp))
+
+        with patch.object(main.storage, "connect", return_value=self.conn), \
+                patch.object(main.storage, "ensure_schema"), \
+                patch.object(main.storage, "upsert_players") as upsert, \
+                patch.object(
+                    main.storage, "checkpoint_times_by_player",
+                    return_value=dict(done or {}),
+                ), \
+                patch.object(
+                    main.storage, "latest_xp_by_skill",
+                    side_effect=lambda conn, name: dict((last or {}).get(name, {})),
+                ), \
+                patch.object(
+                    main.storage, "insert_snapshots"
+                ) as insert, \
+                patch.object(
+                    main.storage, "insert_checkpoint_pairs"
+                ) as pairs, \
+                patch.object(
+                    main.api, "fetch_player_xp",
+                    side_effect=lambda name, wait=None: fetch_xp(name),
+                ), \
+                patch.object(main, "_fetch_gains", side_effect=gains):
+            stats = main.collect_all(
+                "dsn", list(players), list(grid), 1, self.limiter
             )
-        return stats, upsert, insert, checkpoints
+        return stats, upsert, insert, pairs
 
-    def test_hcim_account_is_verified_then_recorded(self) -> None:
-        stats, upsert, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)), [xp(10), xp(20)]
+    def test_interval_major_newest_first(self) -> None:
+        stats, upsert, insert, pairs = self.run_collect(
+            ["alice", "bob"],
+            [T2, T1],
+            lambda name: (HCIM, xp(1000)),
+            lambda name, timestamp: xp(10),
+        )
+        self.assertEqual(stats["players"], 2)
+        self.assertEqual(stats["rows"], 2 * len(SKILLS))
+        upsert.assert_called_once_with(
+            self.conn, [("alice", HCIM), ("bob", HCIM)]
+        )
+        self.assertEqual(
+            self.calls,
+            [("alice", T2), ("bob", T2), ("alice", T1), ("bob", T1)],
+        )
+        self.assertEqual(
+            [call.args[1] for call in pairs.call_args_list],
+            [[("alice", T2), ("bob", T2)], [("alice", T1), ("bob", T1)]],
+        )
+
+    def test_verification_and_failures_are_isolated(self) -> None:
+        def fetch_xp(name):
+            if name == "bob":
+                return None
+            if name == "carol":
+                raise api.ApiError("503")
+            if name == "dave":
+                return (1, xp(1000))
+            return (HCIM, xp(1000))
+
+        stats, upsert, insert, pairs = self.run_collect(
+            ["alice", "bob", "carol", "dave"],
+            [T2],
+            fetch_xp,
+            lambda name, timestamp: xp(10),
         )
         self.assertEqual(stats["players"], 1)
-        self.assertEqual(stats["rows"], 2 * len(SKILLS))
+        self.assertEqual(stats["failures"], 2)
         upsert.assert_called_once_with(self.conn, [("alice", HCIM)])
-        self.assertEqual(len(insert.call_args.args[1]), 2 * len(SKILLS))
-        self.assertEqual(
-            sorted(checkpoints.call_args.args[2]), [T1, T2]
-        )
-
-        stats, upsert, insert, checkpoints = self.collect(
-            (1, xp(0)), [xp(0), xp(0)]
-        )
-        self.assertEqual(stats["players"], 0)
-        upsert.assert_not_called()
-        insert.assert_not_called()
-        checkpoints.assert_not_called()
+        self.assertEqual(self.calls, [("alice", T2)])
+        self.assertEqual(pairs.call_args.args[1], [("alice", T2)])
 
     def test_unchanged_xp_is_not_stored(self) -> None:
-        stats, _, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)), [xp(0), xp(0)], last_xp=xp(1000)
+        stats, _, insert, pairs = self.run_collect(
+            ["alice"],
+            [T2],
+            lambda name: (HCIM, xp(1000)),
+            lambda name, timestamp: xp(0),
+            last={"alice": xp(1000)},
         )
         self.assertEqual(stats["rows"], 0)
         insert.assert_not_called()
-        self.assertEqual(
-            sorted(checkpoints.call_args.args[2]), [T1, T2]
-        )
+        self.assertEqual(pairs.call_args.args[1], [("alice", T2)])
 
-        gains = xp(0)
-        gains["overall"] = 5
-        stats, _, insert, _ = self.collect(
-            (HCIM, xp(1000)), [gains], grid=(T1,), last_xp=xp(1000)
+        stats, _, insert, _ = self.run_collect(
+            ["alice"],
+            [T2],
+            lambda name: (HCIM, xp(1000)),
+            lambda name, timestamp: {**xp(0), "overall": 5},
+            last={"alice": xp(1000)},
         )
         self.assertEqual(stats["rows"], 1)
         self.assertEqual(
             [row[1] for row in insert.call_args.args[1]], ["overall"]
         )
 
-    def test_failed_checkpoint_does_not_abort_the_player(self) -> None:
-        stats, _, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)),
-            [api.ApiError("503"), xp(10)],
-        )
-        self.assertEqual(stats["players"], 1)
-        self.assertEqual(stats["failures"], 1)
-        self.assertEqual(stats["rows"], len(SKILLS))
-        rows = insert.call_args.args[1]
-        self.assertTrue(all(row[2] == storage.as_datetime(T2) for row in rows))
-        self.assertEqual(sorted(checkpoints.call_args.args[2]), [T2])
+    def test_checkpoint_failure_is_retried_on_the_next_run(self) -> None:
+        def gains(name, timestamp):
+            if timestamp == T2:
+                raise api.ApiError("503")
+            return xp(10)
 
-        # Pending rows survive a failure on a later checkpoint.
-        stats, _, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)),
-            [xp(10), api.ApiError("503")],
+        stats, _, insert, pairs = self.run_collect(
+            ["alice"],
+            [T2, T1],
+            lambda name: (HCIM, xp(1000)),
+            gains,
         )
         self.assertEqual(stats["failures"], 1)
-        self.assertEqual(len(insert.call_args.args[1]), len(SKILLS))
-        self.assertEqual(sorted(checkpoints.call_args.args[2]), [T1])
+        self.assertEqual(
+            self.calls, [("alice", T2), ("alice", T1)]
+        )
+        self.assertEqual(pairs.call_args.args[1], [("alice", T1)])
 
-    def test_highscores_api_error_is_counted_not_raised(self) -> None:
-        with patch.object(main.storage, "connect", return_value=self.conn), \
-                patch.object(main.api, "fetch_player_xp",
-                             side_effect=api.ApiError("503")):
-            stats = main.collect_player(
-                "dsn", "alice", [T1], self.limiter
-            )
-        self.assertEqual(stats["failures"], 1)
-        self.assertEqual(stats["players"], 0)
-        self.conn.close.assert_called_once()
+    def test_already_fetched_timestamps_are_skipped(self) -> None:
+        stats, _, _, pairs = self.run_collect(
+            ["alice", "bob"],
+            [T2],
+            lambda name: (HCIM, xp(1000)),
+            lambda name, timestamp: xp(10),
+            done={"alice": {T2}},
+        )
+        self.assertEqual(self.calls, [("bob", T2)])
+        self.assertEqual(pairs.call_args.args[1], [("bob", T2)])
 
 
 class ModeTest(unittest.TestCase):

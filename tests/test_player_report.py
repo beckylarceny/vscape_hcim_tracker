@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src import main
-from src.utility import SKILLS, SPANS
+from src.utility import DATA_START_EPOCH, SKILLS, SPANS
 from src.player_report import (
     ChartData,
     PlayerData,
@@ -136,6 +136,9 @@ class RenderTest(unittest.TestCase):
         )
         self.assertIn("data coverage:", page)
         self.assertIn('class="zero"', page)
+        self.assertIn("(1 day): covered", page)
+        self.assertIn('id="coverage-tip"', page)
+        self.assertIn("(hover: none)", page)
         self.assertLess(
             page.index("data coverage:"), page.index("<h2>Current xp</h2>")
         )
@@ -184,6 +187,8 @@ class RenderTest(unittest.TestCase):
         self.assertIn("overall all time: total xp and xp/h", page)
         self.assertIn('<figure class="wide">', page)
         self.assertIn(".charts figure.wide{grid-column:1/-1}", page)
+        self.assertIn('class="key gap-key">missing data</span>', page)
+        self.assertIn("width:.95em;height:.95em", page)
         self.assertIn('class="area"', page)
         self.assertIn('class="line"', page)
 
@@ -208,6 +213,26 @@ class RenderTest(unittest.TestCase):
 
 
 class ChartTest(unittest.TestCase):
+    def test_gap_rectangles_mark_missing_sections(self) -> None:
+        from src.player_report import _missing_ranges
+
+        self.assertEqual(_missing_ranges([], 0, 100, 10), ((0, 100),))
+        self.assertEqual(_missing_ranges([50], 0, 100, 100), ())
+        self.assertEqual(
+            _missing_ranges([10, 80], 0, 100, 10),
+            ((10, 80), (80, 100)),
+        )
+
+        chart = ChartData(
+            start_epoch=NOW - 1000,
+            end_epoch=NOW,
+            xp=[(NOW - 1000, 0), (NOW, 3)],
+            gains=[(NOW, 1)],
+            missing=((NOW - 800, NOW - 400),),
+        )
+        svg = _chart_svg(chart, "gaps")
+        self.assertIn('class="gap"', svg)
+
     def test_gains_area_is_a_step_shape(self) -> None:
         chart = ChartData(
             start_epoch=NOW - 1000,
@@ -310,7 +335,7 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(chart.xp[-1], (NOW, 4000))
         self.assertAlmostEqual(chart.gains[0][1], 1000 / 24)
         self.assertEqual(
-            data.charts["overall"]["all"].start_epoch, NOW - 3 * DAY
+            data.charts["overall"]["all"].start_epoch, DATA_START_EPOCH
         )
         self.assertLessEqual(len(data.charts["overall"]["all"].xp), 160)
 
@@ -345,9 +370,11 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(chart.xp, [(NOW - DAY, 500), (NOW, 500)])
 
     def test_coverage_and_absent_skills(self) -> None:
-        conn = FakeConn([], checkpoints=[NOW - 3 * DAY, NOW - DAY, NOW])
+        conn = FakeConn(
+            [], checkpoints=[NOW - 30 * DAY, NOW - 20 * DAY, NOW - 10 * DAY]
+        )
         data = self.collect(conn)
-        self.assertEqual(len(data.coverage), 365)
+        self.assertEqual(len(data.coverage), 300)
         covered = [flag for _, flag in data.coverage]
         self.assertEqual(sum(covered), 3)
 

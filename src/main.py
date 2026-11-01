@@ -106,94 +106,18 @@ def build_grid(
     return sorted(times, reverse=True)
 
 
-def collect_player(
-    dsn: str,
-    username: str,
-    grid_times: list[int],
-    limiter: RateLimiter,
-) -> dict[str, int]:
-    """Fetch the xp history of one player and store it. Resumes automatically."""
-    stats = _zero_stats()
-    conn = storage.connect(dsn)
-    pending: list[tuple] = []
-    done: list[int] = []
-    try:
-        try:
-            fetched = api.fetch_player_xp(username, wait=limiter.wait)
-            stats["requests"] += 1
-        except api.ApiError as error:
-            log.warning("highscores fetch for %r failed: %s", username, error)
-            stats["failures"] += 1
-            return stats
+def _fetch_current(name: str, limiter: RateLimiter):
+    """Fetch one player's current xp; raises ApiError."""
+    fetched = api.fetch_player_xp(name, wait=limiter.wait)
+    if fetched is None:
+        return None
+    ironman, xp_now = fetched
+    return name, ironman, xp_now
 
-        if fetched is None:
-            log.warning("no highscores entry for %r", username)
-            stats["failures"] += 1
-            return stats
 
-        ironman, xp_now = fetched
-        if ironman != HCIM:
-            # Only currently hardcore ironman accounts are recorded.
-            log.info(
-                "skipping %r: ironman status is %d, not hardcore", username, ironman
-            )
-            return stats
-
-        storage.upsert_players(conn, [(username, ironman)])
-        stats["players"] = 1
-
-        existing = storage.fetched_checkpoint_times(conn, username, grid_times)
-        missing = sorted(t for t in grid_times if t not in existing)
-        if not missing:
-            return stats
-
-        last_xp = storage.latest_xp_by_skill(conn, username)
-        for timestamp in missing:
-            age = max(0, int(time.time() - timestamp))
-            try:
-                gained = api.fetch_player_gains(
-                    username, age, wait=limiter.wait
-                )
-            except api.ApiError as error:
-                log.warning(
-                    "checkpoint %s for %r failed: %s", timestamp, username, error
-                )
-                stats["failures"] += 1
-                continue
-            stats["requests"] += 1
-            if gained is None:
-                stats["failures"] += 1
-                continue
-
-            observed = storage.as_datetime(timestamp)
-            for skill in SKILLS:
-                xp = xp_now[skill] - gained[skill]
-                if xp < 0:
-                    # Cannot happen unless the API is inconsistent; clamp.
-                    xp = 0
-                if last_xp.get(skill) == xp:
-                    # No change since the last stored point; do not duplicate.
-                    continue
-                last_xp[skill] = xp
-                pending.append((username, skill, observed, xp))
-                stats["rows"] += 1
-            done.append(timestamp)
-
-            if len(pending) >= 5000:
-                storage.insert_snapshots(conn, pending)
-                storage.insert_checkpoints(conn, username, done)
-                pending.clear()
-                done.clear()
-
-        return stats
-    finally:
-        try:
-            if pending:
-                storage.insert_snapshots(conn, pending)
-            if done:
-                storage.insert_checkpoints(conn, username, done)
-        finally:
-            conn.close()
+def _fetch_gains(name: str, timestamp: int, limiter: RateLimiter):
+    age = max(0, int(time.time() - timestamp))
+    return name, api.fetch_player_gains(name, age, wait=limiter.wait)
 
 
 def collect_all(
@@ -203,30 +127,118 @@ def collect_all(
     workers: int,
     limiter: RateLimiter,
 ) -> dict[str, int]:
+    """Backfill interval by interval, newest timestamp first.
+
+    Every player is fetched for one timestamp before moving to the previous
+    interval, so the database fills backwards in time and the newest coverage
+    appears first.
+    """
     totals = _zero_stats()
-    done = 0
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {
-            pool.submit(collect_player, dsn, name, grid_times, limiter): name
-            for name in players
+    conn = storage.connect(dsn)
+    try:
+        storage.ensure_schema(conn)
+        current: dict[str, dict[str, int]] = {}
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = {
+                pool.submit(_fetch_current, name, limiter): name
+                for name in players
+            }
+            for future in as_completed(futures):
+                name = futures[future]
+                totals["requests"] += 1
+                try:
+                    result = future.result()
+                except Exception as error:  # noqa: BLE001
+                    log.warning(
+                        "highscores fetch for %r failed: %s", name, error
+                    )
+                    totals["failures"] += 1
+                    continue
+                if result is None:
+                    log.warning("no highscores entry for %r", name)
+                    totals["failures"] += 1
+                    continue
+                _, ironman, xp_now = result
+                if ironman != HCIM:
+                    log.info(
+                        "skipping %r: ironman status is %d, not hardcore",
+                        name, ironman,
+                    )
+                    continue
+                current[name] = xp_now
+
+        storage.upsert_players(conn, [(name, HCIM) for name in current])
+        totals["players"] = len(current)
+        if not current:
+            return totals
+
+        done = storage.checkpoint_times_by_player(conn)
+        last_xp = {
+            name: storage.latest_xp_by_skill(conn, name) for name in current
         }
-        for future in as_completed(futures):
-            name = futures[future]
-            done += 1
-            try:
-                stats = future.result()
-            except Exception:  # noqa: BLE001 - one player must not kill the run
-                log.exception("failed to collect %r", name)
-                totals["failures"] += 1
+
+        for index, timestamp in enumerate(grid_times, start=1):
+            todo = [
+                name for name in current
+                if timestamp not in done.get(name, ())
+            ]
+            if not todo:
                 continue
-            _add_stats(totals, stats)
-            if done % 10 == 0 or done == len(players):
-                log.info(
-                    "progress %d/%d players, %d requests, %d rows, %d failures",
-                    done, len(players), totals["requests"],
-                    totals["rows"], totals["failures"],
-                )
-    return totals
+
+            gained_by_player: dict[str, dict[str, int]] = {}
+            with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+                futures = {
+                    pool.submit(_fetch_gains, name, timestamp, limiter): name
+                    for name in todo
+                }
+                for future in as_completed(futures):
+                    name = futures[future]
+                    totals["requests"] += 1
+                    try:
+                        _, gained = future.result()
+                    except Exception as error:  # noqa: BLE001
+                        log.warning(
+                            "checkpoint %s for %r failed: %s",
+                            timestamp, name, error,
+                        )
+                        totals["failures"] += 1
+                        continue
+                    if gained is None:
+                        totals["failures"] += 1
+                        continue
+                    gained_by_player[name] = gained
+
+            if not gained_by_player:
+                continue
+
+            observed = storage.as_datetime(timestamp)
+            rows: list[tuple] = []
+            pairs: list[tuple[str, int]] = []
+            for name, gained in gained_by_player.items():
+                xp_now = current[name]
+                previous = last_xp[name]
+                for skill in SKILLS:
+                    xp = max(0, xp_now[skill] - gained[skill])
+                    if previous.get(skill) == xp:
+                        # No change since the newer stored point.
+                        continue
+                    previous[skill] = xp
+                    rows.append((name, skill, observed, xp))
+                pairs.append((name, timestamp))
+
+            if rows:
+                storage.insert_snapshots(conn, rows)
+            storage.insert_checkpoint_pairs(conn, pairs)
+            totals["rows"] += len(rows)
+            log.info(
+                "backfill %d/%d: %s, %d players, %d rows",
+                index, len(grid_times),
+                observed.strftime("%Y-%m-%d %H:%M"),
+                len(pairs), len(rows),
+            )
+        return totals
+    finally:
+        conn.close()
 
 
 def refresh_priority_players(args: argparse.Namespace) -> None:

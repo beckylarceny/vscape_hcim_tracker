@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING, NamedTuple, TypeVar
 if TYPE_CHECKING:
     import psycopg
 
-from .utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
+from .utility import (
+    DATA_START_EPOCH,
+    DEFAULT_PRIORITY_INTERVAL_SECONDS,
+    SKILLS,
+    SPANS,
+)
 from .storage import as_datetime
 
 PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/highscores?player={username}"
@@ -55,6 +60,7 @@ class ChartData(NamedTuple):
     gains: list[tuple[int, float]]
     regular_xp: frozenset[int] = frozenset()
     regular_gains: frozenset[int] = frozenset()
+    missing: tuple[tuple[int, int], ...] = ()
 
 
 class Frequency(NamedTuple):
@@ -109,9 +115,25 @@ def total_level(current: dict[str, int]) -> int | None:
     return sum(levels) if levels else None
 
 
+def _years_months(seconds: int) -> str:
+    days = seconds // 86400
+    years, remainder = divmod(days, 365)
+    months = remainder // 30
+    years += months // 12
+    months %= 12
+    parts: list[str] = []
+    if years:
+        parts.append(f"{years} {'year' if years == 1 else 'years'}")
+    if months:
+        parts.append(f"{months} {'month' if months == 1 else 'months'}")
+    if not parts:
+        return f"{days} {'day' if days == 1 else 'days'}"
+    return " ".join(parts)
+
+
 def _bucket_count(lookback: int) -> int:
     """One coverage bucket per day, clamped to a readable bar."""
-    return max(30, min(500, (lookback + 86399) // 86400))
+    return max(30, min(300, (lookback + 86399) // 86400))
 
 
 def _current_line(
@@ -258,6 +280,8 @@ def _thin(
 
 
 CHART_POINTS = 90
+# A chart window with no stored point for this long looks empty.
+MISSING_AFTER_SECONDS = 7 * 86400
 WIDE_CHART_POINTS = 160
 
 
@@ -393,6 +417,26 @@ def _frequency_info(
     )
 
 
+def _missing_ranges(
+    times: list[int], start_epoch: int, end_epoch: int, limit: int
+) -> tuple[tuple[int, int], ...]:
+    """Stretches of the window with no checkpoint within `limit` seconds."""
+    if end_epoch <= start_epoch:
+        return ()
+    inside = [t for t in times if start_epoch <= t <= end_epoch]
+    if not inside:
+        return ((start_epoch, end_epoch),)
+    ranges: list[tuple[int, int]] = []
+    if inside[0] - start_epoch > limit:
+        ranges.append((start_epoch, inside[0]))
+    for earlier, later in zip(inside, inside[1:]):
+        if later - earlier > limit:
+            ranges.append((earlier, later))
+    if end_epoch - inside[-1] > limit:
+        ranges.append((inside[-1], end_epoch))
+    return tuple(ranges)
+
+
 def collect_player_data(
     conn: psycopg.Connection,
     username: str,
@@ -405,6 +449,8 @@ def collect_player_data(
     """Load one player's stored history and derive every displayed value."""
     points_by_skill = _points_by_skill(conn, username, 0)
     spans = list(SPANS.items())
+    missing_limit = max(MISSING_AFTER_SECONDS, 2 * slack)
+    all_start = min(DATA_START_EPOCH, now_epoch)
 
     current: dict[str, int] = {}
     past: dict[str, dict[str, int | None]] = {}
@@ -432,12 +478,22 @@ def collect_player_data(
                 epochs, points, span, now_epoch
             )
             best[skill][name] = heaps[name][0] if heaps[name] else None
-            charts[skill][name] = _chart_data(
-                epochs, points, span, now_epoch
+            chart = _chart_data(epochs, points, span, now_epoch)
+            charts[skill][name] = chart._replace(
+                missing=_missing_ranges(
+                    [stamp for stamp in epochs if stamp >= chart.start_epoch],
+                    chart.start_epoch, now_epoch, missing_limit,
+                )
             )
-        all_span = max(1, now_epoch - epochs[0]) if epochs else 0
-        charts[skill]["all"] = _chart_data(
+        all_span = max(1, now_epoch - all_start)
+        all_chart = _chart_data(
             epochs, points, all_span, now_epoch, WIDE_CHART_POINTS
+        )
+        charts[skill]["all"] = all_chart._replace(
+            missing=_missing_ranges(
+                [stamp for stamp in epochs if stamp >= all_start],
+                all_start, now_epoch, missing_limit,
+            )
         )
 
     coverage = _coverage_buckets(
@@ -531,6 +587,15 @@ def _chart_svg(
         f'aria-label="{_esc(label)}">',
         f"<title>{_esc(label)}</title>",
     ]
+    for gap_start, gap_end in chart.missing:
+        gap_left = x(gap_start)
+        gap_right = x(gap_end)
+        if gap_right > gap_left:
+            parts.append(
+                f'<rect class="gap" x="{gap_left:.1f}" y="{top:.1f}" '
+                f'width="{gap_right - gap_left:.1f}" '
+                f'height="{plot_height:.1f}"/>'
+            )
     for step in range(3):
         line_y = top + plot_height * step / 2
         parts.append(
@@ -745,7 +810,7 @@ h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;overflow:hidden}
-.coverage span{flex:1;background:#9079B6;min-width:1px}
+.coverage span{flex:1;background:#9079B6;min-width:1em}
 .coverage span.zero{background:#8883}
 .range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
 table{width:auto;max-width:100%;border-collapse:collapse;
@@ -775,8 +840,13 @@ figcaption{font-size:.8rem;color:#888;margin-bottom:.25rem}
              margin-right:.25em}
 .line-key::before{background:#9079B6}
 .area-key::before{background:#7BB59A}
+.charts figcaption{display:flex;align-items:baseline;flex-wrap:wrap}
+.charts .key.gap-key{margin-left:auto}
+.key.gap-key::before{background:#8883;width:.95em;height:.95em;
+                     border:1px solid #8886}
 svg{display:block;width:100%;height:auto}
 svg .grid{stroke:#8884;stroke-width:.5}
+svg .gap{fill:#8883}
 svg .line{fill:none;stroke:#9079B6;stroke-width:1.5;
           vector-effect:non-scaling-stroke}
 svg .area{fill:#7BB59A33;stroke:#7BB59A33;stroke-width:1;
@@ -793,6 +863,10 @@ a{color:#7BB59A}
         box-shadow:0 1px 4px #0003}
 .to-top:hover{background:#7B659C;color:#fff}
 .version{text-align:right;color:#888;font-size:.75rem;margin:2rem 0 3.5rem}
+.tip{position:fixed;z-index:20;max-width:22rem;padding:.3rem .45rem;
+     background:#1b1b1b;color:#eee;font-size:.75rem;line-height:1.35;
+     border-radius:0;pointer-events:none;white-space:normal}
+.tip[hidden]{display:none}
 @media (max-width:52rem){
   .charts,.gain-tables{grid-template-columns:1fr}
 }
@@ -803,6 +877,51 @@ a{color:#7BB59A}
   th,td{padding:.2rem .4rem}
 }
 """
+
+
+COVERAGE_TIP_HTML = (
+    '<div class="tip" id="coverage-tip" role="tooltip" hidden></div>'
+    "<script>(function(){"
+    "var tip=document.getElementById('coverage-tip');"
+    "if(!tip){return;}"
+    "function place(x,y){"
+    "tip.style.left='0px';tip.style.top='0px';"
+    "var box=tip.getBoundingClientRect(),pad=8;"
+    "var left=Math.min(Math.max(pad,x-box.width/2),"
+    "window.innerWidth-box.width-pad);"
+    "var top=y-box.height-14;"
+    "if(top<pad){top=y+18;}"
+    "tip.style.left=left+'px';tip.style.top=top+'px';}"
+    "function show(span,x,y){"
+    "tip.textContent=span.getAttribute('data-tip');"
+    "tip.hidden=false;place(x,y);}"
+    "function hide(){tip.hidden=true;tip.removeAttribute('data-target');}"
+    "var coarse=window.matchMedia&&"
+    "window.matchMedia('(hover: none)').matches;"
+    "var spans=document.querySelectorAll('.coverage span[data-tip]');"
+    "Array.prototype.forEach.call(spans,function(span){"
+    "if(coarse){"
+    "span.addEventListener('click',function(event){"
+    "event.preventDefault();"
+    "var target=span.getAttribute('data-tip');"
+    "var same=!tip.hidden&&"
+    "tip.getAttribute('data-target')===target;"
+    "if(same){hide();return;}"
+    "tip.setAttribute('data-target',target);"
+    "show(span,event.clientX,event.clientY);});"
+    "}else{"
+    "span.addEventListener('mouseenter',function(event){"
+    "show(span,event.clientX,event.clientY);});"
+    "span.addEventListener('mousemove',function(event){"
+    "place(event.clientX,event.clientY);});"
+    "span.addEventListener('mouseleave',hide);"
+    "}});"
+    "document.addEventListener('click',function(event){"
+    "var target=event.target;"
+    "if(!target.closest||"
+    "!target.closest('.coverage span[data-tip]')){hide();}});"
+    "})();</script>"
+)
 
 
 def _coverage_runs(
@@ -834,15 +953,16 @@ def _coverage_bar(data: PlayerData) -> str:
         first = _date(start_epoch)
         last = _date(end_epoch)
         when = first if first == last else f"{first} - {last}"
+        duration = _years_months(end_epoch - start_epoch)
         state = "covered" if covered else "no data"
-        label = f"{when}: {state}"
+        label = f"{when} ({duration}): {state}"
         if covered:
             segments.append(
-                f'<span title="{_esc(label)}" style="flex:{length}"></span>'
+                f'<span data-tip="{_esc(label)}" style="flex:{length}"></span>'
             )
         else:
             segments.append(
-                f'<span class="zero" title="{_esc(label)}" '
+                f'<span class="zero" data-tip="{_esc(label)}" '
                 f'style="flex:{length}"></span>'
             )
     first = _date(data.coverage[0][0])
@@ -960,6 +1080,7 @@ def render_player_page(
         f'<p class="meta">generated at: {_esc(data.generated)}</p>',
         _frequency_meta(data),
         _coverage_bar(data),
+        COVERAGE_TIP_HTML,
         '<div class="stats">',
         "<h2>Current xp</h2>",
         _current_table(data),
@@ -990,14 +1111,18 @@ def render_player_page(
             parts.append(
                 f"<figure><figcaption><b>{_esc(name)}</b>"
                 '<span class="key line-key">total xp</span>'
-                '<span class="key area-key">xp/h</span></figcaption>'
+                '<span class="key area-key">xp/h</span>'
+                '<span class="key gap-key">missing data</span>'
+                "</figcaption>"
                 f"{_chart_svg(data.charts[skill][name], label)}"
                 "</figure>"
             )
         parts.append(
             f'<figure class="wide"><figcaption><b>all time</b>'
             '<span class="key line-key">total xp</span>'
-            '<span class="key area-key">xp/h</span></figcaption>'
+            '<span class="key area-key">xp/h</span>'
+            '<span class="key gap-key">missing data</span>'
+            "</figcaption>"
             f"{_chart_svg(data.charts[skill]['all'], f'{skill} all time: total xp and xp/h')}"
             "</figure>"
         )
