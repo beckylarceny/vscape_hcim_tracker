@@ -91,7 +91,3 @@ was about 7 times that size.
 - `xp_at(t)` is only as exact as the server's samples; `xp_now` and the gain
   query are separate requests.
 - Negative derived xp is clamped to zero.
-
-## License
-
-MIT. See `LICENSE`.
