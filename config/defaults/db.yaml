@@ -1,0 +1,4 @@
+host: ""
+port: 5432
+database: xp_tracker
+user: xp_tracker
