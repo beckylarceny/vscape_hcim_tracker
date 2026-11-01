@@ -20,137 +20,76 @@ text and HTML rankings.
   changes. Every fetched timestamp goes into `checkpoints`, so unchanged points
   are not fetched again. Missing xp is treated as the previous value.
 
-## Vidyascape API rate limits
-
-No request quota is documented, and
-`GET /api/highscores/player/{username}` returns no `RateLimit-*` headers
-(checked 2026-11-01). The limit is enforced indirectly: overlapping requests
-start returning HTTP 503.
-
-The client handles this as follows:
-
-- One global limiter spaces every request, across all worker threads and
-  including retries. `--rate` is total requests per second, not per worker.
-- Defaults are `--workers 2 --rate 4`: two players in flight, four requests per
-  second overall.
-- 429, 500, 502, 503 and 504 are tried up to five times with exponential
-  backoff of 2, 4, 8 and 16 seconds plus jitter. A `Retry-After` header is
-  honoured when present.
-- A checkpoint is recorded only after a successful fetch, so a failed one is
-  retried on the next run while it is inside `--retry-window` (7 days).
-
-In testing, eight concurrent requests produced roughly 50% HTTP 503 responses.
-Raising `--workers` or `--rate` does not lose data, because failed checkpoints
-are retried, but it makes the initial one-year backfill slower.
-
-## Docker
-
-Three containers: `db` (PostgreSQL with the `pgdata` volume), `collector`
-(API to database), and `web` (report generation and HTTP serving on port 8000).
-Only `web` is exposed.
+## Usage
 
 ```sh
 cp .env.example .env      # set a real POSTGRES_PASSWORD
-docker compose up -d --build
-# page:  http://localhost:8000/
-# text:  reports/latest.txt
-docker compose down       # keeps the database
-docker compose down -v    # deletes stored xp
+docker build -t vscape_hcim_tracker-app:latest .
+docker compose up -d --force-recreate
 ```
 
-The first collector run is the one-year backfill: about 136,000 requests, or
-roughly 9.5 hours at the default 4 req/s. Later runs fetch only the current 6h
-checkpoint plus retries. Defaults (`--workers 2 --rate 4`) are conservative
-because the API returns 503 under concurrent load. The general page is
-regenerated every minute by `web`.
+- page: <http://localhost:8000/>
+- text: `reports/latest.txt`
+- logs: `docker compose logs -f collector` or `docker compose logs -f web`
+- stop: `docker compose down` keeps the database
+- delete data: `docker compose down -v`
 
-## Local usage
+Three containers: `db` (PostgreSQL with the `pgdata` volume), `collector` (API
+to database), and `web` (reports and HTTP on port 8000). Only `web` is
+published. The first collector run backfills one year: about 136,000 requests,
+roughly 9.5 hours at the default 4 req/s. Later runs fetch the current 6h
+checkpoint plus retries. Reports regenerate every minute.
 
-```sh
-createdb xp_tracker
-export VSCAPE_HCIM_TRACKER_DSN=postgresql:///xp_tracker
+## API rate limits
 
-python -m src --loop                            # collect and report
-python -m src --collect-only                    # fetch only
-python -m src --serve-only --serve-port 8000    # report and serve only
-python -m src --report-only                     # one report, no fetching
-```
+No quota is documented and `/api/highscores/player/...` returns no rate-limit
+headers. Overlapping requests cause HTTP 503.
 
-Key options: `--interval 24h` (backfill step), `--collect-interval 6h`,
-`--retry-window 7d`, `--lookback 365d`, `--workers 2`, `--rate 4`,
-`--report-interval 1m`, `--top 5`, `--serve-port 0`, `--dsn` or
-`$VSCAPE_HCIM_TRACKER_DSN`.
+- One global limiter covers all workers and retries; `--rate` is total requests
+  per second.
+- Defaults: `--workers 2 --rate 4`.
+- 429, 500, 502, 503 and 504 are retried up to five times with 2, 4, 8 and 16 s
+  backoff plus jitter. A `Retry-After` header is honoured.
+- Failed checkpoints are retried within the 7-day window.
+
+Eight concurrent requests produced roughly 50% HTTP 503 responses in testing.
+Higher concurrency does not lose data, but slows the initial backfill.
 
 ## Reports
 
-`reports/latest.txt` and `reports/latest.html` hold the rankings; older report
-files are deleted. For each skill and `overall` they show the top 5 gains over
-the past day/week/month/year and each player's best window of that length
-(players with zero gain are omitted). The page additionally shows metadata, a
-data-coverage bar for backfill progress and gaps, and a name box with a **Go**
-button that opens that player's page. Usernames in the tables link there too.
+`reports/latest.txt` and `reports/latest.html` show the top 5 gains per skill
+and span (day/week/month/year), plus each player's best window. The page adds
+metadata, a coverage bar and a player search box.
 
-Every player also gets `reports/players/<name>.html`, with the username linked
-to their Vidyascape highscores page, current xp and OSRS level per skill, a
-checkpoint-coverage bar, past and best gains in separate tables for each span,
-and a 2x2 grid of inline SVG charts per skill (day/week/month/year). Each chart
-plots total xp as a line and normalised xp/hour between stored data points as a
-stepped area for that window. These pages are rewritten only when that player
-gains new checkpoint rows, not on the one-minute report timer.
-
-The levels use the OSRS experience thresholds for levels 1-99; the `overall`
-row shows the sum of the other skills' levels (total level).
-
-Because storage is sparse, xp between two stored points is treated as constant;
-windows still have exactly the nominal span.
+Each player gets `reports/players/<name>.html` with current xp and OSRS level, a
+checkpoint-coverage bar, separate past/best tables, and 2x2 charts per skill:
+total xp line and xp/hour area. The `overall` row shows total level. Sparse data
+is treated as constant between stored points.
 
 ## Priority players
 
-Priority players are fetched every 10 minutes, in addition to the normal 6h
-grid. The list lives in `priority_players.json` at the project root:
+Priority players are fetched every 10 minutes, in addition to the 6h grid. Edit
+`priority_players.json`:
 
 ```json
 {"players": ["cojultad"]}
 ```
 
-The default is `cojultad`. The collector re-reads the file before every
-10-minute fetch and the web container re-reads it every report cycle, so edits
-apply without a restart. Compose bind-mounts the file into both services.
+The collector re-reads it before every fetch and the web every report cycle, so
+edits apply without a restart. `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS` or
+`--priority` overrides it, and `VSCAPE_HCIM_TRACKER_PRIORITY_FILE` changes the
+path. High-frequency rows are pruned after 24 hours.
 
-Environment or CLI values override the file:
+`reports/priority/` contains:
 
-```sh
-VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS="alice,bob"
-# or
-python -m src --priority alice --priority bob
-```
+- `index.html` - priority player list.
+- `<name>.html` - one large 24h chart per skill, `hh:mm` ticks, regular snapshot
+  data in orange.
+- `<name>.xml` - RSS feed, one item per 10-minute fetch with changed xp,
+  starting with the time since the last priority or regular snapshot.
 
-`VSCAPE_HCIM_TRACKER_PRIORITY_FILE` points at a different JSON file. The
-collector service must run with `--loop`. High-frequency rows go into
-`priority_snapshots` and `priority_checkpoints` and are deleted after 24 hours;
-normal history is untouched. At most 144 checkpoints and 144 x 24 snapshot rows
-are kept per priority player.
-
-Priority reports live under `reports/priority/` and are served at
-`/priority/<name>.html` and `/priority/<name>.xml`:
-
-- `index.html`: list of the configured priority players, linked to their pages
-  and feeds. The general report links here.
-- `<name>.html`: current xp and one large chart per skill for the last 24 hours,
-  with the total xp line and the xp/hour area. Time ticks use `hh:mm`. Missing
-  10-minute samples are filled from the normal snapshot history and drawn in
-  orange.
-- `<name>.xml`: RSS 2.0 feed with one item per 10-minute fetch where at least one
-  xp value changed. Each item starts with the time since the last priority or
-  regular snapshot, then lists the changed skills one per line. The feed covers
-  the retained day.
-
-Each priority player's normal player page also links to their priority report,
-and the priority page links to its RSS feed in a top subheading.
-
-RSS links need absolute URLs. Set the public base URL with
-`VSCAPE_HCIM_TRACKER_BASE_URL` or `--base-url` (default
-`http://localhost:8000`). Changing the priority list requires a restart.
+RSS links use `VSCAPE_HCIM_TRACKER_BASE_URL` or `--base-url` (default
+`http://localhost:8000`).
 
 ## Storage cost
 
