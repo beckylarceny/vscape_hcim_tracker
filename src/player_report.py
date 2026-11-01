@@ -449,87 +449,41 @@ def _chart_svg(
             )
 
     if chart.gains:
-        gains = chart.gains
-        bounds: list[tuple[float, float]] = []
-        for index, (timestamp, _) in enumerate(gains):
-            if index == 0:
-                left_edge = (
-                    timestamp - (gains[1][0] - timestamp) / 2
-                    if len(gains) > 1 else chart.start_epoch
-                )
-            else:
-                left_edge = (gains[index - 1][0] + timestamp) / 2
-            if index == len(gains) - 1:
-                right_edge = (
-                    timestamp + (timestamp - gains[index - 1][0]) / 2
-                    if len(gains) > 1 else chart.end_epoch
-                )
-            else:
-                right_edge = (timestamp + gains[index + 1][0]) / 2
-            bounds.append((
-                max(float(chart.start_epoch), left_edge),
-                min(float(chart.end_epoch), right_edge),
-            ))
-
         if segmented_area:
-            count = len(gains)
-            for index, (timestamp, value) in enumerate(gains):
-                previous_gap = (
-                    timestamp - gains[index - 1][0] if index > 0 else None
-                )
-                next_gap = (
-                    gains[index + 1][0] - timestamp
-                    if index < count - 1 else None
-                )
-                if previous_gap is None and next_gap is None:
-                    width = window
-                elif previous_gap is None:
-                    available = 2 * (timestamp - chart.start_epoch)
-                    width = next_gap if next_gap is not None else window
-                    if available > 0:
-                        width = min(width, available)
-                elif next_gap is None:
-                    available = 2 * (chart.end_epoch - timestamp)
-                    width = previous_gap
-                    if available > 0:
-                        width = min(width, available)
-                else:
-                    width = min(previous_gap, next_gap)
-                left_edge = max(
-                    float(chart.start_epoch), timestamp - width / 2
-                )
-                right_edge = min(
-                    float(chart.end_epoch), timestamp + width / 2
-                )
-                if right_edge <= left_edge:
-                    continue
-                top_y = y_gain(value)
-                css = (
-                    "area regular"
-                    if timestamp in chart.regular_gains
-                    else "area"
-                )
-                area = (
-                    f"{x(left_edge):.1f},{baseline:.1f} "
-                    f"{x(left_edge):.1f},{top_y:.1f} "
-                    f"{x(right_edge):.1f},{top_y:.1f} "
-                    f"{x(right_edge):.1f},{baseline:.1f}"
-                )
-                parts.append(f'<polygon class="{css}" points="{area}"/>')
+            previous_time = chart.start_epoch
+            for timestamp, value in chart.gains:
+                start_x = x(previous_time)
+                end_x = x(timestamp)
+                if end_x > start_x:
+                    top_y = y_gain(value)
+                    css = (
+                        "area regular"
+                        if timestamp in chart.regular_gains
+                        else "area"
+                    )
+                    area = (
+                        f"{start_x:.1f},{baseline:.1f} "
+                        f"{start_x:.1f},{top_y:.1f} "
+                        f"{end_x:.1f},{top_y:.1f} "
+                        f"{end_x:.1f},{baseline:.1f}"
+                    )
+                    parts.append(
+                        f'<polygon class="{css}" points="{area}"/>'
+                    )
+                previous_time = max(previous_time, timestamp)
         else:
-            first_left, first_right = bounds[0]
-            first_value = gains[0][1]
+            first_time, first_gain = chart.gains[0]
             area = [
-                f"{x(first_left):.1f},{baseline:.1f}",
-                f"{x(first_left):.1f},{y_gain(first_value):.1f}",
-                f"{x(first_right):.1f},{y_gain(first_value):.1f}",
+                f"{x(first_time):.1f},{baseline:.1f}",
+                f"{x(first_time):.1f},{y_gain(first_gain):.1f}",
             ]
-            for index in range(1, len(gains)):
-                left_edge, right_edge = bounds[index]
-                value = gains[index][1]
-                area.append(f"{x(left_edge):.1f},{y_gain(value):.1f}")
-                area.append(f"{x(right_edge):.1f},{y_gain(value):.1f}")
-            area.append(f"{x(bounds[-1][1]):.1f},{baseline:.1f}")
+            previous_gain = first_gain
+            for timestamp, value in chart.gains[1:]:
+                # Hold the previous gain until this point, then step.
+                area.append(f"{x(timestamp):.1f},{y_gain(previous_gain):.1f}")
+                area.append(f"{x(timestamp):.1f},{y_gain(value):.1f}")
+                previous_gain = value
+            area.append(f"{x(chart.gains[-1][0]):.1f},{baseline:.1f}")
             parts.append(f'<polygon class="area" points="{" ".join(area)}"/>')
 
     if len(chart.xp) > 1:

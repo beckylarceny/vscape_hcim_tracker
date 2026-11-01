@@ -304,61 +304,6 @@ class ChartTest(unittest.TestCase):
             for first, second in pairs
         ))
 
-    def test_gain_steps_are_centered_on_data_points(self) -> None:
-        from src.player_report import ChartData, _chart_svg
-
-        chart = ChartData(
-            start_epoch=NOW - 1000,
-            end_epoch=NOW,
-            xp=[(NOW - 1000, 0), (NOW, 3)],
-            gains=[(NOW - 800, 10), (NOW - 400, 20), (NOW, 30)],
-        )
-        svg = _chart_svg(chart, "test")
-        match = re.search(r'<polygon class="area" points="([^"]+)"', svg)
-        coords = [
-            tuple(float(part) for part in point.split(","))
-            for point in match.group(1).split()
-        ]
-
-        def xpos(timestamp: int) -> float:
-            return 46 + 268 * ((timestamp - (NOW - 1000)) / 1000)
-
-        left_mid = xpos(NOW - 600)
-        right_mid = xpos(NOW - 200)
-        self.assertTrue(any(
-            abs(first[0] - left_mid) < 0.2
-            and abs(second[0] - right_mid) < 0.2
-            and first[1] == second[1]
-            for first, second in zip(coords, coords[1:])
-        ))
-
-    def test_segmented_area_steps_are_centered_on_points(self) -> None:
-        from src.player_report import ChartData, _chart_svg
-
-        chart = ChartData(
-            start_epoch=NOW - 1000,
-            end_epoch=NOW,
-            xp=[(NOW - 1000, 0), (NOW, 3)],
-            gains=[(NOW - 800, 10), (NOW - 400, 20), (NOW, 30)],
-        )
-        svg = _chart_svg(chart, "test", segmented_area=True)
-        polygons = re.findall(
-            r'<polygon class="area" points="([^"]+)"', svg
-        )
-        centers = []
-        for polygon in polygons:
-            xs = [
-                float(point.split(",")[0])
-                for point in polygon.split()
-            ]
-            centers.append((min(xs) + max(xs)) / 2)
-
-        def xpos(timestamp: int) -> float:
-            return 46 + 268 * ((timestamp - (NOW - 1000)) / 1000)
-
-        self.assertAlmostEqual(centers[0], xpos(NOW - 800), delta=0.2)
-        self.assertAlmostEqual(centers[1], xpos(NOW - 400), delta=0.2)
-
 class ThinTest(unittest.TestCase):
     def test_long_series_keeps_endpoints(self) -> None:
         from src.player_report import _thin
