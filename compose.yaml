@@ -1,0 +1,82 @@
+name: vscape_hcim_tracker
+
+x-app: &app
+  image: vscape_hcim_tracker-app:latest
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment:
+    VSCAPE_HCIM_TRACKER_DSN: postgresql://${POSTGRES_USER:-xp_tracker}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-xp_tracker}
+    VSCAPE_HCIM_TRACKER_TEST_DSN: postgresql://${POSTGRES_USER:-xp_tracker}:${POSTGRES_PASSWORD}@db:5432/xp_tracker_test
+    VSCAPE_HCIM_TRACKER_LOG_LEVEL: ${VSCAPE_HCIM_TRACKER_LOG_LEVEL:-INFO}
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-xp_tracker}
+      POSTGRES_USER: ${POSTGRES_USER:-xp_tracker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  collector:
+    <<: *app
+    command:
+      - python
+      - -m
+      - src
+      - --loop
+      - --collect-only
+      - --workers
+      - "2"
+      - --rate
+      - "4"
+      - --log-level
+      - ${VSCAPE_HCIM_TRACKER_LOG_LEVEL:-INFO}
+    stop_grace_period: 30s
+
+  web:
+    <<: *app
+    command:
+      - python
+      - -m
+      - src
+      - --serve-only
+      - --serve-port
+      - "8000"
+      - --serve-host
+      - 0.0.0.0
+      - --report-dir
+      - /app/reports
+      - --report-interval
+      - 1m
+      - --log-level
+      - ${VSCAPE_HCIM_TRACKER_LOG_LEVEL:-INFO}
+    volumes:
+      - ./reports:/app/reports
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
