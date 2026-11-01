@@ -5,8 +5,10 @@ from __future__ import annotations
 import bisect
 import heapq
 import html
+import os
 import re
 import urllib.parse
+from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
 if TYPE_CHECKING:
@@ -55,6 +57,13 @@ class ChartData(NamedTuple):
     regular_gains: frozenset[int] = frozenset()
 
 
+class Interval(NamedTuple):
+    name: str
+    snapshots: int
+    first_epoch: int | None
+    last_epoch: int | None
+
+
 class PlayerData(NamedTuple):
     username: str
     generated: str
@@ -65,6 +74,7 @@ class PlayerData(NamedTuple):
     best: dict[str, dict[str, Record | None]]
     charts: dict[str, dict[str, ChartData]]
     coverage: list[tuple[int, bool]] = ()
+    intervals: tuple[Interval, ...] = ()
 
 
 def player_slug(username: str) -> str:
@@ -97,6 +107,24 @@ def total_level(current: dict[str, int]) -> int | None:
         if skill != "overall"
     ]
     return sum(levels) if levels else None
+
+
+def _bucket_count(lookback: int) -> int:
+    """One coverage bucket per day, clamped to a readable bar."""
+    return max(30, min(500, (lookback + 86399) // 86400))
+
+
+def _current_line(
+    skill: str, value: int | None, current: dict[str, int]
+) -> str:
+    if value is None:
+        return "no data"
+    if skill == "overall":
+        total = total_level(current)
+        if total is None:
+            return _num(value)
+        return f"{_num(value)} (total level {total})"
+    return f"{_num(value)} (level {level_for_xp(value)})"
 
 
 def scan_player_points(
@@ -166,6 +194,21 @@ def _date(epoch: int) -> str:
     return as_datetime(epoch).strftime("%Y-%m-%d")
 
 
+def _atomic_write(path: Path, text: str) -> None:
+    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temp.write_text(text, encoding="utf-8")
+    os.replace(temp, path)
+
+
+def _group_points(rows) -> dict[str, list[tuple[int, int]]]:
+    points: dict[str, list[tuple[int, int]]] = {}
+    for skill, observed_at, xp in rows:
+        points.setdefault(skill, []).append(
+            (int(observed_at.timestamp()), int(xp))
+        )
+    return points
+
+
 def _points_by_skill(
     conn: psycopg.Connection, username: str, earliest: int
 ) -> dict[str, list[tuple[int, int]]]:
@@ -178,12 +221,7 @@ def _points_by_skill(
         """,
         (username, as_datetime(earliest)),
     ).fetchall()
-    points: dict[str, list[tuple[int, int]]] = {}
-    for skill, observed_at, xp in rows:
-        points.setdefault(skill, []).append(
-            (int(observed_at.timestamp()), int(xp))
-        )
-    return points
+    return _group_points(rows)
 
 
 def _xp_at(
@@ -273,7 +311,7 @@ def _coverage_buckets(
     lookback: int,
 ) -> list[tuple[int, bool]]:
     """Whether the player has a checkpoint in each day-sized bucket."""
-    buckets = max(30, min(500, (lookback + 86399) // 86400))
+    buckets = _bucket_count(lookback)
     rows = conn.execute(
         """
         SELECT observed_at
@@ -292,6 +330,40 @@ def _coverage_buckets(
         (int(start_epoch + index * width), present[index])
         for index in range(buckets)
     ]
+
+
+def _snapshot_times(
+    conn: psycopg.Connection, username: str, earliest: int
+) -> list[int]:
+    """Distinct times at which this player has stored snapshots."""
+    rows = conn.execute(
+        """
+        SELECT DISTINCT observed_at
+        FROM snapshots
+        WHERE username = %s AND observed_at >= %s
+        ORDER BY observed_at
+        """,
+        (username, as_datetime(earliest)),
+    ).fetchall()
+    return [int(row[0].timestamp()) for row in rows]
+
+
+def _interval_info(
+    times: list[int], now_epoch: int
+) -> tuple[Interval, ...]:
+    """Snapshot count and covered date range inside each span."""
+    intervals: list[Interval] = []
+    for name, span in SPANS.items():
+        inside = [t for t in times if now_epoch - span <= t <= now_epoch]
+        intervals.append(
+            Interval(
+                name,
+                len(inside),
+                inside[0] if inside else None,
+                inside[-1] if inside else None,
+            )
+        )
+    return tuple(intervals)
 
 
 def collect_player_data(
@@ -341,6 +413,9 @@ def collect_player_data(
     coverage = _coverage_buckets(
         conn, username, now_epoch - lookback, now_epoch, lookback
     )
+    intervals = _interval_info(
+        _snapshot_times(conn, username, now_epoch - lookback), now_epoch
+    )
 
     return PlayerData(
         username=username,
@@ -352,6 +427,7 @@ def collect_player_data(
         best=best,
         charts=charts,
         coverage=coverage,
+        intervals=intervals,
     )
 
 
@@ -800,6 +876,25 @@ def skill_panel_open(index: int, skill: str) -> str:
     )
 
 
+def _interval_meta(data: PlayerData) -> str:
+    lines: list[str] = []
+    for info in data.intervals:
+        if info.first_epoch is None:
+            lines.append(
+                f'<p class="meta">{_esc(info.name)} interval: '
+                "0 snapshots</p>"
+            )
+            continue
+        first = _date(info.first_epoch)
+        last = _date(info.last_epoch)
+        when = first if first == last else f"{first} to {last}"
+        lines.append(
+            f'<p class="meta">{_esc(info.name)} interval: '
+            f"{info.snapshots} snapshots, {when}</p>"
+        )
+    return "".join(lines)
+
+
 def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
     parts: list[str] = [
         "<!doctype html>",
@@ -822,8 +917,9 @@ def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
             ]
             if is_priority else []
         ),
-        f'<p class="meta">generated: {_esc(data.generated)}</p>',
+        f'<p class="meta">generated at: {_esc(data.generated)}</p>',
         _coverage_bar(data),
+        _interval_meta(data),
         '<div class="stats">',
         "<h2>Current xp</h2>",
         _current_table(data),
@@ -834,18 +930,10 @@ def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
         parts.append(skill_panel_open(index, skill))
         parts.append(f"<h2>{_esc(skill)}</h2>")
         value = data.current.get(skill)
-        if value is None:
-            shown = "no data"
-        elif skill == "overall":
-            shown = _num(value)
-            overall_level = total_level(data.current)
-            if overall_level is not None:
-                shown += f" (total level {overall_level})"
-        else:
-            shown = (
-                f"{_num(value)} (level {level_for_xp(value)})"
-            )
-        parts.append(f'<p class="meta">current xp: {shown}</p>')
+        parts.append(
+            '<p class="meta">current xp: '
+            f"{_current_line(skill, value, data.current)}</p>"
+        )
         parts.append("<h3>Gains</h3>")
         parts.append('<div class="gain-tables">')
         parts.append(

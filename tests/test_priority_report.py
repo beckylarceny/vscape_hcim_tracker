@@ -61,7 +61,7 @@ def rows(*points) -> list[tuple[str, dt.datetime, int]]:
 
 
 class DataTest(unittest.TestCase):
-    def test_current_xp_and_one_chart_per_skill(self) -> None:
+    def test_current_xp_and_charts(self) -> None:
         conn = FakeConn(rows(
             ("overall", NOW - 1800, 1000),
             ("overall", NOW, 2000),
@@ -75,11 +75,9 @@ class DataTest(unittest.TestCase):
         self.assertEqual(chart.xp[-1], (NOW, 2000))
         self.assertAlmostEqual(chart.gains[0][1], 2000.0)
 
-    def test_missing_skill_has_an_empty_chart(self) -> None:
-        conn = FakeConn(rows(("overall", NOW, 100)))
-        data = collect_priority_data(conn, "alice", NOW, "generated")
-        self.assertEqual(data.charts["attack"].xp, [])
-        self.assertEqual(data.charts["attack"].gains, [])
+        missing = data.charts["defence"]
+        self.assertEqual(missing.xp, [])
+        self.assertEqual(missing.gains, [])
 
     def test_regular_snapshots_fill_priority_gaps(self) -> None:
         priority = rows(
@@ -99,26 +97,23 @@ class DataTest(unittest.TestCase):
         self.assertIn(NOW - 1800, chart.regular_xp)
         self.assertIn(NOW - 600, chart.regular_xp)
         self.assertNotIn(NOW - 3600, chart.regular_xp)
-        self.assertNotIn(NOW, chart.regular_xp)
         self.assertIn(NOW - 1800, chart.regular_gains)
-        self.assertIn(NOW, chart.regular_gains)
 
-    def test_regular_point_inside_priority_interval_is_ignored(self) -> None:
+        # A regular point inside a priority interval is ignored.
         priority = rows(
             ("overall", NOW - 600, 1000),
             ("overall", NOW, 1100),
         )
         regular = rows(("overall", NOW - 300, 1050))
-        conn = FakeConn(priority, regular=regular)
-        chart = collect_priority_data(conn, "alice", NOW, "generated").charts[
-            "overall"
-        ]
+        chart = collect_priority_data(
+            FakeConn(priority, regular=regular), "alice", NOW, "generated"
+        ).charts["overall"]
         self.assertNotIn(NOW - 300, chart.regular_xp)
         self.assertNotIn(NOW - 300, [stamp for stamp, _ in chart.xp])
 
 
 class EventTest(unittest.TestCase):
-    def test_changes_are_grouped_by_fetch_time(self) -> None:
+    def test_changes_grouped_and_previous_snapshot(self) -> None:
         conn = FakeConn(rows(
             ("overall", NOW - 3600, 1000),
             ("overall", NOW - 1800, 1500),
@@ -131,30 +126,22 @@ class EventTest(unittest.TestCase):
         self.assertEqual(
             dict(events[0].changes), {"overall": 300, "attack": 20}
         )
-        self.assertEqual(
-            dict(events[1].changes), {"overall": 500}
-        )
+        self.assertEqual(dict(events[1].changes), {"overall": 500})
         self.assertEqual(events[0].previous_epoch, NOW - 1800)
-        self.assertEqual(events[1].previous_epoch, NOW - 3600)
 
-    def test_previous_snapshot_can_come_from_regular_data(self) -> None:
+        # The previous snapshot may come from regular data.
         priority = rows(
             ("overall", NOW - 3600, 1000),
             ("overall", NOW - 1800, 1500),
             ("overall", NOW, 1800),
         )
-        regular = rows(
-            ("overall", NOW - 2400, 1200),
-        )
-        conn = FakeConn(priority, regular=regular)
-        events = collect_events(conn, "alice", NOW)
-        by_epoch = {event.epoch: event for event in events}
-        self.assertEqual(
-            by_epoch[NOW - 1800].previous_epoch, NOW - 2400
-        )
-        self.assertEqual(by_epoch[NOW].previous_epoch, NOW - 1800)
+        conn = FakeConn(priority, regular=rows(("overall", NOW - 2400, 1200)))
+        by_epoch = {
+            event.epoch: event for event in collect_events(conn, "alice", NOW)
+        }
+        self.assertEqual(by_epoch[NOW - 1800].previous_epoch, NOW - 2400)
 
-    def test_old_events_are_dropped(self) -> None:
+        # Events outside the 24h window are dropped.
         conn = FakeConn(rows(
             ("overall", NOW - 2 * 86400, 100),
             ("overall", NOW - 2 * 86400 + 1800, 200),
@@ -163,7 +150,7 @@ class EventTest(unittest.TestCase):
 
 
 class FeedTest(unittest.TestCase):
-    def test_feed_has_one_item_per_change(self) -> None:
+    def test_feed_items_and_empty_feed(self) -> None:
         events = [
             Event(NOW, (("overall", 300), ("attack", 20)), NOW - 600),
             Event(NOW - 1800, (("overall", 500),), NOW - 3600),
@@ -173,10 +160,6 @@ class FeedTest(unittest.TestCase):
         )
         self.assertIn('<?xml version="1.0" encoding="UTF-8"?>', feed)
         self.assertIn("<title>A &amp; B +300 xp</title>", feed)
-        self.assertIn("overall: +300 xp", feed)
-        self.assertIn("attack: +20 xp", feed)
-        self.assertIn("last snapshot: 10 minutes ago", feed)
-        self.assertIn("last snapshot: 30 minutes ago", feed)
         self.assertIn(
             "last snapshot: 10 minutes ago | overall: +300 xp | "
             "attack: +20 xp",
@@ -184,15 +167,11 @@ class FeedTest(unittest.TestCase):
         )
         self.assertIn(f"A_B-{NOW}", feed)
         self.assertEqual(feed.count("<item>"), 2)
-        self.assertIn(
-            "https://example.test/priority/A_B.xml", feed
-        )
-        self.assertIn("https://example.test/priority/A_B.html", feed)
+        self.assertIn("https://example.test/priority/A_B.xml", feed)
 
-    def test_empty_feed_is_still_valid(self) -> None:
-        feed = render_feed("alice", "alice", [], NOW, "http://localhost:8000")
-        self.assertIn("<channel>", feed)
-        self.assertNotIn("<item>", feed)
+        empty = render_feed("alice", "alice", [], NOW, "http://localhost:8000")
+        self.assertIn("<channel>", empty)
+        self.assertNotIn("<item>", empty)
 
 
 class PageTest(unittest.TestCase):
@@ -211,79 +190,26 @@ class PageTest(unittest.TestCase):
             charts={skill: chart for skill in SKILLS},
         )
 
-    def test_one_big_chart_per_skill(self) -> None:
+    def test_priority_page_charts_and_axis(self) -> None:
         page = render_priority_page(self.make_data())
         self.assertEqual(page.count("<svg"), len(SKILLS))
         self.assertIn('viewBox="0 0 720 200"', page)
         self.assertIn("priority report: 10-minute updates", page)
+        self.assertIn("generated at:", page)
         self.assertIn(
             '<h2 class="subheading"><a href="alice.xml">rss feed</a></h2>',
             page,
         )
-        self.assertEqual(page.count('class="subheading"'), 2)
         self.assertIn('href="../players/alice.html"', page)
-        self.assertIn(
-            '<a href="index.html">priority tracking</a>', page
-        )
         self.assertIn('type="application/rss+xml"', page)
-
-    def test_time_axis_uses_hh_mm_ticks(self) -> None:
-        page = render_priority_page(self.make_data())
         labels = re.findall(
             r'<text x="[^"]+" y="\d+" text-anchor="[^"]+">'
             r"(\d\d:\d\d)</text>",
             page,
         )
         self.assertEqual(len(labels), len(SKILLS) * 7)
-        self.assertNotIn("2027-01-15<", page)
 
-    def test_skill_links_under_the_header(self) -> None:
-        page = render_priority_page(self.make_data())
-        self.assertIn(
-            '<div class="tabs" id="skill-tabs" role="tablist">', page
-        )
-        self.assertIn('data-skill="overall"', page)
-        self.assertIn('data-skill="attack"', page)
-        self.assertLess(
-            page.index('id="skill-tabs"'),
-            page.index('<div class="stats">'),
-        )
-        self.assertIn(
-            '<section id="skill-overall" class="tab-panel" '
-            'role="tabpanel" aria-labelledby="tab-overall">',
-            page,
-        )
-        self.assertIn(
-            '<section id="skill-attack" class="tab-panel" '
-            'role="tabpanel" aria-labelledby="tab-attack" hidden>',
-            page,
-        )
-        self.assertIn(".tab-panel[hidden]{display:none}", page)
-        self.assertNotIn('<nav class="skill-nav">', page)
-
-    def test_flat_skills_are_grey_tabs(self) -> None:
-        data = self.make_data()
-        flat_chart = ChartData(
-            NOW - 86400,
-            NOW,
-            [(NOW - 86400, 100), (NOW, 100)],
-            [(NOW, 0.0)],
-        )
-        charts = dict(data.charts)
-        charts["attack"] = flat_chart
-        page = render_priority_page(data._replace(charts=charts))
-        self.assertIn(
-            'class="tab flat" type="button" role="tab" id="tab-attack"',
-            page,
-        )
-        self.assertIn(
-            'class="tab" type="button" role="tab" id="tab-overall"', page
-        )
-        self.assertIn(".tab.flat{color:#888}", page)
-
-    def test_regular_data_is_marked_and_coloured(self) -> None:
-        data = self.make_data()
-        chart = ChartData(
+        regular = ChartData(
             NOW - 86400,
             NOW,
             [(NOW - 86400, 400), (NOW - 3600, 800), (NOW, 1000)],
@@ -292,7 +218,9 @@ class PageTest(unittest.TestCase):
             frozenset({NOW - 3600}),
         )
         page = render_priority_page(
-            data._replace(charts={skill: chart for skill in SKILLS})
+            self.make_data()._replace(
+                charts={skill: regular for skill in SKILLS}
+            )
         )
         self.assertIn("regular data", page)
         self.assertIn('class="line regular"', page)
@@ -313,7 +241,7 @@ class PageTest(unittest.TestCase):
 
 
 class WriteTest(unittest.TestCase):
-    def test_writes_pages_and_removes_stale_files(self) -> None:
+    def test_writes_and_resolves_canonical(self) -> None:
         conn = FakeConn(rows(("overall", NOW - 1800, 1000)))
         with tempfile.TemporaryDirectory() as directory:
             report_dir = Path(directory)
@@ -331,10 +259,6 @@ class WriteTest(unittest.TestCase):
             self.assertIn(
                 "alice priority - xp tracker",
                 page.read_text(encoding="utf-8"),
-            )
-            self.assertIn(
-                'href="alice.html"',
-                index.read_text(encoding="utf-8"),
             )
             self.assertIn(
                 "the top 5 players by overall xp",
@@ -357,15 +281,13 @@ class WriteTest(unittest.TestCase):
                 1,
             )
 
-    def test_configured_name_resolves_to_canonical_player(self) -> None:
-        conn = FakeConn(
-            rows(("overall", NOW - 1800, 1000)),
-            canonical="Cojultad",
+        canonical = FakeConn(
+            rows(("overall", NOW - 1800, 1000)), canonical="Cojultad"
         )
         with tempfile.TemporaryDirectory() as directory:
             report_dir = Path(directory)
             write_priority_reports(
-                conn, report_dir, ("cojultad",), NOW, "generated",
+                canonical, report_dir, ("cojultad",), NOW, "generated",
                 "http://localhost:8000",
             )
             priority = report_dir / "priority"

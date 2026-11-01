@@ -27,10 +27,15 @@ PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/api/highscores/player/{username}
 PLAYER_TRACKER_URL = (
     "https://vidyaplace.org/api/tracker/player/{username}?time={seconds}"
 )
-SKILL_TRACKER_URL = (
-    "https://vidyaplace.org/api/tracker/skill/{skill}/{page}"
-    "?time={seconds}&ironman={ironman}"
-)
+
+
+def _dedupe(names) -> tuple[str, ...]:
+    result: list[str] = []
+    for value in names:
+        name = str(value).strip()
+        if name and name not in result:
+            result.append(name)
+    return tuple(result)
 
 
 def build_dsn(database: str | None = None) -> str | None:
@@ -103,12 +108,7 @@ def _load_priority_file() -> tuple[str, ...]:
         data = data.get("players")
     if not isinstance(data, list):
         return DEFAULT_PRIORITY_PLAYERS
-    names: list[str] = []
-    for value in data:
-        name = str(value).strip()
-        if name and name not in names:
-            names.append(name)
-    return tuple(names)
+    return _dedupe(data)
 
 
 def parse_priority_players(values: list[str] | None) -> tuple[str, ...]:
@@ -122,11 +122,8 @@ def parse_priority_players(values: list[str] | None) -> tuple[str, ...]:
         values = [raw]
     names: list[str] = []
     for value in values:
-        for name in value.split(","):
-            name = name.strip()
-            if name and name not in names:
-                names.append(name)
-    return tuple(names)
+        names.extend(value.split(","))
+    return _dedupe(names)
 
 
 DEFAULT_BASE_URL = os.environ.get(

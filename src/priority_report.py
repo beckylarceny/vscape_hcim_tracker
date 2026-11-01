@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import email.utils
-import os
 import urllib.parse
 from bisect import bisect_left, bisect_right
 from pathlib import Path
@@ -22,16 +21,16 @@ from .player_report import (
     SKILL_TABS_CSS,
     SKILL_TAB_SCRIPT,
     _PLAYER_CSS,
+    _atomic_write,
     _chart_svg,
+    _current_line,
     _esc,
-    _num,
+    _group_points,
     _thin,
     highscores_url,
-    level_for_xp,
     player_slug,
     skill_panel_open,
     skill_tabs_html,
-    total_level,
 )
 from .storage import as_datetime, canonical_username
 
@@ -67,12 +66,7 @@ def _points_by_skill(
         """,
         (username, as_datetime(start_epoch), as_datetime(end_epoch)),
     ).fetchall()
-    points: dict[str, list[tuple[int, int]]] = {}
-    for skill, observed_at, xp in rows:
-        points.setdefault(skill, []).append(
-            (int(observed_at.timestamp()), int(xp))
-        )
-    return points
+    return _group_points(rows)
 
 
 def _regular_points_by_skill(
@@ -87,12 +81,7 @@ def _regular_points_by_skill(
         """,
         (username, as_datetime(start_epoch), as_datetime(end_epoch)),
     ).fetchall()
-    points: dict[str, list[tuple[int, int]]] = {}
-    for skill, observed_at, xp in rows:
-        points.setdefault(skill, []).append(
-            (int(observed_at.timestamp()), int(xp))
-        )
-    return points
+    return _group_points(rows)
 
 
 def _merged_points(
@@ -276,23 +265,27 @@ def collect_events(
     return events[:MAX_FEED_EVENTS]
 
 
+def _plural(count: int, unit: str) -> str:
+    return f"{count} {unit}" + ("s" if count != 1 else "")
+
+
 def _ago(seconds: int) -> str:
     seconds = max(0, int(seconds))
     if seconds < 60:
         return "less than a minute"
     minutes = seconds // 60
     if minutes < 60:
-        return f"{minutes} minute" + ("s" if minutes != 1 else "")
+        return _plural(minutes, "minute")
     hours, minutes = divmod(minutes, 60)
     if hours < 24:
-        text = f"{hours} hour" + ("s" if hours != 1 else "")
+        text = _plural(hours, "hour")
         if minutes:
-            text += f" {minutes} minute" + ("s" if minutes != 1 else "")
+            text += f" {_plural(minutes, 'minute')}"
         return text
     days, hours = divmod(hours, 24)
-    text = f"{days} day" + ("s" if days != 1 else "")
+    text = _plural(days, "day")
     if hours:
-        text += f" {hours} hour" + ("s" if hours != 1 else "")
+        text += f" {_plural(hours, 'hour')}"
     return text
 
 
@@ -365,20 +358,10 @@ svg .line.regular{stroke:#f59e0b;stroke-dasharray:4 3}
 svg .area.regular{fill:#f59e0b33;stroke:#f59e0b33}
 svg .dot.regular{fill:#f59e0b}
 .key.regular-key::before{background:#f59e0b}
+ul{max-width:44rem;margin:1rem auto;padding-left:1.4rem}
+p.blurb{max-width:44rem;margin:1rem auto;color:#888;font-size:.9rem;
+        line-height:1.5}
 """
-
-
-def _current_line(
-    skill: str, value: int | None, current: dict[str, int]
-) -> str:
-    if value is None:
-        return "no data"
-    if skill == "overall":
-        total = total_level(current)
-        if total is None:
-            return _num(value)
-        return f"{_num(value)} (total level {total})"
-    return f"{_num(value)} (level {level_for_xp(value)})"
 
 
 def render_priority_page(data: PriorityData) -> str:
@@ -408,7 +391,7 @@ def render_priority_page(data: PriorityData) -> str:
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
         "vidyascape highscores</a></h2>",
         f'<h2 class="subheading"><a href="{_esc(feed_href)}">rss feed</a></h2>',
-        f'<p class="meta">generated: {_esc(data.generated)}</p>',
+        f'<p class="meta">generated at: {_esc(data.generated)}</p>',
         '<p class="meta">priority report: 10-minute updates, last 24 hours</p>',
         skill_tabs_html(flat),
         '<div class="stats">',
@@ -452,12 +435,6 @@ def render_priority_page(data: PriorityData) -> str:
     return "\n".join(parts) + "\n"
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temp.write_text(text, encoding="utf-8")
-    os.replace(temp, path)
-
-
 def render_priority_index(players: list[str]) -> str:
     items = "".join(
         f'<li><a href="{urllib.parse.quote(player_slug(name))}.html">'
@@ -472,11 +449,8 @@ def render_priority_index(players: list[str]) -> str:
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>priority tracking - xp tracker</title>",
-        f"<style>{_PLAYER_CSS}"
-        "ul{max-width:44rem;margin:1rem auto;padding-left:1.4rem}"
-        "p.blurb{max-width:44rem;margin:1rem auto;color:#888;"
-        "font-size:.9rem;line-height:1.5}"
-        "</style></head><body id=\"top\">",
+        f"<style>{_PLAYER_CSS}{_PRIORITY_CSS}</style>"
+        '</head><body id="top">',
         '<div class="backlinks"><p class="sub">'
         '<a href="../latest.html">all rankings</a></p></div>',
         "<h1>priority tracking</h1>",

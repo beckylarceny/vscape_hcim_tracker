@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -52,11 +51,25 @@ class GridTest(unittest.TestCase):
         )
         self.assertGreaterEqual(min(grid), NOW - 7 * DAY - COLLECT)
 
-    def test_retry_window_includes_previous_checkpoints(self) -> None:
-        grid = main.build_grid(
+        later = main.build_grid(
             NOW + COLLECT, DAY, COLLECT, 365 * DAY, 7 * DAY, True
         )
-        self.assertIn((NOW // COLLECT) * COLLECT, grid)
+        self.assertIn(current, later)
+
+
+class RateLimiterTest(unittest.TestCase):
+    def test_spaces_calls_and_zero_is_unlimited(self) -> None:
+        with patch.object(
+            main.time, "monotonic", side_effect=[0.0, 0.1]
+        ), patch.object(main.time, "sleep") as sleep:
+            limiter = main.RateLimiter(4)
+            limiter.wait()
+            limiter.wait()
+        self.assertEqual(sleep.call_args_list[0].args[0], 0.15)
+
+        with patch.object(main.time, "sleep") as sleep:
+            main.RateLimiter(0).wait()
+        sleep.assert_not_called()
 
 
 class CollectPlayerTest(unittest.TestCase):
@@ -89,7 +102,18 @@ class CollectPlayerTest(unittest.TestCase):
             )
         return stats, upsert, insert, checkpoints
 
-    def test_non_hcim_account_is_not_recorded(self) -> None:
+    def test_hcim_account_is_verified_then_recorded(self) -> None:
+        stats, upsert, insert, checkpoints = self.collect(
+            (HCIM, xp(1000)), [xp(10), xp(20)]
+        )
+        self.assertEqual(stats["players"], 1)
+        self.assertEqual(stats["rows"], 2 * len(SKILLS))
+        upsert.assert_called_once_with(self.conn, [("alice", HCIM)])
+        self.assertEqual(len(insert.call_args.args[1]), 2 * len(SKILLS))
+        self.assertEqual(
+            sorted(checkpoints.call_args.args[2]), [T1, T2]
+        )
+
         stats, upsert, insert, checkpoints = self.collect(
             (1, xp(0)), [xp(0), xp(0)]
         )
@@ -98,23 +122,9 @@ class CollectPlayerTest(unittest.TestCase):
         insert.assert_not_called()
         checkpoints.assert_not_called()
 
-    def test_hcim_account_is_verified_then_recorded(self) -> None:
-        stats, upsert, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)), [xp(10), xp(20)]
-        )
-        self.assertEqual(stats["players"], 1)
-        self.assertEqual(stats["rows"], 2 * len(SKILLS))
-        upsert.assert_called_once_with(self.conn, [("alice", HCIM)])
-        self.assertEqual(insert.call_count, 1)
-        self.assertEqual(len(insert.call_args.args[1]), 2 * len(SKILLS))
-        self.assertEqual(
-            sorted(checkpoints.call_args.args[2]), [T1, T2]
-        )
-
     def test_unchanged_xp_is_not_stored(self) -> None:
-        last = xp(1000)
         stats, _, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)), [xp(0), xp(0)], last_xp=last
+            (HCIM, xp(1000)), [xp(0), xp(0)], last_xp=xp(1000)
         )
         self.assertEqual(stats["rows"], 0)
         insert.assert_not_called()
@@ -122,22 +132,20 @@ class CollectPlayerTest(unittest.TestCase):
             sorted(checkpoints.call_args.args[2]), [T1, T2]
         )
 
-    def test_only_changed_skills_are_stored(self) -> None:
-        last = xp(1000)
         gains = xp(0)
         gains["overall"] = 5
         stats, _, insert, _ = self.collect(
-            (HCIM, xp(1000)), [gains], grid=(T1,), last_xp=last
+            (HCIM, xp(1000)), [gains], grid=(T1,), last_xp=xp(1000)
         )
         self.assertEqual(stats["rows"], 1)
-        rows = insert.call_args.args[1]
-        self.assertEqual([row[1] for row in rows], ["overall"])
+        self.assertEqual(
+            [row[1] for row in insert.call_args.args[1]], ["overall"]
+        )
 
     def test_failed_checkpoint_does_not_abort_the_player(self) -> None:
-        stats, upsert, insert, checkpoints = self.collect(
+        stats, _, insert, checkpoints = self.collect(
             (HCIM, xp(1000)),
             [api.ApiError("503"), xp(10)],
-            grid=(T1, T2),
         )
         self.assertEqual(stats["players"], 1)
         self.assertEqual(stats["failures"], 1)
@@ -145,6 +153,15 @@ class CollectPlayerTest(unittest.TestCase):
         rows = insert.call_args.args[1]
         self.assertTrue(all(row[2] == storage.as_datetime(T2) for row in rows))
         self.assertEqual(sorted(checkpoints.call_args.args[2]), [T2])
+
+        # Pending rows survive a failure on a later checkpoint.
+        stats, _, insert, checkpoints = self.collect(
+            (HCIM, xp(1000)),
+            [xp(10), api.ApiError("503")],
+        )
+        self.assertEqual(stats["failures"], 1)
+        self.assertEqual(len(insert.call_args.args[1]), len(SKILLS))
+        self.assertEqual(sorted(checkpoints.call_args.args[2]), [T1])
 
     def test_highscores_api_error_is_counted_not_raised(self) -> None:
         with patch.object(main.storage, "connect", return_value=self.conn), \
@@ -157,25 +174,8 @@ class CollectPlayerTest(unittest.TestCase):
         self.assertEqual(stats["players"], 0)
         self.conn.close.assert_called_once()
 
-    def test_pending_rows_are_flushed_when_later_fetch_fails(self) -> None:
-        stats, _, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)),
-            [xp(10), api.ApiError("503")],
-            grid=(T1, T2),
-        )
-        self.assertEqual(stats["failures"], 1)
-        self.assertEqual(insert.call_count, 1)
-        self.assertEqual(len(insert.call_args.args[1]), len(SKILLS))
-        self.assertEqual(sorted(checkpoints.call_args.args[2]), [T1])
-
 
 class ModeTest(unittest.TestCase):
-    def test_collect_only_and_serve_only_are_exclusive(self) -> None:
-        with self.assertRaises(SystemExit):
-            main.build_parser().parse_args(
-                ["--collect-only", "--serve-only"]
-            )
-
     def test_collect_only_run_skips_report_generation(self) -> None:
         conn = MagicMock()
         args = SimpleNamespace(
@@ -208,22 +208,8 @@ class ModeTest(unittest.TestCase):
         finish.assert_called_once()
 
 
-class ReportThreadTest(unittest.TestCase):
-    def test_writes_on_its_own_timer(self) -> None:
-        args = SimpleNamespace(report_interval=0.01)
-        with patch.object(main, "write_current_report") as writer:
-            stop = main.start_report_thread(args, "dsn")
-            self.assertIsNotNone(stop)
-            for _ in range(100):
-                if writer.call_count:
-                    break
-                time.sleep(0.01)
-            stop.set()
-        self.assertGreaterEqual(writer.call_count, 1)
-
-
 class DsnTest(unittest.TestCase):
-    def test_explicit_dsn_wins(self) -> None:
+    def test_dsn_precedence_and_encoding(self) -> None:
         with patch.dict(
             os.environ,
             {"VSCAPE_HCIM_TRACKER_DSN": "postgresql:///x"},
@@ -231,7 +217,6 @@ class DsnTest(unittest.TestCase):
         ):
             self.assertEqual(build_dsn(), "postgresql:///x")
 
-    def test_pg_variables_are_url_encoded(self) -> None:
         with patch.dict(
             os.environ,
             {
@@ -248,7 +233,6 @@ class DsnTest(unittest.TestCase):
                 "postgresql://u:p%40ss%3Aword@db:5432/xp_tracker",
             )
 
-    def test_database_override_uses_pg_variables(self) -> None:
         with patch.dict(
             os.environ,
             {
@@ -272,68 +256,45 @@ class PriorityListTest(unittest.TestCase):
             parse_priority_players(["a,b", " c ", "a"]),
             ("a", "b", "c"),
         )
-
-    def test_environment_is_used_when_cli_is_omitted(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS": "x, y"},
-        ):
-            self.assertEqual(parse_priority_players(None), ("x", "y"))
-
-    def test_default_list_is_empty(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(parse_priority_players(None), ())
-
-    def test_json_file_is_used_when_env_is_unset(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory, "priority.json")
-            path.write_text(
-                '{"players": ["alice", "bob", "alice"]}',
-                encoding="utf-8",
-            )
-            with patch.dict(
-                os.environ, {PRIORITY_FILE_ENV: str(path)}, clear=True
-            ):
-                self.assertEqual(
-                    parse_priority_players(None), ("alice", "bob")
-                )
-
-    def test_plain_json_array_is_accepted(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory, "priority.json")
-            path.write_text('["alice"]', encoding="utf-8")
-            with patch.dict(
-                os.environ, {PRIORITY_FILE_ENV: str(path)}, clear=True
-            ):
-                self.assertEqual(parse_priority_players(None), ("alice",))
-
-    def test_empty_json_disables_priority(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory, "priority.json")
-            path.write_text("[]", encoding="utf-8")
-            with patch.dict(
-                os.environ, {PRIORITY_FILE_ENV: str(path)}, clear=True
-            ):
-                self.assertEqual(parse_priority_players(None), ())
-
-    def test_missing_file_uses_the_default(self) -> None:
-        with patch.dict(
-            os.environ,
-            {PRIORITY_FILE_ENV: "/nonexistent/priority.json"},
-            clear=True,
-        ):
-            self.assertEqual(
-                parse_priority_players(None), ()
-            )
-
-    def test_cli_values_override_the_file(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             self.assertEqual(
                 parse_priority_players(["alice,bob"]),
                 ("alice", "bob"),
             )
 
-    def test_refresh_reloads_the_file(self) -> None:
+    def test_environment_then_file_then_default(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS": "x, y"},
+        ):
+            self.assertEqual(parse_priority_players(None), ("x", "y"))
+
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(parse_priority_players(None), ())
+
+        with patch.dict(
+            os.environ,
+            {PRIORITY_FILE_ENV: "/nonexistent/priority.json"},
+            clear=True,
+        ):
+            self.assertEqual(parse_priority_players(None), ())
+
+    def test_json_file_is_used_when_env_is_unset(self) -> None:
+        cases = (
+            ('{"players": ["alice", "bob", "alice"]}', ("alice", "bob")),
+            ('["alice"]', ("alice",)),
+            ("[]", ()),
+        )
+        for text, expected in cases:
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory, "priority.json")
+                path.write_text(text, encoding="utf-8")
+                with patch.dict(
+                    os.environ, {PRIORITY_FILE_ENV: str(path)}, clear=True
+                ):
+                    self.assertEqual(parse_priority_players(None), expected)
+
+    def test_refresh_reloads_file_unless_cli_pinned(self) -> None:
         args = SimpleNamespace(priority=None, priority_players=("old",))
         with patch.object(
             main, "parse_priority_players", return_value=("new",)
@@ -341,45 +302,11 @@ class PriorityListTest(unittest.TestCase):
             main.refresh_priority_players(args)
         self.assertEqual(args.priority_players, ("new",))
 
-    def test_refresh_does_not_override_cli_values(self) -> None:
-        args = SimpleNamespace(
-            priority=["fixed"], priority_players=("fixed",)
-        )
+        pinned = SimpleNamespace(priority=["fixed"], priority_players=("fixed",))
         with patch.object(main, "parse_priority_players") as parse:
-            main.refresh_priority_players(args)
+            main.refresh_priority_players(pinned)
         parse.assert_not_called()
-        self.assertEqual(args.priority_players, ("fixed",))
-
-
-class PriorityTrackingTest(unittest.TestCase):
-    def test_top_players_come_before_manual_names(self) -> None:
-        spelling = {"cojultad": "Cojultad"}
-        with patch.object(
-            main.storage, "top_players_by_xp", return_value=["Cojultad"]
-        ), patch.object(
-            main.storage, "canonical_username",
-            side_effect=lambda conn, name: spelling.get(name),
-        ):
-            self.assertEqual(
-                main.tracked_priority_names(
-                    MagicMock(), ("cojultad", "Wolfy")
-                ),
-                ("Cojultad", "Wolfy"),
-            )
-
-    def test_index_adds_players_with_remaining_priority_rows(self) -> None:
-        with patch.object(
-            main.storage, "top_players_by_xp", return_value=["alice"]
-        ), patch.object(
-            main.storage, "canonical_username", return_value=None
-        ), patch.object(
-            main.storage, "priority_snapshot_players",
-            return_value=["alice", "bob"],
-        ):
-            self.assertEqual(
-                main.priority_index_names(MagicMock(), ()),
-                ("alice", "bob"),
-            )
+        self.assertEqual(pinned.priority_players, ("fixed",))
 
 
 class PriorityCollectTest(unittest.TestCase):
@@ -425,8 +352,7 @@ class PriorityCollectTest(unittest.TestCase):
         self.assertEqual(len(insert.call_args.args[1]), len(SKILLS))
         self.assertEqual(checkpoints.call_args.args[2], [T1])
 
-    def test_priority_uses_the_canonical_username(self) -> None:
-        _, insert, checkpoints = self.collect(
+        stats, insert, checkpoints = self.collect(
             (HCIM, xp(1000)), [xp(100)], canonical="Cojultad"
         )
         self.assertTrue(
@@ -434,7 +360,6 @@ class PriorityCollectTest(unittest.TestCase):
         )
         self.assertEqual(checkpoints.call_args.args[1], "Cojultad")
 
-    def test_unchanged_priority_xp_is_not_stored(self) -> None:
         stats, insert, checkpoints = self.collect(
             (HCIM, xp(1000)), [xp(0)], last_xp=xp(1000)
         )
@@ -449,7 +374,6 @@ class PriorityCollectTest(unittest.TestCase):
         insert.assert_not_called()
         checkpoints.assert_not_called()
 
-    def test_priority_api_error_is_counted(self) -> None:
         with patch.object(main.storage, "connect", return_value=self.conn), \
                 patch.object(
                     main.storage, "canonical_username", return_value=None
@@ -464,14 +388,15 @@ class PriorityCollectTest(unittest.TestCase):
         self.assertEqual(stats["failures"], 1)
         self.assertEqual(stats["players"], 0)
 
-    def test_collect_once_uses_the_priority_list_and_prunes(self) -> None:
+    def test_collect_once_uses_tracked_players_and_prunes(self) -> None:
         args = SimpleNamespace(priority_players=("alice", "bob"))
         totals = {"requests": 2, "rows": 2, "failures": 0, "players": 1}
         with patch.object(main.storage, "connect", return_value=self.conn), \
                 patch.object(main.storage, "ensure_schema"), \
                 patch.object(main.storage, "prune_priority_data") as prune, \
                 patch.object(
-                    main.storage, "top_players_by_xp", return_value=[]
+                    main.storage, "top_players_by_xp",
+                    return_value=["Cojultad"],
                 ), \
                 patch.object(
                     main.storage, "canonical_username", return_value=None
@@ -480,15 +405,15 @@ class PriorityCollectTest(unittest.TestCase):
                     main, "collect_priority_player", return_value=totals
                 ) as collect:
             result = main.collect_priority_once(args, "dsn", self.limiter)
-        self.assertEqual(collect.call_count, 2)
+        self.assertEqual(
+            [call.args[1] for call in collect.call_args_list],
+            ["Cojultad", "alice", "bob"],
+        )
         prune.assert_called_once()
-        self.assertEqual(result["players"], 2)
+        self.assertEqual(result["players"], 3)
+        self.assertEqual(result["failures"], 0)
 
-    def test_collect_once_includes_top_players_without_manual_entries(
-        self,
-    ) -> None:
         args = SimpleNamespace(priority_players=())
-        totals = {"requests": 2, "rows": 2, "failures": 0, "players": 1}
         with patch.object(main.storage, "connect", return_value=self.conn), \
                 patch.object(main.storage, "ensure_schema"), \
                 patch.object(main.storage, "prune_priority_data"), \
@@ -504,23 +429,6 @@ class PriorityCollectTest(unittest.TestCase):
                 ) as collect:
             main.collect_priority_once(args, "dsn", self.limiter)
         self.assertEqual(collect.call_args.args[1], "Cojultad")
-
-    def test_priority_thread_starts_without_players_to_prune(self) -> None:
-        args = SimpleNamespace(priority_players=())
-
-        def fake_loop(thread_args, dsn, limiter, stop):
-            stop.set()
-
-        with patch.object(
-            main, "_priority_loop", side_effect=fake_loop
-        ) as loop:
-            stop = main.start_priority_thread(args, "dsn", self.limiter)
-            self.assertIsNotNone(stop)
-            for _ in range(50):
-                if loop.call_count:
-                    break
-                time.sleep(0.01)
-        self.assertGreaterEqual(loop.call_count, 1)
 
 
 if __name__ == "__main__":

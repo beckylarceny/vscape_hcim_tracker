@@ -154,36 +154,39 @@ def fetched_checkpoint_times(
     return {int(row[0].timestamp()) for row in rows}
 
 
-def latest_xp_by_skill(
-    conn: psycopg.Connection, username: str
+_SNAPSHOT_TABLES = frozenset({"snapshots", "priority_snapshots"})
+_CHECKPOINT_TABLES = frozenset({"checkpoints", "priority_checkpoints"})
+
+
+def _latest_xp(
+    conn: psycopg.Connection, table: str, username: str
 ) -> dict[str, int]:
-    """Most recent stored xp per skill for one player."""
+    if table not in _SNAPSHOT_TABLES:
+        raise ValueError(table)
     rows = conn.execute(
-        """
+        f"""
         SELECT DISTINCT ON (skill) skill, xp
-        FROM snapshots
+        FROM {table}
         WHERE username = %s
         ORDER BY skill, observed_at DESC
         """,
         (username,),
     ).fetchall()
     return {skill: xp for skill, xp in rows}
+
+
+def latest_xp_by_skill(
+    conn: psycopg.Connection, username: str
+) -> dict[str, int]:
+    """Most recent stored xp per skill for one player."""
+    return _latest_xp(conn, "snapshots", username)
 
 
 def latest_priority_xp_by_skill(
     conn: psycopg.Connection, username: str
 ) -> dict[str, int]:
     """Most recent high-frequency xp per skill for one player."""
-    rows = conn.execute(
-        """
-        SELECT DISTINCT ON (skill) skill, xp
-        FROM priority_snapshots
-        WHERE username = %s
-        ORDER BY skill, observed_at DESC
-        """,
-        (username,),
-    ).fetchall()
-    return {skill: xp for skill, xp in rows}
+    return _latest_xp(conn, "priority_snapshots", username)
 
 
 def top_players_by_xp(
@@ -217,15 +220,18 @@ def priority_snapshot_players(conn: psycopg.Connection) -> list[str]:
     return [row[0] for row in rows]
 
 
-def insert_checkpoints(
-    conn: psycopg.Connection, username: str, timestamps: Sequence[int]
+def _insert_checkpoints(
+    conn: psycopg.Connection, table: str, username: str,
+    timestamps: Sequence[int],
 ) -> None:
     if not timestamps:
         return
+    if table not in _CHECKPOINT_TABLES:
+        raise ValueError(table)
     with conn.cursor() as cursor:
         cursor.executemany(
-            """
-            INSERT INTO checkpoints (username, observed_at)
+            f"""
+            INSERT INTO {table} (username, observed_at)
             VALUES (%s, %s)
             ON CONFLICT DO NOTHING
             """,
@@ -234,53 +240,45 @@ def insert_checkpoints(
     conn.commit()
 
 
-def insert_snapshots(conn: psycopg.Connection, rows: Sequence[tuple]) -> None:
+def _insert_rows(
+    conn: psycopg.Connection, table: str, rows: Sequence[tuple]
+) -> None:
     if not rows:
         return
+    if table not in _SNAPSHOT_TABLES:
+        raise ValueError(table)
     with conn.cursor() as cursor:
         cursor.executemany(
-            """
-            INSERT INTO snapshots (username, skill, observed_at, xp)
+            f"""
+            INSERT INTO {table} (username, skill, observed_at, xp)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (username, skill, observed_at) DO NOTHING
             """,
             rows,
         )
     conn.commit()
+
+
+def insert_checkpoints(
+    conn: psycopg.Connection, username: str, timestamps: Sequence[int]
+) -> None:
+    _insert_checkpoints(conn, "checkpoints", username, timestamps)
+
+
+def insert_snapshots(conn: psycopg.Connection, rows: Sequence[tuple]) -> None:
+    _insert_rows(conn, "snapshots", rows)
 
 
 def insert_priority_snapshots(
     conn: psycopg.Connection, rows: Sequence[tuple]
 ) -> None:
-    if not rows:
-        return
-    with conn.cursor() as cursor:
-        cursor.executemany(
-            """
-            INSERT INTO priority_snapshots (username, skill, observed_at, xp)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (username, skill, observed_at) DO NOTHING
-            """,
-            rows,
-        )
-    conn.commit()
+    _insert_rows(conn, "priority_snapshots", rows)
 
 
 def insert_priority_checkpoints(
     conn: psycopg.Connection, username: str, timestamps: Sequence[int]
 ) -> None:
-    if not timestamps:
-        return
-    with conn.cursor() as cursor:
-        cursor.executemany(
-            """
-            INSERT INTO priority_checkpoints (username, observed_at)
-            VALUES (%s, %s)
-            ON CONFLICT DO NOTHING
-            """,
-            [(username, as_datetime(epoch)) for epoch in timestamps],
-        )
-    conn.commit()
+    _insert_checkpoints(conn, "priority_checkpoints", username, timestamps)
 
 
 def prune_priority_data(conn: psycopg.Connection, cutoff_epoch: int) -> None:

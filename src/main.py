@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 import threading
 import time
@@ -12,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from . import api, player_report, priority_report, report, storage, web
+from .player_report import _atomic_write
 from .config import (
     DEFAULT_BASE_URL,
     DEFAULT_COLLECT_INTERVAL_SECONDS,
@@ -66,6 +66,15 @@ class RateLimiter:
             time.sleep(delay)
 
 
+def _zero_stats() -> dict[str, int]:
+    return {"requests": 0, "rows": 0, "failures": 0, "players": 0}
+
+
+def _add_stats(totals: dict[str, int], stats: dict[str, int]) -> None:
+    for key in totals:
+        totals[key] += stats[key]
+
+
 def build_grid(
     now_epoch: int,
     interval: int,
@@ -96,7 +105,7 @@ def collect_player(
     limiter: RateLimiter,
 ) -> dict[str, int]:
     """Fetch the xp history of one player and store it. Resumes automatically."""
-    stats = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
+    stats = _zero_stats()
     conn = storage.connect(dsn)
     pending: list[tuple] = []
     done: list[int] = []
@@ -186,7 +195,7 @@ def collect_all(
     workers: int,
     limiter: RateLimiter,
 ) -> dict[str, int]:
-    totals = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
+    totals = _zero_stats()
     done = 0
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = {
@@ -202,8 +211,7 @@ def collect_all(
                 log.exception("failed to collect %r", name)
                 totals["failures"] += 1
                 continue
-            for key in totals:
-                totals[key] += stats[key]
+            _add_stats(totals, stats)
             if done % 10 == 0 or done == len(players):
                 log.info(
                     "progress %d/%d players, %d requests, %d rows, %d failures",
@@ -227,7 +235,7 @@ def collect_priority_player(
     limiter: RateLimiter,
 ) -> dict[str, int]:
     """Fetch one 10-minute priority checkpoint and store it."""
-    stats = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
+    stats = _zero_stats()
     conn = storage.connect(dsn)
     try:
         canonical = storage.canonical_username(conn, username)
@@ -300,7 +308,7 @@ def collect_priority_once(
     args: argparse.Namespace, dsn: str, limiter: RateLimiter
 ) -> dict[str, int]:
     """Fetch the current 10-minute slot for every priority player, then prune."""
-    totals = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
+    totals = _zero_stats()
 
     now = int(time.time())
     timestamp = (
@@ -333,8 +341,7 @@ def collect_priority_once(
             log.exception("failed to collect priority player %r", name)
             totals["failures"] += 1
             continue
-        for key in totals:
-            totals[key] += stats[key]
+        _add_stats(totals, stats)
 
     log.info(
         "priority collection: %d players, %d requests, %d rows, %d failures",
@@ -357,9 +364,9 @@ def _priority_loop(
         except Exception:  # noqa: BLE001 - keep the loop alive
             log.exception("priority collection failed")
         now = time.time()
-        next_slot = (
-            int(now) // DEFAULT_PRIORITY_INTERVAL_SECONDS + 1
-        ) * DEFAULT_PRIORITY_INTERVAL_SECONDS + 5
+        next_slot = _next_slot(
+            now, DEFAULT_PRIORITY_INTERVAL_SECONDS, 5
+        )
         stop.wait(max(1.0, next_slot - now))
 
 
@@ -378,10 +385,9 @@ def start_priority_thread(
     return stop
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temp.write_text(text, encoding="utf-8")
-    os.replace(temp, path)
+def _next_slot(now: float, interval: int, grace: int) -> float:
+    """Next timestamp on the interval grid, plus a grace period."""
+    return (int(now) // interval + 1) * interval + grace
 
 
 def _remove_old_reports(report_dir: Path) -> None:
@@ -390,10 +396,7 @@ def _remove_old_reports(report_dir: Path) -> None:
         "report_*.txt", "report_*.html", ".latest.*.tmp", "players/.*.tmp",
     ):
         for path in report_dir.glob(pattern):
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
+            path.unlink(missing_ok=True)
 
 
 _PLAYER_WATERMARKS: dict[Path, dict[str, tuple[int, object]]] = {}
@@ -458,22 +461,24 @@ def write_player_pages(
     directory = report_dir / "players"
     directory.mkdir(parents=True, exist_ok=True)
     priority = set(priority_names)
-    expected: set[str] = set()
-    stale: list[str] = []
-    for username in data.players:
-        name = f"{player_report.player_slug(username)}.html"
-        expected.add(name)
-        if (
-            force
-            or previous is None
-            or previous.get(username) != watermarks.get(username)
-            or not (directory / name).exists()
-        ):
-            stale.append(username)
+    entries = [
+        (username, f"{player_report.player_slug(username)}.html")
+        for username in data.players
+    ]
+    expected = {name for _, name in entries}
+    stale = [
+        username
+        for username, name in entries
+        if force
+        or previous is None
+        or previous.get(username) != watermarks.get(username)
+        or not (directory / name).exists()
+    ]
 
+    names = dict(entries)
     written = 0
     for username in stale:
-        name = f"{player_report.player_slug(username)}.html"
+        name = names[username]
         try:
             page_data = player_report.collect_player_data(
                 conn, username, data.now_epoch, data.lookback,
@@ -493,10 +498,7 @@ def write_player_pages(
             )
     for path in directory.glob("*.html"):
         if path.name not in expected:
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
+            path.unlink(missing_ok=True)
     return written
 
 
@@ -602,7 +604,7 @@ def run_once(
             collect_interval, lookback,
         )
 
-        totals = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
+        totals = _zero_stats()
         status = "error"
         try:
             if not args.report_only:
@@ -918,9 +920,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         now = time.time()
-        next_run = (
-            int(now) // args.collect_interval + 1
-        ) * args.collect_interval + 60
+        next_run = _next_slot(now, args.collect_interval, 60)
         delay = max(1.0, next_run - now)
         log.info("sleeping %.0fs until the next checkpoint", delay)
         time.sleep(delay)

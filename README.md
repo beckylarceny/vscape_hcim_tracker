@@ -33,6 +33,8 @@ docker compose up -d --force-recreate
 - logs: `docker compose logs -f collector` or `docker compose logs -f web`
 - stop: `docker compose down` keeps the database
 - delete data: `docker compose down -v`
+- update: `./update.sh` pulls, rebuilds the image and recreates `collector` and
+  `web`; the database container is left running
 
 Three containers: `db` (PostgreSQL with the `pgdata` volume), `collector` (API
 to database), and `web` (reports and HTTP on port 8000). Only `web` is

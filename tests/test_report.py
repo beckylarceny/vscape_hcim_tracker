@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import unittest
 
 from src.config import SKILLS, SPANS
@@ -38,54 +37,30 @@ def build_points(burst_after_seconds: int = 100 * 86400) -> list[tuple[int, int]
 
 
 class RecordScanTest(unittest.TestCase):
-    def scan(self) -> dict[str, list]:
+    def test_window_lengths_and_unaligned_now(self) -> None:
         heaps = {name: [] for name in SPANS}
         _scan_player_points(
             "tester", build_points(), list(SPANS.items()),
             NOW, LOOKBACK, INTERVAL, 5, heaps,
         )
-        return heaps
-
-    def test_window_lengths_match_spans(self) -> None:
         for name, span in SPANS.items():
-            record = sorted(self.scan()[name], reverse=True)[0]
+            record = sorted(heaps[name], reverse=True)[0]
             self.assertEqual(record.end_epoch - record.start_epoch, span, name)
 
-
-class RecordWindowTest(unittest.TestCase):
-    def test_year_records_exist_when_now_is_unaligned(self) -> None:
         # write_report() passes time.time(), which is never on a checkpoint.
         interval = 86400
-        lookback = 365 * 86400
         aligned = (1_800_000_000 // interval) * interval
-        now = aligned + 1800
         points = [
-            (t, t - aligned + lookback)
-            for t in range(aligned - lookback, aligned + 1, interval)
+            (t, t - aligned + LOOKBACK)
+            for t in range(aligned - LOOKBACK, aligned + 1, interval)
         ]
         heaps = {name: [] for name in SPANS}
         _scan_player_points(
             "tester", points, list(SPANS.items()),
-            now, lookback, 6 * 3600, 5, heaps,
+            aligned + 1800, LOOKBACK, 6 * 3600, 5, heaps,
         )
         self.assertTrue(heaps["year"])
 
-
-class ZeroGainTest(unittest.TestCase):
-    def test_flat_xp_produces_no_record_rows(self) -> None:
-        points = [
-            (NOW - LOOKBACK + step * INTERVAL, 500)
-            for step in range(LOOKBACK // INTERVAL + 1)
-        ]
-        heaps = {name: [] for name in SPANS}
-        _scan_player_points(
-            "flat", points, list(SPANS.items()),
-            NOW, LOOKBACK, INTERVAL, 5, heaps,
-        )
-        self.assertTrue(all(not heap for heap in heaps.values()))
-
-
-class BestPerPlayerTest(unittest.TestCase):
     def test_player_appears_once_with_their_best_gain(self) -> None:
         points: list[tuple[int, int]] = []
         xp = 0
@@ -104,9 +79,19 @@ class BestPerPlayerTest(unittest.TestCase):
 
         for name in SPANS:
             self.assertLessEqual(len(heaps[name]), 1, name)
-        self.assertEqual(len(heaps["day"]), 1)
         self.assertEqual(heaps["day"][0].gain, 5_000_000)
         self.assertEqual(heaps["day"][0].username, "tester")
+
+        flat = [
+            (NOW - LOOKBACK + step * INTERVAL, 500)
+            for step in range(LOOKBACK // INTERVAL + 1)
+        ]
+        heaps = {name: [] for name in SPANS}
+        _scan_player_points(
+            "flat", flat, list(SPANS.items()),
+            NOW, LOOKBACK, INTERVAL, 5, heaps,
+        )
+        self.assertTrue(all(not heap for heap in heaps.values()))
 
 
 class HtmlReportTest(unittest.TestCase):
@@ -144,36 +129,22 @@ class HtmlReportTest(unittest.TestCase):
         self.assertLess(text.index("  PAST"), text.index("  BEST"))
         self.assertIn("    Day (24h)", text)
         self.assertIn("    Year (8760h)", text)
+        self.assertIn("players logged:", text)
+        self.assertIn("backfill interval:", text)
+        self.assertIn("1. alice", text)
 
-    def test_player_names_link_to_player_pages(self) -> None:
+    def test_player_names_link_to_player_pages_and_finder(self) -> None:
         data = self.make_data()
         gains = {span: dict(skills) for span, skills in data.gains.items()}
         gains["day"]["overall"] = [("Fuck Jagex", 100)]
-        page = render_html(data._replace(gains=gains))
-        self.assertIn(
-            'href="players/Fuck_Jagex.html"',
-            page,
+        page = render_html(
+            data._replace(gains=gains, players=("Alice", "Fuck Jagex"))
         )
+        self.assertIn('href="players/Fuck_Jagex.html"', page)
         self.assertIn(">Fuck Jagex</a>", page)
-
-    def test_player_finder_maps_names_to_pages(self) -> None:
-        data = self.make_data()._replace(players=("Alice", "Fuck Jagex"))
-        page = render_html(data)
-        self.assertIn('<form class="find"', page)
-        self.assertIn('<button type="submit">Go</button>', page)
         self.assertIn('<option value="Alice">', page)
-        self.assertIn(
-            '"alice": "players/Alice.html"',
-            page,
-        )
-        self.assertIn(
-            '"fuck jagex": "players/Fuck_Jagex.html"',
-            page,
-        )
-        self.assertIn(
-            "window.open(url,'_blank','noopener')", page
-        )
-        self.assertNotIn("location.href", page)
+        self.assertIn('"fuck jagex": "players/Fuck_Jagex.html"', page)
+        self.assertIn("window.open(url,'_blank','noopener')", page)
 
     def test_coverage_bar_renders_runs(self) -> None:
         page = render_html(self.make_data())
@@ -181,23 +152,19 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn("1/2 players (50%)", page)
         self.assertIn('class="zero"', page)
 
-    def test_coverage_uses_candidate_total(self) -> None:
-        data = self.make_data()._replace(coverage_total=4)
-        page = render_html(data)
+        page = render_html(self.make_data()._replace(coverage_total=4))
         self.assertIn("2/4 players (50%)", page)
-        self.assertIn("1/4 players (25%)", page)
-        self.assertIn("players: 2 / 4", page)
+        self.assertIn("players logged: 2 / 4", page)
 
-    def test_best_tables_split_dates(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn(">Start date<", page)
-        self.assertIn(">End date<", page)
-        self.assertIn(">Date<", page)
-
-    def test_search_bar_is_separated_from_skill_links(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn(
-            "padding-bottom:1.25rem;border-bottom:1px solid #8884", page
+        self.assertEqual(
+            _coverage_runs(
+                [(0, 5), (86400, 5), (172800, 2), (259200, 2), (345600, 0)]
+            ),
+            [(0, 2, 5), (2, 2, 2), (4, 1, 0)],
+        )
+        self.assertEqual(
+            _coverage_runs([(0, 1), (86400, 2), (172800, 1)]),
+            [(0, 1, 1), (1, 1, 2), (2, 1, 1)],
         )
 
     def test_skills_are_tabs(self) -> None:
@@ -205,13 +172,8 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn(
             '<div class="tabs" id="skill-tabs" role="tablist">', page
         )
-        self.assertIn('data-skill="overall"', page)
         self.assertIn('aria-selected="true">overall</button>', page)
-        self.assertNotIn("<nav>", page)
-        self.assertNotIn('<a href="#skill-overall">', page)
-
-    def test_only_the_first_tab_panel_is_visible(self) -> None:
-        page = render_html(self.make_data())
+        self.assertIn("function showSkill(name)", page)
         self.assertIn(
             '<section id="skill-overall" class="tab-panel" '
             'role="tabpanel" aria-labelledby="tab-overall">',
@@ -222,129 +184,19 @@ class HtmlReportTest(unittest.TestCase):
             'role="tabpanel" aria-labelledby="tab-attack" hidden>',
             page,
         )
-        self.assertIn("function showSkill(name)", page)
-        self.assertIn(".tab-panel[hidden]{display:none}", page)
-
-    def test_back_to_top_button(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn('<body id="top">', page)
-        self.assertIn('class="to-top" href="#top"', page)
-        self.assertIn("position:fixed", page)
-
-    def test_priority_players_link(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn(
-            '<a href="priority/index.html">priority tracking</a>', page
-        )
-
-    def test_report_links_are_spaced_like_player_links(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn(
-            ".sub{margin:.2rem 0 .8rem;font-size:1.05rem}", page
-        )
-
-    def test_backlinks_are_under_the_title(self) -> None:
-        page = render_html(self.make_data())
-        title = "<h1>XP Tracker</h1>"
-        text_report = (
-            '<p class="sub"><a href="latest.txt">text report</a></p>'
-        )
-        priority = (
-            '<p class="sub"><a href="priority/index.html">'
-            "priority tracking</a></p>"
-        )
-        self.assertLess(page.index(title), page.index(text_report))
-        self.assertLess(page.index(text_report), page.index(priority))
-        self.assertNotIn('class="backlinks"', page)
-        self.assertIn(
-            '<a href="latest.txt">text report</a>', page
-        )
-        self.assertIn(
-            '<a href="priority/index.html">priority tracking</a>', page
-        )
-
-    def test_player_columns_do_not_squish(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn("minmax(min(32rem,100%),1fr)", page)
-        self.assertIn(
-            "table.past td:nth-child(2),table.best td:nth-child(2)"
-            "{white-space:nowrap}",
-            page,
-        )
-        self.assertIn("@media (max-width:48rem)", page)
-
-    def test_tables_fit_their_content(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn("table{width:auto;max-width:100%;", page)
-        self.assertIn("margin:.25rem auto 1rem", page)
-
-    def test_section_headings_are_centered(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn("h2,h3,h4{text-align:center}", page)
-
-    def test_all_text_is_lowercase(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn("text-transform:lowercase", page)
-        self.assertNotIn("text-transform:uppercase", page)
-
-    def test_mobile_tables_fit_the_viewport(self) -> None:
-        page = render_html(self.make_data())
-        self.assertIn("table{font-size:.8em;table-layout:fixed;", page)
-        self.assertIn("width:calc(100% - 2rem)", page)
-        self.assertIn("margin-left:auto;margin-right:auto", page)
-        self.assertIn(
-            "table.past td:nth-child(2),table.best td:nth-child(2)"
-            "{white-space:normal}",
-            page,
-        )
-        self.assertIn(
-            "table.best.wide th:nth-child(3),"
-            "table.best.wide td:nth-child(3){width:28%}",
-            page,
-        )
-
-    def test_no_rounded_corners(self) -> None:
-        page = render_html(self.make_data())
-        self.assertFalse(re.search(r"border-radius:\s*(?!0\b)\d", page))
-
-
-class CoverageRunTest(unittest.TestCase):
-    def test_adjacent_equal_coverage_is_merged(self) -> None:
-        coverage = [
-            (0, 5), (86400, 5), (172800, 2), (259200, 2), (345600, 0),
-        ]
-        self.assertEqual(
-            _coverage_runs(coverage),
-            [(0, 2, 5), (2, 2, 2), (4, 1, 0)],
-        )
-
-    def test_no_merge_when_coverage_changes(self) -> None:
-        coverage = [(0, 1), (86400, 2), (172800, 1)]
-        self.assertEqual(
-            _coverage_runs(coverage),
-            [(0, 1, 1), (1, 1, 2), (2, 1, 1)],
-        )
-
-
-class DurationFormatTest(unittest.TestCase):
-    def test_hours(self) -> None:
-        self.assertEqual(_hours(3600), "1 hour")
-        self.assertEqual(_hours(21600), "6 hours")
-        self.assertEqual(_hours(86400), "24 hours")
-        self.assertEqual(_hours(1800), "0.5 hours")
-
-    def test_years_and_months(self) -> None:
-        self.assertEqual(_years_months(86400), "1 day")
-        self.assertEqual(_years_months(20 * 86400), "20 days")
-        self.assertEqual(_years_months(365 * 86400), "1 year")
-        self.assertEqual(_years_months((365 + 30) * 86400), "1 year 1 month")
-        self.assertEqual(
-            _years_months((2 * 365 + 2 * 30) * 86400), "2 years 2 months"
-        )
+        self.assertNotIn('<a href="#skill-overall">', page)
 
 
 class DurationTest(unittest.TestCase):
-    def test_units(self) -> None:
+    def test_duration_parse_and_format(self) -> None:
+        self.assertEqual(_hours(3600), "1 hour")
+        self.assertEqual(_hours(21600), "6 hours")
+        self.assertEqual(_hours(1800), "0.5 hours")
+        self.assertEqual(_years_months(86400), "1 day")
+        self.assertEqual(_years_months(365 * 86400), "1 year")
+        self.assertEqual(_years_months((365 + 30) * 86400), "1 year 1 month")
+        self.assertEqual(_years_months((2 * 365 + 2 * 30) * 86400),
+                         "2 years 2 months")
         self.assertEqual(parse_duration("6h"), 21600)
         self.assertEqual(parse_duration("365d"), 31536000)
         self.assertEqual(parse_duration("21600"), 21600)

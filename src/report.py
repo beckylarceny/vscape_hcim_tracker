@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import html
 import json
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -15,6 +14,10 @@ from .player_report import (
     Record,
     SKILL_TABS_CSS,
     SKILL_TAB_SCRIPT,
+    _bucket_count,
+    _coverage_runs,
+    _date,
+    _esc,
     player_page_href,
     scan_player_points as _scan_player_points,
     skill_panel_open,
@@ -35,10 +38,6 @@ class ReportData(NamedTuple):
     records: dict[str, dict[str, list[Record]]]
     coverage: list[tuple[int, int]]
     players: tuple[str, ...] = ()
-
-
-def _date(epoch: int) -> str:
-    return as_datetime(epoch).strftime("%Y-%m-%d")
 
 
 def _hours(seconds: int) -> str:
@@ -69,11 +68,11 @@ def _top_gains_for_skill(
 ) -> list[tuple[str, int]]:
     latest = xp_at_or_before(conn, skill, now_epoch)
     earlier = xp_at_or_before(conn, skill, now_epoch - span)
-    gains = [
-        (username, latest[username] - earlier[username])
-        for username in latest
-        if username in earlier and latest[username] > earlier[username]
-    ]
+    gains: list[tuple[str, int]] = []
+    for username, xp in latest.items():
+        before = earlier.get(username)
+        if before is not None and xp > before:
+            gains.append((username, xp - before))
     gains.sort(key=lambda item: item[1], reverse=True)
     return gains[:top_n]
 
@@ -167,7 +166,7 @@ def build_report_data(
             records[name][skill] = per_span[name]
 
     # One bar segment per day of the lookback window.
-    buckets = max(30, min(500, (lookback + 86399) // 86400))
+    buckets = _bucket_count(lookback)
     coverage = coverage_buckets(
         conn, now_epoch - lookback, now_epoch, buckets
     )
@@ -194,20 +193,31 @@ def build_report_data(
     )
 
 
+def _text_span_block(
+    lines: list[str], title: str, rows_for
+) -> None:
+    """One PAST or BEST block: a span heading, its rows, blank line."""
+    lines.append(title)
+    for span_name, span in SPANS.items():
+        lines.append(f"    {span_name.capitalize()} ({span // 3600}h)")
+        rows = rows_for(span_name)
+        lines.extend(rows)
+        if not rows:
+            lines.append("          (no data)")
+        lines.append("")
+
+
 def render_text(data: ReportData) -> str:
-    lines: list[str] = []
-    lines.append("XP TRACKER REPORT")
-    lines.append(f"generated:  {data.generated}")
-    lines.append(f"grid end:   {_date(data.now_epoch)}")
-    lines.append(f"backfill:   {_hours(data.interval)}")
-    lines.append(f"collect:    {_hours(data.collect_interval)}")
-    lines.append(f"lookback:   {_years_months(data.lookback)}")
-    if data.coverage_total > data.player_count:
-        lines.append(
-            f"players:    {data.player_count} / {data.coverage_total}"
-        )
-    else:
-        lines.append(f"players:    {data.player_count}")
+    lines = ["XP TRACKER REPORT"]
+    for name, value in (
+        ("generated at", data.generated),
+        ("grid end", _date(data.now_epoch)),
+        ("backfill interval", _hours(data.interval)),
+        ("collect interval", _hours(data.collect_interval)),
+        ("lookback interval", _years_months(data.lookback)),
+        ("players logged", _players_line(data)),
+    ):
+        lines.append(f"{name + ':':<20}{value}")
     lines.append("")
 
     for skill in SKILLS:
@@ -215,32 +225,28 @@ def render_text(data: ReportData) -> str:
         lines.append(skill)
         lines.append("=" * 78)
         lines.append("")
-
-        lines.append("  PAST")
-        for span_name, span in SPANS.items():
-            hours = span // 3600
-            lines.append(f"    {span_name.capitalize()} ({hours}h)")
-            gains = data.gains[span_name].get(skill, [])
-            for rank, (username, gain) in enumerate(gains, start=1):
-                lines.append(f"      {rank:>2}. {username:<24} {gain:>15,}")
-            if not gains:
-                lines.append("          (no data)")
-            lines.append("")
-
-        lines.append("  BEST")
-        for span_name, span in SPANS.items():
-            hours = span // 3600
-            lines.append(f"    {span_name.capitalize()} ({hours}h)")
-            records = data.records[span_name].get(skill, [])
-            for rank, record in enumerate(records, start=1):
-                lines.append(
-                    f"      {rank:>2}. {record.username:<24} "
-                    f"{record.gain:>15,}  "
-                    f"{_date(record.start_epoch)}..{_date(record.end_epoch)}"
+        _text_span_block(
+            lines,
+            "  PAST",
+            lambda span: [
+                f"      {rank:>2}. {username:<24} {gain:>15,}"
+                for rank, (username, gain) in enumerate(
+                    data.gains[span].get(skill, []), start=1
                 )
-            if not records:
-                lines.append("          (no data)")
-            lines.append("")
+            ],
+        )
+        _text_span_block(
+            lines,
+            "  BEST",
+            lambda span: [
+                f"      {rank:>2}. {record.username:<24} "
+                f"{record.gain:>15,}  "
+                f"{_date(record.start_epoch)}..{_date(record.end_epoch)}"
+                for rank, record in enumerate(
+                    data.records[span].get(skill, []), start=1
+                )
+            ],
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -316,34 +322,41 @@ a{color:#7BB59A}
 """
 
 
-def _esc(value: object) -> str:
-    return html.escape(str(value), quote=True)
-
-
 def _player_link(username: str) -> str:
     return f'<a href="{_esc(player_page_href(username))}">{_esc(username)}</a>'
 
 
-def _gains_table(gains: list[tuple[str, int]]) -> str:
-    rows: list[str] = []
-    for rank, (username, gain) in enumerate(gains, start=1):
-        rows.append(
-            f"<tr><td class=rank>{rank}</td><td>{_player_link(username)}</td>"
-            f"<td class=num>{gain:,}</td></tr>"
-        )
+def _table(css: str, header: str, rows: list[str], colspan: int) -> str:
     if not rows:
-        rows.append('<tr><td class=empty colspan="3">(no data yet)</td></tr>')
+        rows = [
+            f'<tr><td class=empty colspan="{colspan}">(no data yet)</td></tr>'
+        ]
     return (
-        '<table class="past"><thead><tr><th>#</th><th>Player</th>'
-        '<th class="num">XP</th></tr></thead><tbody>'
+        f'<table class="{css}"><thead><tr>{header}</tr></thead><tbody>'
         + "".join(rows)
         + "</tbody></table>"
     )
 
 
+def _players_line(data: ReportData) -> str:
+    if data.coverage_total > data.player_count:
+        return f"{data.player_count} / {data.coverage_total}"
+    return str(data.player_count)
+
+
+def _gains_table(gains: list[tuple[str, int]]) -> str:
+    rows = [
+        f"<tr><td class=rank>{rank}</td><td>{_player_link(username)}</td>"
+        f"<td class=num>{gain:,}</td></tr>"
+        for rank, (username, gain) in enumerate(gains, start=1)
+    ]
+    header = '<th>#</th><th>Player</th><th class="num">XP</th>'
+    return _table("past", header, rows, 3)
+
+
 def _records_table(records: list[Record], span_name: str) -> str:
     single_date = span_name == "day"
-    rows: list[str] = []
+    rows = []
     for rank, record in enumerate(records, start=1):
         if single_date:
             dates = f"<td class=date>{_date(record.end_epoch)}</td>"
@@ -361,39 +374,15 @@ def _records_table(records: list[Record], span_name: str) -> str:
             "<th>#</th><th>Player</th><th class=\"num\">XP</th>"
             '<th class="num">Date</th>'
         )
-        colspan = 4
-        css = "best day"
+        colspan, css = 4, "best day"
     else:
         header = (
             "<th>#</th><th>Player</th><th class=\"num\">XP</th>"
             '<th class="num">Start date</th>'
             '<th class="num">End date</th>'
         )
-        colspan = 5
-        css = "best wide"
-    if not rows:
-        rows.append(
-            f'<tr><td class=empty colspan="{colspan}">(no data yet)</td></tr>'
-        )
-    return (
-        f'<table class="{css}"><thead><tr>{header}</tr></thead><tbody>'
-        + "".join(rows)
-        + "</tbody></table>"
-    )
-
-
-def _coverage_runs(
-    coverage: list[tuple[int, int]]
-) -> list[tuple[int, int, int]]:
-    """(start index, length, players present) for equal-coverage runs."""
-    runs: list[tuple[int, int, int]] = []
-    for index, (_, present) in enumerate(coverage):
-        if runs and runs[-1][2] == present:
-            start, length, _ = runs[-1]
-            runs[-1] = (start, length + 1, present)
-        else:
-            runs.append((index, 1, present))
-    return runs
+        colspan, css = 5, "best wide"
+    return _table(css, header, rows, colspan)
 
 
 def _coverage_bar(data: ReportData) -> str:
@@ -475,6 +464,16 @@ def _player_finder(data: ReportData) -> str:
 
 
 def render_html(data: ReportData) -> str:
+    metas = "\n".join(
+        f'<p class="meta">{name}: {value}</p>'
+        for name, value in (
+            ("generated at", _esc(data.generated)),
+            ("players logged", _players_line(data)),
+            ("backfill interval", _hours(data.interval)),
+            ("collect interval", _hours(data.collect_interval)),
+            ("lookback interval", _years_months(data.lookback)),
+        )
+    )
     parts: list[str] = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
@@ -484,16 +483,7 @@ def render_html(data: ReportData) -> str:
         "<h1>XP Tracker</h1>",
         '<p class="sub"><a href="latest.txt">text report</a></p>',
         '<p class="sub"><a href="priority/index.html">priority tracking</a></p>',
-        f'<p class="meta">generated: {_esc(data.generated)}</p>',
-        f'<p class="meta">players: {data.player_count}'
-        + (
-            f' / {data.coverage_total}</p>'
-            if data.coverage_total > data.player_count
-            else '</p>'
-        ),
-        f'<p class="meta">backfill: {_hours(data.interval)}</p>',
-        f'<p class="meta">collect: {_hours(data.collect_interval)}</p>',
-        f'<p class="meta">lookback: {_years_months(data.lookback)}</p>',
+        metas,
         '<p class="meta">data coverage:</p>',
         _coverage_bar(data),
         _player_finder(data),
@@ -542,23 +532,6 @@ def build_report(
     collect_interval: int | None = None,
 ) -> str:
     return render_text(
-        build_report_data(
-            conn, now_epoch, interval, lookback, top_n, player_count,
-            collect_interval,
-        )
-    )
-
-
-def build_html_report(
-    conn: psycopg.Connection,
-    now_epoch: int,
-    interval: int,
-    lookback: int,
-    top_n: int,
-    player_count: int,
-    collect_interval: int | None = None,
-) -> str:
-    return render_html(
         build_report_data(
             conn, now_epoch, interval, lookback, top_n, player_count,
             collect_interval,
