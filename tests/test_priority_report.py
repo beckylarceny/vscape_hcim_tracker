@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.config import SKILLS
+from src.utility import SKILLS
 from src.player_report import ChartData
 from src.priority_report import (
     Event,

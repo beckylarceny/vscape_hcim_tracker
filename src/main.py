@@ -12,11 +12,11 @@ from pathlib import Path
 
 from . import api, player_report, priority_report, report, storage, web
 from .player_report import _atomic_write
-from .config import (
+from .utility import (
     DEFAULT_BASE_URL,
     DEFAULT_COLLECT_INTERVAL_SECONDS,
     DEFAULT_INTERVAL_SECONDS,
-    DEFAULT_LOOKBACK_SECONDS,
+    DATA_START_EPOCH,
     DEFAULT_PRIORITY_INTERVAL_SECONDS,
     DEFAULT_PRIORITY_RETENTION_SECONDS,
     DEFAULT_PRIORITY_TOP,
@@ -73,6 +73,14 @@ def _zero_stats() -> dict[str, int]:
 def _add_stats(totals: dict[str, int], stats: dict[str, int]) -> None:
     for key in totals:
         totals[key] += stats[key]
+
+
+def effective_lookback(now_epoch: int, lookback: int | None) -> int:
+    """History to reconstruct, never before the known data start."""
+    available = max(0, now_epoch - DATA_START_EPOCH)
+    if lookback is None:
+        return available
+    return min(lookback, available)
 
 
 def build_grid(
@@ -574,13 +582,13 @@ def run_once(
 ) -> None:
     interval = args.interval
     collect_interval = args.collect_interval
-    lookback = args.lookback
+    now = int(time.time())
+    lookback = effective_lookback(now, args.lookback)
     limiter = limiter or RateLimiter(args.rate)
     conn = storage.connect(dsn)
     try:
         storage.ensure_schema(conn)
 
-        now = int(time.time())
         grid_times = build_grid(
             now, interval, collect_interval, lookback,
             args.retry_window, args.no_backfill,
@@ -678,8 +686,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--lookback", type=parse_duration, default=DEFAULT_LOOKBACK_SECONDS,
-        help="how far back to reconstruct, e.g. 365d (default: 365d)",
+        "--lookback", type=parse_duration, default=None,
+        help=(
+            "how far back to reconstruct, e.g. 365d "
+            "(default: everything since 2025-01-26)"
+        ),
     )
     parser.add_argument(
         "--workers", type=int, default=DEFAULT_WORKERS,
@@ -776,9 +787,11 @@ def write_current_report(args: argparse.Namespace, dsn: str) -> None:
             "SELECT max(candidate_count) FROM runs"
         ).fetchone()
         candidates = int(row[0]) if row and row[0] else verified
+        now = int(time.time())
         write_report(
-            conn, Path(args.report_dir), int(time.time()), args.interval,
-            args.lookback, args.top, verified, args.collect_interval,
+            conn, Path(args.report_dir), now, args.interval,
+            effective_lookback(now, args.lookback), args.top, verified,
+            args.collect_interval,
             coverage_total=candidates,
             priority_players=getattr(args, "priority_players", ()),
             base_url=getattr(args, "base_url", DEFAULT_BASE_URL),

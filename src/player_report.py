@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, NamedTuple, TypeVar
 if TYPE_CHECKING:
     import psycopg
 
-from .config import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
+from .utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
 from .storage import as_datetime
 
 PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/highscores?player={username}"

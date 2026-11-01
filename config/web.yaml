@@ -1,0 +1,10 @@
+defaults:
+  report_interval_seconds: 60
+  top_n: 5
+  base_url: "http://localhost:8000"
+
+spans:
+  day: 86400
+  week: 604800
+  month: 2592000
+  year: 31536000

@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src import main
-from src.config import SKILLS, SPANS
+from src.utility import SKILLS, SPANS
 from src.player_report import (
     ChartData,
     PlayerData,

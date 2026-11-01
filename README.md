@@ -11,9 +11,9 @@ text and HTML rankings.
 
 - `/api/tracker/player/{username}?time=n` returns xp gained over the last `n`
   seconds, so `xp_at(t) = xp_now - gained(now - t)`.
-- Backfills one year on a 24h grid, adds a 6h checkpoint per run, and rechecks
-  the last 7 days so failed fetches are retried. The API history caps at about
-  one year.
+- Backfills everything since 2025-01-26 on a 24h grid, adds a 6h checkpoint per
+  run, and rechecks the last 7 days so failed fetches are retried. That epoch is
+  the earliest data the API holds.
 - Only accounts whose highscores entry still reports `ironman == 2` (hardcore)
   are recorded.
 - Storage is sparse: a `snapshots` row is written only when a skill's xp
@@ -38,9 +38,14 @@ docker compose up -d --force-recreate
 
 Three containers: `db` (PostgreSQL with the `pgdata` volume), `collector` (API
 to database), and `web` (reports and HTTP on port 8000). Only `web` is
-published. The first collector run backfills one year: about 136,000 requests,
-roughly 9.5 hours at the default 4 req/s. Later runs fetch the current 6h
-checkpoint plus retries. Reports regenerate every minute.
+published. The first collector run backfills everything since 2025-01-26, the
+earliest data the tracker API holds: about 644 days, 250,000 requests, roughly
+17.5 hours at the default 4 req/s. Later runs fetch the current 6h checkpoint
+plus retries. Reports regenerate every minute.
+
+`--lookback` defaults to the fixed start epoch, so backfills stay complete as
+time passes. Passing a duration still limits the window, but never before
+2025-01-26.
 
 Set `POSTGRES_PASSWORD` before the first start. Postgres applies it only when
 the `pgdata` volume is initialized. If the password changes later, reset the
@@ -134,20 +139,36 @@ checkpoint-coverage bar, separate past/best tables, and 2x2 charts per skill:
 total xp line and xp/hour area. The `overall` row shows total level. Sparse data
 is treated as constant between stored points.
 
+## Configuration
+
+`config/` holds one file per service:
+
+- `collector.yaml`: `skills`, `account_filter_codes`, API `urls`, and `defaults`
+  for `interval_seconds`, `collect_interval_seconds`, `retry_window_seconds`,
+  `data_start_epoch`, `workers`, `rate`. Also `priority`: `players`,
+  `interval_seconds`, `retention_seconds`, `top`.
+- `web.yaml`: `defaults` for `report_interval_seconds`, `top_n`, `base_url`,
+  and the `spans` used for xp records.
+- `db.yaml`: database fallbacks `host`, `port`, `database`, `user`.
+
+`src/utility.py` loads all three at import (`VSCAPE_HCIM_TRACKER_CONFIG_DIR`
+overrides the directory) and provides `build_dsn` and `parse_priority_players`.
+
 ## Priority tracking
 
 Priority tracking covers the five players with the highest `overall` xp,
-plus any names in `priority_players.json`. Both sets are fetched every 10 minutes, in
-addition to the 6h grid. The file ships with an empty list:
+plus any names in `config/collector.yaml` under `priority.players`. Both sets are
+fetched every 10 minutes, in addition to the 6h grid. The list ships empty:
 
 ```json
-{"players": []}
+"priority": {"players": [], "interval_seconds": 600,
+             "retention_seconds": 86400, "top": 5}
 ```
 
-The collector re-reads it before every fetch and the web every report cycle, so
-edits apply without a restart. `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS` or
-`--priority` overrides it, and `VSCAPE_HCIM_TRACKER_PRIORITY_FILE` changes the
-path. High-frequency rows are pruned after 24 hours.
+The collector re-reads the priority list before every fetch and the web every
+report cycle, so edits apply without a restart. `config/` is bind-mounted
+read-only. `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS` or `--priority` overrides it.
+High-frequency rows are pruned after 24 hours.
 
 `reports/priority/` contains:
 
@@ -167,10 +188,10 @@ RSS links use `VSCAPE_HCIM_TRACKER_BASE_URL` or `--base-url` (default
 Measured on 75 players with roughly one year of data: 216 bytes per snapshot
 row and 111 bytes per checkpoint row, including indexes.
 
-- Per player, first year: about 537 snapshot rows (only xp changes) and 387
-  checkpoints (daily backfill plus the retry window).
-- Full backfill, 371 players: about 199,000 snapshot rows (~43 MB) and 144,000
-  checkpoints (~16 MB); roughly 60-70 MB of database in total.
+- Per player, full history: about 950 snapshot rows (only xp changes) and 672
+  checkpoints (daily backfill since 2025-01-26 plus the retry window).
+- Full backfill, 371 players: about 352,000 snapshot rows (~76 MB) and 250,000
+  checkpoints (~28 MB); roughly 100 MB of database in total.
 - Ongoing 6h collection: `371 × 1,460 = 541,000` checkpoints per year (~60 MB)
   plus about 199,000 snapshot rows per year (~43 MB), so roughly 100 MB/year.
 - Checkpoints grow for every player regardless of activity. Snapshots only grow

@@ -10,7 +10,7 @@ COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # The build context is the project root.
-COPY priority_players.json ./priority_players.json
+COPY config/ ./config/
 COPY src/ ./src/
 COPY tests/ ./tests/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

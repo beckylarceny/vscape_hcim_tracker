@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.config import SKILLS, SPANS
+from src.utility import SKILLS, SPANS
 from src.main import parse_duration
 from src.report import (
     Record,

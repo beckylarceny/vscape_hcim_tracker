@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import yaml
 import os
 import tempfile
 import unittest
@@ -10,9 +11,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from src import api, main, storage
-from src.config import (
+from src.utility import (
+    DATA_START_EPOCH,
     HCIM,
-    PRIORITY_FILE_ENV,
+    CONFIG_DIR_ENV,
     SKILLS,
     build_dsn,
     parse_priority_players,
@@ -70,6 +72,21 @@ class RateLimiterTest(unittest.TestCase):
         with patch.object(main.time, "sleep") as sleep:
             main.RateLimiter(0).wait()
         sleep.assert_not_called()
+
+
+class LookbackTest(unittest.TestCase):
+    def test_default_starts_at_the_fixed_data_epoch(self) -> None:
+        now = DATA_START_EPOCH + 100 * DAY
+        self.assertEqual(main.effective_lookback(now, None), 100 * DAY)
+        self.assertEqual(
+            main.effective_lookback(now, 365 * DAY), 100 * DAY
+        )
+        self.assertEqual(
+            main.effective_lookback(now, 10 * DAY), 10 * DAY
+        )
+        self.assertEqual(
+            main.effective_lookback(DATA_START_EPOCH - 5, None), 0
+        )
 
 
 class CollectPlayerTest(unittest.TestCase):
@@ -249,6 +266,17 @@ class DsnTest(unittest.TestCase):
                 "postgresql://u:p%40ss@db:5432/xp_tracker_test",
             )
 
+        # db.yaml supplies the defaults when the PG* variables are absent.
+        with patch.dict(
+            os.environ,
+            {"PGHOST": "db", "PGPASSWORD": "p"},
+            clear=True,
+        ):
+            self.assertEqual(
+                build_dsn(),
+                "postgresql://xp_tracker:p@db:5432/xp_tracker",
+            )
+
 
 class PriorityListTest(unittest.TestCase):
     def test_cli_values_are_split_and_deduped(self) -> None:
@@ -262,7 +290,7 @@ class PriorityListTest(unittest.TestCase):
                 ("alice", "bob"),
             )
 
-    def test_environment_then_file_then_default(self) -> None:
+    def test_environment_then_config_then_default(self) -> None:
         with patch.dict(
             os.environ,
             {"VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS": "x, y"},
@@ -274,23 +302,25 @@ class PriorityListTest(unittest.TestCase):
 
         with patch.dict(
             os.environ,
-            {PRIORITY_FILE_ENV: "/nonexistent/priority.json"},
+            {CONFIG_DIR_ENV: "/nonexistent/config-dir"},
             clear=True,
         ):
             self.assertEqual(parse_priority_players(None), ())
 
-    def test_json_file_is_used_when_env_is_unset(self) -> None:
+    def test_collector_json_priority_players(self) -> None:
         cases = (
-            ('{"players": ["alice", "bob", "alice"]}', ("alice", "bob")),
-            ('["alice"]', ("alice",)),
-            ("[]", ()),
+            ({"priority": {"players": ["alice", "bob", "alice"]}},
+             ("alice", "bob")),
+            ({"priority": {"players": []}}, ()),
+            ({"priority": {}}, ()),
         )
-        for text, expected in cases:
+        for payload, expected in cases:
             with tempfile.TemporaryDirectory() as directory:
-                path = Path(directory, "priority.json")
-                path.write_text(text, encoding="utf-8")
+                Path(directory, "collector.yaml").write_text(
+                    yaml.safe_dump(payload), encoding="utf-8"
+                )
                 with patch.dict(
-                    os.environ, {PRIORITY_FILE_ENV: str(path)}, clear=True
+                    os.environ, {CONFIG_DIR_ENV: directory}, clear=True
                 ):
                     self.assertEqual(parse_priority_players(None), expected)
 
