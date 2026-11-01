@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY config/ ./config/
 COPY src/ ./src/
 COPY tests/ ./tests/
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh \
     && useradd --create-home --uid 1000 tracker \
