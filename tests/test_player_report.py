@@ -185,6 +185,7 @@ class RenderTest(unittest.TestCase):
             page.index('<section id="skill-overall"'),
         )
         self.assertIn(".tabs{display:flex", page)
+        self.assertIn(".stats .tabs{margin-top:2.5rem}", page)
         self.assertIn(".tab-panel[hidden]{display:none}", page)
 
     def test_current_table_skills_are_not_links(self) -> None:
