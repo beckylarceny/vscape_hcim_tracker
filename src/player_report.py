@@ -750,7 +750,7 @@ SKILL_TABS_CSS = """
      border-radius:0;background:transparent;color:inherit;cursor:pointer}
 .tab.flat{color:#888}
 .tab[aria-selected="true"]{background:#9079B6;color:#fff;border-color:#9079B6}
-.stats .tabs{margin-top:2.5rem}
+.stats .tabs{margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid #8884}
 .tab-panel[hidden]{display:none}
 .tab-panel>h2:first-child{margin-top:.6rem}
 """
