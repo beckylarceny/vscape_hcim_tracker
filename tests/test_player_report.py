@@ -183,6 +183,11 @@ class RenderTest(unittest.TestCase):
             page,
         )
 
+    def test_all_tables_fit_their_content(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn("table{width:auto;max-width:100%;", page)
+        self.assertIn("margin:.25rem auto .75rem", page)
+
     def test_no_rounded_corners(self) -> None:
         page = render_player_page(fake_data())
         self.assertFalse(re.search(r"border-radius:\s*(?!0\b)\d", page))

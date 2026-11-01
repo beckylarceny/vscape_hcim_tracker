@@ -563,8 +563,8 @@ h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
 .coverage span{flex:1;background:#3b82f6;min-width:1px}
 .coverage span.zero{background:#8883}
 .range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
-table{width:100%;border-collapse:collapse;margin:.25rem 0 .75rem;
-      table-layout:auto}
+table{width:auto;max-width:100%;border-collapse:collapse;
+      margin:.25rem auto .75rem;table-layout:auto}
 th,td{text-align:left;padding:.25rem .55rem;border-bottom:1px solid #8884}
 th{font-weight:600}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;
