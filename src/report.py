@@ -253,16 +253,18 @@ h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 .sub{margin:.25rem 0 1.3rem;font-size:1.05rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
-          background:#8882;border-radius:2px;overflow:hidden}
+          background:#8882;border-radius:0;overflow:hidden}
 .coverage span{flex:1;background:#3b82f6;min-width:1px}
 .coverage span.zero{background:#8883;opacity:1}
 .range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
-.find{display:flex;gap:.5rem;margin:1rem 0 .25rem;max-width:26rem}
-.find input{flex:1;min-width:0;padding:.4rem .55rem;font:inherit;color:inherit;
-            background:transparent;border:1px solid #8886;border-radius:4px}
+.find{display:flex;gap:.5rem;margin:1.25rem 0 2.5rem;
+      padding-bottom:1.25rem;border-bottom:1px solid #8884}
+.find input{flex:1;min-width:0;max-width:26rem;padding:.4rem .55rem;
+            font:inherit;color:inherit;background:transparent;
+            border:1px solid #8886;border-radius:0}
 .find button{padding:.4rem .9rem;font:inherit;border:1px solid #8886;
-             border-radius:4px;background:#3b82f6;color:#fff;cursor:pointer}
-nav{display:flex;flex-wrap:wrap;gap:.75rem;margin:1rem 0;font-size:.85rem}
+             border-radius:0;background:#3b82f6;color:#fff;cursor:pointer}
+nav{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.5rem 0 1rem;font-size:.85rem}
 h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:uppercase;
    letter-spacing:.04em}
 .tables{display:grid;align-items:start;

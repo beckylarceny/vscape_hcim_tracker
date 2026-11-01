@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 
 from src.config import SKILLS, SPANS
@@ -188,6 +189,16 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn(">Start date<", page)
         self.assertIn(">End date<", page)
         self.assertIn(">Date<", page)
+
+    def test_search_bar_is_separated_from_skill_links(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn(
+            "padding-bottom:1.25rem;border-bottom:1px solid #8884", page
+        )
+
+    def test_no_rounded_corners(self) -> None:
+        page = render_html(self.make_data())
+        self.assertFalse(re.search(r"border-radius:\s*(?!0\b)\d", page))
 
 
 class CoverageRunTest(unittest.TestCase):

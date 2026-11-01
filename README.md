@@ -75,8 +75,8 @@ xp gained per stored data point as an area for that window. These pages are
 rewritten only when that player gains new checkpoint rows, not on the
 one-minute report timer.
 
-The levels use the OSRS experience thresholds for levels 1-99; `overall` has no
-level and shows `-`.
+The levels use the OSRS experience thresholds for levels 1-99; the `overall`
+row shows the sum of the other skills' levels (total level).
 
 Because storage is sparse, xp between two stored points is treated as constant;
 windows still have exactly the nominal span.

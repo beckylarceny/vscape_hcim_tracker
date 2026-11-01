@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,6 +21,7 @@ from src.player_report import (
     player_page_href,
     player_slug,
     render_player_page,
+    total_level,
 )
 
 NOW = 1_800_000_000
@@ -123,10 +125,19 @@ class RenderTest(unittest.TestCase):
     def test_past_and_best_are_separate_tables(self) -> None:
         page = render_player_page(fake_data())
         self.assertIn('<div class="gain-tables">', page)
-        self.assertIn("<th class=\"num\">Past XP</th>", page)
-        self.assertIn("<th class=\"num\">Best XP</th>", page)
+        self.assertIn("<th class=\"num\">XP</th>", page)
+        self.assertNotIn("Past XP", page)
+        self.assertNotIn("Best XP", page)
         self.assertIn("<td class=\"num\">100</td>", page)
         self.assertIn("<td class=\"num\">500</td>", page)
+
+    def test_overall_level_sums_other_skills(self) -> None:
+        page = render_player_page(fake_data())
+        # 23 real skills, each at 1,000 xp = level 9.
+        self.assertIn(
+            '<tr><td>overall</td><td class="num">207</td>', page
+        )
+        self.assertIn("current xp: 1,000 (total level 207)", page)
 
     def test_one_chart_per_skill_and_span(self) -> None:
         page = render_player_page(fake_data())
@@ -141,6 +152,10 @@ class RenderTest(unittest.TestCase):
         page = render_player_page(fake_data(username="<bob>"))
         self.assertIn("&lt;bob&gt;", page)
         self.assertNotIn("<bob>", page)
+
+    def test_no_rounded_corners(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertFalse(re.search(r"border-radius:\s*(?!0\b)\d", page))
 
     def test_empty_history_renders_no_data(self) -> None:
         data = fake_data()
@@ -186,6 +201,13 @@ class LevelTest(unittest.TestCase):
 
     def test_negative_xp_is_level_one(self) -> None:
         self.assertEqual(level_for_xp(-5), 1)
+
+    def test_total_level_excludes_overall(self) -> None:
+        self.assertEqual(
+            total_level({"overall": 999_999, "attack": 1154, "defence": 0}),
+            11,
+        )
+        self.assertIsNone(total_level({}))
 
 
 class CollectTest(unittest.TestCase):

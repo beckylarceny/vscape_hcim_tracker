@@ -84,6 +84,16 @@ def level_for_xp(xp: int) -> int:
     return bisect.bisect_right(XP_THRESHOLDS, max(0, xp))
 
 
+def total_level(current: dict[str, int]) -> int | None:
+    """Sum of every skill's level; `overall` is not itself a skill."""
+    levels = [
+        level_for_xp(xp)
+        for skill, xp in current.items()
+        if skill != "overall"
+    ]
+    return sum(levels) if levels else None
+
+
 def scan_player_points(
     username: str,
     points: list[tuple[int, int]],
@@ -406,10 +416,13 @@ def _chart_svg(chart: ChartData, label: str) -> str:
 
 def _current_table(data: PlayerData) -> str:
     rows: list[str] = []
+    overall_level = total_level(data.current)
     for skill in SKILLS:
         value = data.current.get(skill)
         shown = _num(value) if value is not None else "-"
-        if skill == "overall" or value is None:
+        if skill == "overall":
+            level = str(overall_level) if overall_level is not None else "-"
+        elif value is None:
             level = "-"
         else:
             level = str(level_for_xp(value))
@@ -436,7 +449,7 @@ def _past_table(data: PlayerData, skill: str) -> str:
         )
     return (
         '<table class="past"><thead><tr><th>Span</th>'
-        '<th class="num">Past XP</th></tr></thead><tbody>'
+        '<th class="num">XP</th></tr></thead><tbody>'
         + "".join(rows)
         + "</tbody></table>"
     )
@@ -462,7 +475,7 @@ def _best_table(data: PlayerData, skill: str) -> str:
         )
     return (
         '<table class="best"><thead><tr><th>Span</th>'
-        '<th class="num">Best XP</th><th class="num">Start</th>'
+        '<th class="num">XP</th><th class="num">Start</th>'
         '<th class="num">End</th></tr></thead><tbody>'
         + "".join(rows)
         + "</tbody></table>"
@@ -504,18 +517,18 @@ table.best th:nth-child(1),table.best td:nth-child(1){width:25%}
         grid-template-columns:repeat(2,minmax(0,1fr));
         gap:.75rem 1rem}
 figure{min-width:0;margin:0;padding:.5rem .6rem .35rem;
-       border:1px solid #8883;border-radius:6px}
+       border:1px solid #8883;border-radius:0}
 figcaption{font-size:.8rem;color:#888;margin-bottom:.25rem}
 .key{font-size:.7rem;color:#888;margin-left:.45rem}
 .key::before{content:"";display:inline-block;width:.55em;height:.55em;
-             margin-right:.25em;border-radius:1px}
+             margin-right:.25em}
 .line-key::before{background:#3b82f6}
 .area-key::before{background:#22c55e}
 svg{display:block;width:100%;height:auto}
 svg .grid{stroke:#8884;stroke-width:.5}
 svg .line{fill:none;stroke:#3b82f6;stroke-width:1.5;
           vector-effect:non-scaling-stroke}
-svg .area{fill:#22c55e33;stroke:#22c55e;stroke-width:1;
+svg .area{fill:#22c55e33;stroke:#22c55e33;stroke-width:1;
           vector-effect:non-scaling-stroke}
 svg .dot{fill:#3b82f6}
 svg text{fill:#888;font-size:9px}
@@ -557,6 +570,9 @@ def render_player_page(data: PlayerData) -> str:
             shown = "no data"
         elif skill == "overall":
             shown = _num(value)
+            overall_level = total_level(data.current)
+            if overall_level is not None:
+                shown += f" (total level {overall_level})"
         else:
             shown = (
                 f"{_num(value)} (level {level_for_xp(value)})"
