@@ -30,15 +30,14 @@ docker build -t vscape_hcim_tracker-app:latest .
 docker compose up -d --force-recreate
 ```
 
-- page: <http://localhost:8000/>
-- text: `reports/latest.txt`
-- logs: `docker compose logs -f collector` or `docker compose logs -f web`
 - start: `./scripts/start.sh`
 - stop: `./scripts/stop.sh` keeps the containers and the database
-- remove: `docker compose down` keeps the database
-- delete data: `docker compose down -v`
 - update: `./scripts/update.sh` pulls, rebuilds the image and recreates
   `collector` and `web`; the database container is left running
+- page: <http://localhost:8000/>
+- logs: `docker compose logs -f collector` or `docker compose logs -f web`
+- remove: `docker compose down` keeps the database
+- delete data: `docker compose down -v`
 
 Three containers: `db` (PostgreSQL with the `pgdata` volume), `collector` (API
 to database), and `web` (reports and HTTP on port 8000). Only `web` is
