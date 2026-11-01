@@ -105,8 +105,9 @@ services running. Restoring drops everything written after the dump.
   (day/week/month/year), best windows, metadata, coverage bar, player search.
 - `players/<name>.html`: current xp and level, checkpoint coverage, past/best
   tables, and five charts per skill (four spans plus a wide all-time chart).
-  Stretches with no checkpoint for over 36 hours are shaded as missing data;
-  idle time that was fetched stays unshaded.
+  Stretches with fewer checkpoints than the nearby cadence are shaded as
+  missing data; idle time that was fully fetched stays unshaded. Coverage bar
+  segments fade to the share of expected checkpoints they hold.
 - `priority/`: index, one 24h page per player, and an RSS feed. Priority covers
   the top 5 by `overall` xp plus `priority.players`, fetched every 10 minutes and
   pruned after 24 hours.

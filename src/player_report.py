@@ -79,7 +79,7 @@ class PlayerData(NamedTuple):
     past: dict[str, dict[str, int | None]]
     best: dict[str, dict[str, Record | None]]
     charts: dict[str, dict[str, ChartData]]
-    coverage: list[tuple[int, bool]] = ()
+    coverage: list[tuple[int, float]] = ()
     frequencies: tuple[Frequency, ...] = ()
 
 
@@ -333,33 +333,79 @@ def _chart_data(
     )
 
 
+def _slot_count(start: int, end: int, anchor: int, cadence: int) -> int:
+    """How many `cadence`-spaced slots from `anchor` fall in [start, end)."""
+    if cadence <= 0 or end <= start:
+        return 0
+    first = -((anchor - start) // cadence)
+    last = -((anchor - end) // cadence) - 1
+    return max(0, last - first + 1)
+
+
+def _coverage_series(
+    times: list[int], start_epoch: int, end_epoch: int, buckets: int
+) -> list[tuple[int, float]]:
+    """Covered share of each bucket, from the checkpoints inside it.
+
+    The expected count comes from the cadence of the nearby checkpoint gaps,
+    so a daily backfill day counts as full while a skipped fetch inside a 6
+    hour cadence does not.
+    """
+    if buckets <= 0 or end_epoch <= start_epoch:
+        return []
+    width = (end_epoch + 1 - start_epoch) / buckets
+    counts = [0] * buckets
+    for stamp in times:
+        if start_epoch <= stamp <= end_epoch:
+            index = min(int((stamp - start_epoch) / width), buckets - 1)
+            counts[index] += 1
+    gaps = [
+        (earlier, later, later - earlier)
+        for earlier, later in zip(times, times[1:])
+        if later > earlier
+    ]
+    series: list[tuple[int, float]] = []
+    for index in range(buckets):
+        start = int(start_epoch + index * width)
+        end = int(start_epoch + (index + 1) * width)
+        if counts[index] == 0:
+            series.append((start, 0.0))
+            continue
+        near = [
+            (earlier, gap) for earlier, later, gap in gaps
+            if earlier < end and later > start
+        ]
+        if not near:
+            series.append((start, 1.0))
+            continue
+        anchor, cadence = min(near, key=lambda item: item[1])
+        expected = max(1, _slot_count(start, end, anchor, cadence))
+        series.append(
+            (start, round(min(1.0, counts[index] / expected), 2))
+        )
+    return series
+
+
 def _coverage_buckets(
     conn: psycopg.Connection,
     username: str,
     start_epoch: int,
     end_epoch: int,
     lookback: int,
-) -> list[tuple[int, bool]]:
-    """Whether the player has a checkpoint in each day-sized bucket."""
+) -> list[tuple[int, float]]:
+    """Covered share of each bucket over the player's lookback window."""
     buckets = _bucket_count(lookback)
     rows = conn.execute(
         """
         SELECT observed_at
         FROM checkpoints
         WHERE username = %s AND observed_at >= %s AND observed_at <= %s
+        ORDER BY observed_at
         """,
         (username, as_datetime(start_epoch), as_datetime(end_epoch)),
     ).fetchall()
-    present = [False] * buckets
-    width = (end_epoch + 1 - start_epoch) / buckets
-    for (observed_at,) in rows:
-        index = int((int(observed_at.timestamp()) - start_epoch) / width)
-        if 0 <= index < buckets:
-            present[index] = True
-    return [
-        (int(start_epoch + index * width), present[index])
-        for index in range(buckets)
-    ]
+    times = [int(observed_at.timestamp()) for (observed_at,) in rows]
+    return _coverage_series(times, start_epoch, end_epoch, buckets)
 
 
 def _snapshot_times(
@@ -437,18 +483,25 @@ def _frequency_info(
 def _missing_ranges(
     times: list[int], start_epoch: int, end_epoch: int, limit: int
 ) -> tuple[tuple[int, int], ...]:
-    """Stretches of the window with no checkpoint within `limit` seconds."""
+    """Stretches of the window with fewer checkpoints than expected.
+
+    The window edges use `limit`. Interior gaps are compared with the smallest
+    nearby gap, so a skipped fetch inside a 6 hour cadence is flagged while a
+    normal 24 hour backfill day is not.
+    """
     if end_epoch <= start_epoch:
         return ()
     inside = [t for t in times if start_epoch <= t <= end_epoch]
     if not inside:
         return ((start_epoch, end_epoch),)
+    gaps = [later - earlier for earlier, later in zip(inside, inside[1:])]
     ranges: list[tuple[int, int]] = []
     if inside[0] - start_epoch > limit:
         ranges.append((start_epoch, inside[0]))
-    for earlier, later in zip(inside, inside[1:]):
-        if later - earlier > limit:
-            ranges.append((earlier, later))
+    for index, gap in enumerate(gaps):
+        local = min(gaps[max(0, index - 1): index + 2])
+        if gap > limit or gap > 1.5 * local:
+            ranges.append((inside[index], inside[index + 1]))
     if end_epoch - inside[-1] > limit:
         ranges.append((inside[-1], end_epoch))
     return tuple(ranges)
@@ -944,10 +997,10 @@ COVERAGE_TIP_HTML = (
 
 
 def _coverage_runs(
-    coverage: list[tuple[int, bool]]
-) -> list[tuple[int, int, bool]]:
-    """(start index, length, covered) for equal-state runs."""
-    runs: list[tuple[int, int, bool]] = []
+    coverage: list[tuple[int, float]]
+) -> list[tuple[int, int, float]]:
+    """(start index, length, covered share) for equal-share runs."""
+    runs: list[tuple[int, int, float]] = []
     for index, (_, covered) in enumerate(coverage):
         if runs and runs[-1][2] == covered:
             start, length, _ = runs[-1]
@@ -973,13 +1026,18 @@ def _coverage_bar(data: PlayerData) -> str:
         last = _date(end_epoch)
         when = first if first == last else f"{first} - {last}"
         duration = _years_months(end_epoch - start_epoch)
-        state = "covered" if covered else "no data"
-        label = f"{when} ({duration}): {state}"
         if covered:
+            share = min(1.0, covered)
+            pct = round(share * 100)
+            state = "covered" if pct >= 100 else f"{pct}% covered"
+            label = f"{when} ({duration}): {state}"
             segments.append(
-                f'<span data-tip="{_esc(label)}" style="flex:{length}"></span>'
+                f'<span data-tip="{_esc(label)}" '
+                f'style="flex:{length};opacity:{0.15 + 0.85 * share:.2f}">'
+                "</span>"
             )
         else:
+            label = f"{when} ({duration}): no data"
             segments.append(
                 f'<span class="zero" data-tip="{_esc(label)}" '
                 f'style="flex:{length}"></span>'

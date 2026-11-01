@@ -16,6 +16,8 @@ from src.player_report import (
     PlayerData,
     Record,
     _chart_svg,
+    _coverage_bar,
+    _coverage_series,
     _frequency_info,
     _thin,
     collect_player_data,
@@ -233,6 +235,21 @@ class ChartTest(unittest.TestCase):
         svg = _chart_svg(chart, "gaps")
         self.assertIn('class="gap"', svg)
 
+    def test_skipped_fetch_shades_the_gap(self) -> None:
+        from src.player_report import _missing_ranges
+
+        six_hourly = [0, 21600, 43200, 64800, 86400]
+        self.assertEqual(_missing_ranges(six_hourly, 0, DAY, 2 * DAY), ())
+        skipped = [0, 21600, 64800, 86400]
+        self.assertEqual(
+            _missing_ranges(skipped, 0, DAY, 2 * DAY),
+            ((21600, 64800),),
+        )
+
+        # A plain 24 hour cadence is not partial coverage.
+        daily = [index * DAY for index in range(5)]
+        self.assertEqual(_missing_ranges(daily, 0, 4 * DAY, 2 * DAY), ())
+
     def test_gains_area_is_a_step_shape(self) -> None:
         chart = ChartData(
             start_epoch=NOW - 1000,
@@ -412,6 +429,32 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(
             empty.charts["overall"]["day"].missing, ((NOW - DAY, NOW),)
         )
+
+    def test_coverage_shares_follow_the_checkpoint_cadence(self) -> None:
+        # Four checkpoints per day, one 6 hour fetch missed: 80% covered.
+        six_hourly = [0, 6 * 3600, 12 * 3600, 18 * 3600]
+        series = _coverage_series(six_hourly, 0, DAY, 1)
+        self.assertEqual([share for _, share in series], [0.8])
+
+        # A daily backfill day with one checkpoint is fully covered.
+        daily = [0, DAY]
+        series = _coverage_series(daily, 0, DAY, 1)
+        self.assertEqual([share for _, share in series], [1.0])
+
+        # Empty buckets are reported as no data.
+        series = _coverage_series([0], 0, 2 * DAY, 2)
+        self.assertEqual(series[1][1], 0.0)
+
+    def test_partial_coverage_buckets_are_faded(self) -> None:
+        data = SimpleNamespace(
+            coverage=[(0, 0.6), (DAY, 0.0), (2 * DAY, 1.0)],
+            now_epoch=3 * DAY,
+        )
+        bar = _coverage_bar(data)
+        self.assertIn("60% covered", bar)
+        self.assertIn("opacity:0.66", bar)
+        self.assertIn('class="zero"', bar)
+        self.assertIn("no data", bar)
 
     def test_coverage_and_absent_skills(self) -> None:
         conn = FakeConn(
