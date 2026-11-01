@@ -212,9 +212,9 @@ class HtmlReportTest(unittest.TestCase):
         )
         self.assertIn("@media (max-width:48rem)", page)
 
-    def test_single_column_tables_are_narrow_and_centered(self) -> None:
+    def test_tables_fit_their_content(self) -> None:
         page = render_html(self.make_data())
-        self.assertIn("max-width:44rem", page)
+        self.assertIn("table{width:auto;max-width:100%;", page)
         self.assertIn("margin:.25rem auto 1rem", page)
 
     def test_section_headings_are_centered(self) -> None:

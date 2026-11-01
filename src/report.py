@@ -272,7 +272,7 @@ h2,h3,h4{text-align:center}
         grid-template-columns:repeat(auto-fit,minmax(min(32rem,100%),1fr));
         gap:.75rem 2rem}
 .tables>div{min-width:0;overflow-x:auto}
-table{width:100%;max-width:44rem;border-collapse:collapse;
+table{width:auto;max-width:100%;border-collapse:collapse;
       margin:.25rem auto 1rem;table-layout:auto}
 th,td{text-align:left;padding:.25rem .55rem;border-bottom:1px solid #8884;
       overflow-wrap:anywhere}
