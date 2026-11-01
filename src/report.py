@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 from .utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
 from .player_report import (
+    COVERAGE_TIP_HTML,
     Record,
     SKILL_TABS_CSS,
     SKILL_TAB_SCRIPT,
@@ -18,6 +19,7 @@ from .player_report import (
     _coverage_runs,
     _date,
     _esc,
+    _years_months,
     player_page_href,
     scan_player_points as _scan_player_points,
     skill_panel_open,
@@ -58,20 +60,6 @@ def read_version(report_dir) -> str:
 def _hours(seconds: int) -> str:
     hours = seconds / 3600
     return f"{hours:g} {'hour' if hours == 1 else 'hours'}"
-
-
-def _years_months(seconds: int) -> str:
-    days = seconds // 86400
-    years, remainder = divmod(days, 365)
-    months = remainder // 30
-    parts: list[str] = []
-    if years:
-        parts.append(f"{years} {'year' if years == 1 else 'years'}")
-    if months:
-        parts.append(f"{months} {'month' if months == 1 else 'months'}")
-    if not parts:
-        return f"{days} {'day' if days == 1 else 'days'}"
-    return " ".join(parts)
 
 
 def _top_gains_for_skill(
@@ -280,7 +268,7 @@ h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
 .sub{margin:.2rem 0 .8rem;font-size:1.05rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;border-radius:0;overflow:hidden}
-.coverage span{flex:1;background:#9079B6;min-width:3px}
+.coverage span{flex:1;background:#9079B6;min-width:1em}
 .coverage span.zero{background:#8883;opacity:1}
 .range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
 .find{display:flex;gap:.5rem;margin:1.25rem 0 2.5rem;
@@ -326,6 +314,10 @@ a{color:#7BB59A}
         box-shadow:0 1px 4px #0003}
 .to-top:hover{background:#7B659C;color:#fff}
 .version{text-align:right;color:#888;font-size:.75rem;margin:2rem 0 3.5rem}
+.tip{position:fixed;z-index:20;max-width:22rem;padding:.3rem .45rem;
+     background:#1b1b1b;color:#eee;font-size:.75rem;line-height:1.35;
+     border-radius:0;pointer-events:none;white-space:normal}
+.tip[hidden]{display:none}
 @media (max-width:48rem){
   table{font-size:.8em;table-layout:fixed;width:calc(100% - 2rem);
         margin-left:auto;margin-right:auto}
@@ -416,19 +408,20 @@ def _coverage_bar(data: ReportData) -> str:
         first = _date(start_epoch)
         last = _date(end_epoch)
         when = first if first == last else f"{first} - {last}"
+        duration = _years_months(end_epoch - start_epoch)
         ratio = min(1.0, present / total)
         pct = round(ratio * 100)
-        label = f"{when}: {present}/{total} players ({pct}%)"
+        label = f"{when} ({duration}): {present}/{total} players ({pct}%)"
         if present:
             style = (
                 f' style="flex:{length};'
                 f'opacity:{0.15 + 0.85 * ratio:.2f}"'
             )
-            segments.append(f'<span title="{_esc(label)}"{style}></span>')
+            segments.append(f'<span data-tip="{_esc(label)}"{style}></span>')
         else:
             segments.append(
                 f'<span class="zero" style="flex:{length}" '
-                f'title="{_esc(label)}"></span>'
+                f'data-tip="{_esc(label)}"></span>'
             )
     if not segments:
         segments.append('<span class="zero"></span>')
@@ -504,6 +497,7 @@ def render_html(data: ReportData) -> str:
         metas,
         '<p class="meta">data coverage:</p>',
         _coverage_bar(data),
+        COVERAGE_TIP_HTML,
         _player_finder(data),
     ]
 
