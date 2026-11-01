@@ -38,10 +38,16 @@ class FakeResult:
 
 
 class FakeConn:
-    def __init__(self, rows) -> None:
+    def __init__(self, rows, checkpoints=()) -> None:
         self.rows = rows
+        self.checkpoints = [
+            dt.datetime.fromtimestamp(epoch, tz=dt.timezone.utc)
+            for epoch in checkpoints
+        ]
 
     def execute(self, sql, params=None):
+        if "FROM checkpoints" in sql:
+            return FakeResult([(checkpoint,) for checkpoint in self.checkpoints])
         return FakeResult(self.rows)
 
 
@@ -90,6 +96,12 @@ def fake_data(username: str = "Fuck Jagex") -> PlayerData:
         past=past,
         best=best,
         charts=charts,
+        coverage=[
+            (NOW - LOOKBACK, True),
+            (NOW - LOOKBACK // 2, False),
+            (NOW - DAY, True),
+            (NOW, True),
+        ],
     )
 
 
@@ -176,6 +188,15 @@ class RenderTest(unittest.TestCase):
         self.assertIn('<body id="top">', page)
         self.assertIn('class="to-top" href="#top"', page)
         self.assertIn("position:fixed", page)
+
+    def test_coverage_bar_is_rendered_at_the_top(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn("data coverage:", page)
+        self.assertIn('class="coverage"', page)
+        self.assertIn('class="zero"', page)
+        self.assertLess(
+            page.index("data coverage:"), page.index("<h2>Current xp</h2>")
+        )
 
     def test_empty_history_renders_no_data(self) -> None:
         data = fake_data()
@@ -341,6 +362,15 @@ class CollectTest(unittest.TestCase):
         conn = FakeConn(rows(("overall", NOW - DAY, 500)))
         chart = self.collect(conn).charts["overall"]["day"]
         self.assertEqual(chart.xp, [(NOW - DAY, 500), (NOW, 500)])
+
+    def test_coverage_marks_days_with_checkpoints(self) -> None:
+        conn = FakeConn([], checkpoints=[NOW - 3 * DAY, NOW - DAY, NOW])
+        data = self.collect(conn)
+        self.assertEqual(len(data.coverage), 365)
+        covered = [flag for _, flag in data.coverage]
+        self.assertEqual(sum(covered), 3)
+        self.assertTrue(any(covered))
+        self.assertFalse(all(covered))
 
     def test_skills_without_snapshots_are_absent(self) -> None:
         conn = FakeConn([])

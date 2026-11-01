@@ -62,6 +62,7 @@ class PlayerData(NamedTuple):
     past: dict[str, dict[str, int | None]]
     best: dict[str, dict[str, Record | None]]
     charts: dict[str, dict[str, ChartData]]
+    coverage: list[tuple[int, bool]] = ()
 
 
 def player_slug(username: str) -> str:
@@ -262,6 +263,35 @@ def _chart_data(
     )
 
 
+def _coverage_buckets(
+    conn: psycopg.Connection,
+    username: str,
+    start_epoch: int,
+    end_epoch: int,
+    lookback: int,
+) -> list[tuple[int, bool]]:
+    """Whether the player has a checkpoint in each day-sized bucket."""
+    buckets = max(30, min(500, (lookback + 86399) // 86400))
+    rows = conn.execute(
+        """
+        SELECT observed_at
+        FROM checkpoints
+        WHERE username = %s AND observed_at >= %s AND observed_at <= %s
+        """,
+        (username, as_datetime(start_epoch), as_datetime(end_epoch)),
+    ).fetchall()
+    present = [False] * buckets
+    width = (end_epoch + 1 - start_epoch) / buckets
+    for (observed_at,) in rows:
+        index = int((int(observed_at.timestamp()) - start_epoch) / width)
+        if 0 <= index < buckets:
+            present[index] = True
+    return [
+        (int(start_epoch + index * width), present[index])
+        for index in range(buckets)
+    ]
+
+
 def collect_player_data(
     conn: psycopg.Connection,
     username: str,
@@ -306,6 +336,10 @@ def collect_player_data(
                 epochs, points, span, now_epoch
             )
 
+    coverage = _coverage_buckets(
+        conn, username, now_epoch - lookback, now_epoch, lookback
+    )
+
     return PlayerData(
         username=username,
         generated=generated,
@@ -315,6 +349,7 @@ def collect_player_data(
         past=past,
         best=best,
         charts=charts,
+        coverage=coverage,
     )
 
 
@@ -521,6 +556,11 @@ h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:uppercase;
 .subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
             border:0;padding:0}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
+.coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
+          background:#8882;overflow:hidden}
+.coverage span{flex:1;background:#3b82f6;min-width:1px}
+.coverage span.zero{background:#8883}
+.range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
 table{width:100%;border-collapse:collapse;margin:.25rem 0 .75rem;
       table-layout:auto}
 th,td{text-align:left;padding:.25rem .55rem;border-bottom:1px solid #8884}
@@ -575,6 +615,58 @@ a{color:inherit}
 """
 
 
+def _coverage_runs(
+    coverage: list[tuple[int, bool]]
+) -> list[tuple[int, int, bool]]:
+    """(start index, length, covered) for equal-state runs."""
+    runs: list[tuple[int, int, bool]] = []
+    for index, (_, covered) in enumerate(coverage):
+        if runs and runs[-1][2] == covered:
+            start, length, _ = runs[-1]
+            runs[-1] = (start, length + 1, covered)
+        else:
+            runs.append((index, 1, covered))
+    return runs
+
+
+def _coverage_bar(data: PlayerData) -> str:
+    if not data.coverage:
+        return ""
+    segments: list[str] = []
+    for index, length, covered in _coverage_runs(data.coverage):
+        start_epoch = data.coverage[index][0]
+        next_index = index + length
+        end_epoch = (
+            data.coverage[next_index][0]
+            if next_index < len(data.coverage)
+            else data.now_epoch
+        )
+        first = _date(start_epoch)
+        last = _date(end_epoch)
+        when = first if first == last else f"{first} - {last}"
+        state = "covered" if covered else "no data"
+        label = f"{when}: {state}"
+        if covered:
+            segments.append(
+                f'<span title="{_esc(label)}" style="flex:{length}"></span>'
+            )
+        else:
+            segments.append(
+                f'<span class="zero" title="{_esc(label)}" '
+                f'style="flex:{length}"></span>'
+            )
+    first = _date(data.coverage[0][0])
+    last = _date(data.now_epoch)
+    return (
+        '<p class="meta">data coverage:</p>'
+        '<div class="coverage" role="img" '
+        f'aria-label="checkpoint coverage from {first} to {last}">'
+        + "".join(segments)
+        + "</div>"
+        f'<div class="range"><span>{first}</span><span>{last}</span></div>'
+    )
+
+
 def render_player_page(data: PlayerData) -> str:
     parts: list[str] = [
         "<!doctype html>",
@@ -586,6 +678,7 @@ def render_player_page(data: PlayerData) -> str:
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
         "Vidyascape highscores</a></h2>",
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
+        _coverage_bar(data),
         '<p class="sub"><a href="../latest.html">all rankings</a></p>',
         "<h2>Current xp</h2>",
         _current_table(data),
