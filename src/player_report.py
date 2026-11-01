@@ -544,13 +544,13 @@ _PLAYER_CSS = """
 :root{color-scheme:light dark}
 *{box-sizing:border-box}
 body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0 auto;
-     padding:2rem 1rem;max-width:64rem}
+     padding:2rem 1rem;max-width:64rem;text-transform:lowercase}
 h1{font-size:1.9rem;margin:0 0 .35rem}
 h2{font-size:1.5rem;margin:2.5rem 0 .5rem;border-bottom:1px solid #8884;
    padding-bottom:.3rem}
-h3{font-size:1rem;margin:1.2rem 0 .3rem;text-transform:uppercase;
+h3{font-size:1rem;margin:1.2rem 0 .3rem;text-transform:lowercase;
    letter-spacing:.04em;color:#888}
-h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:uppercase;
+h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
    letter-spacing:.04em}
 .sub{margin:.25rem 0 1rem}
 .subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
@@ -570,7 +570,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;
 td.date,th.date{text-align:right;font-variant-numeric:tabular-nums;
                 white-space:nowrap}
 tr:nth-child(even) td{background:#8881}
-table.current{width:auto;max-width:32rem}
+table.current{width:auto;max-width:32rem;margin-left:auto;margin-right:auto}
 table.past th:nth-child(1),table.past td:nth-child(1){width:45%}
 table.best th:nth-child(1),table.best td:nth-child(1){width:25%}
 .gain-tables{display:grid;align-items:start;
@@ -672,7 +672,7 @@ def render_player_page(data: PlayerData) -> str:
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{_esc(data.username)} - XP Tracker</title>",
+        f"<title>{_esc(data.username.lower())} - xp tracker</title>",
         f"<style>{_PLAYER_CSS}</style></head><body id=\"top\">",
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
@@ -724,7 +724,7 @@ def render_player_page(data: PlayerData) -> str:
         parts.append("</section>")
 
     parts.append(
-        '<a class="to-top" href="#top" aria-label="Back to top">'
+        '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"
     )
     parts.append("</body></html>")

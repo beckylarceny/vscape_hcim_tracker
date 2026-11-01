@@ -245,7 +245,7 @@ _CSS = """
 :root{color-scheme:light dark}
 *{box-sizing:border-box}
 body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0 auto;
-     padding:2rem 1rem;max-width:72rem}
+     padding:2rem 1rem;max-width:72rem;text-transform:lowercase}
 h1{font-size:1.9rem;margin:0 0 .35rem}
 h2{font-size:1.5rem;margin:2.75rem 0 .6rem;border-bottom:1px solid #8884;
    padding-bottom:.3rem}
@@ -265,7 +265,7 @@ h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
 .find button{padding:.4rem .9rem;font:inherit;border:1px solid #8886;
              border-radius:0;background:#3b82f6;color:#fff;cursor:pointer}
 nav{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.5rem 0 1rem;font-size:.85rem}
-h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:uppercase;
+h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:lowercase;
    letter-spacing:.04em}
 h2,h3,h4{text-align:center}
 .tables{display:grid;align-items:start;
@@ -466,7 +466,7 @@ def _player_finder(data: ReportData) -> str:
         "function findPlayer(form){"
         "const name=form.player.value.trim();"
         "const url=PLAYERS[name.toLowerCase()];"
-        "if(!url){alert('Unknown player: '+name);return false;}"
+        "if(!url){alert('unknown player: '+name);return false;}"
         "window.location.href=url;return false;}</script>"
     )
 
@@ -476,7 +476,7 @@ def render_html(data: ReportData) -> str:
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>XP Tracker - {_esc(_date(data.now_epoch))}</title>",
+        f"<title>xp tracker - {_esc(_date(data.now_epoch))}</title>",
         f"<style>{_CSS}</style></head><body id=\"top\">",
         "<h1>XP Tracker</h1>",
         '<p class="sub"><a href="latest.txt">text report</a></p>',
@@ -524,7 +524,7 @@ def render_html(data: ReportData) -> str:
         parts.append("</section>")
 
     parts.append(
-        '<a class="to-top" href="#top" aria-label="Back to top">'
+        '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"
     )
     parts.append("</body></html>")

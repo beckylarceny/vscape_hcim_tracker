@@ -221,6 +221,11 @@ class HtmlReportTest(unittest.TestCase):
         page = render_html(self.make_data())
         self.assertIn("h2,h3,h4{text-align:center}", page)
 
+    def test_all_text_is_lowercase(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn("text-transform:lowercase", page)
+        self.assertNotIn("text-transform:uppercase", page)
+
     def test_mobile_tables_fit_the_viewport(self) -> None:
         page = render_html(self.make_data())
         self.assertIn("table{font-size:.8em;table-layout:fixed;", page)

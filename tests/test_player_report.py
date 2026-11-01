@@ -177,11 +177,20 @@ class RenderTest(unittest.TestCase):
 
     def test_current_table_is_narrow(self) -> None:
         page = render_player_page(fake_data())
-        self.assertIn("table.current{width:auto;max-width:32rem}", page)
+        self.assertIn(
+            "table.current{width:auto;max-width:32rem;"
+            "margin-left:auto;margin-right:auto}",
+            page,
+        )
 
     def test_no_rounded_corners(self) -> None:
         page = render_player_page(fake_data())
         self.assertFalse(re.search(r"border-radius:\s*(?!0\b)\d", page))
+
+    def test_all_text_is_lowercase(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn("text-transform:lowercase", page)
+        self.assertNotIn("text-transform:uppercase", page)
 
     def test_back_to_top_button(self) -> None:
         page = render_player_page(fake_data())
