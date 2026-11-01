@@ -116,10 +116,10 @@ checkpoint-coverage bar, separate past/best tables, and 2x2 charts per skill:
 total xp line and xp/hour area. The `overall` row shows total level. Sparse data
 is treated as constant between stored points.
 
-## Priority players
+## Priority tracking
 
-Priority players are the five players with the highest `overall` xp, plus any
-names in `priority_players.json`. Both sets are fetched every 10 minutes, in
+Priority tracking covers the five players with the highest `overall` xp,
+plus any names in `priority_players.json`. Both sets are fetched every 10 minutes, in
 addition to the 6h grid. The file ships with an empty list:
 
 ```json

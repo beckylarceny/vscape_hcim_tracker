@@ -366,7 +366,7 @@ def _priority_loop(
 def start_priority_thread(
     args: argparse.Namespace, dsn: str, limiter: RateLimiter
 ) -> threading.Event:
-    """Prune and collect priority players every 10 minutes."""
+    """Prune and collect priority tracking players every 10 minutes."""
     stop = threading.Event()
     thread = threading.Thread(
         target=_priority_loop,

@@ -223,7 +223,7 @@ class PageTest(unittest.TestCase):
         self.assertEqual(page.count('class="subheading"'), 2)
         self.assertIn('href="../players/alice.html"', page)
         self.assertIn(
-            '<a href="index.html">priority players</a>', page
+            '<a href="index.html">priority tracking</a>', page
         )
         self.assertIn('type="application/rss+xml"', page)
 
@@ -321,7 +321,7 @@ class WriteTest(unittest.TestCase):
             self.assertFalse(stale.exists())
             self.assertEqual(
                 index.read_text(encoding="utf-8").count(
-                    "no priority players configured"
+                    "no players tracked right now"
                 ),
                 1,
             )

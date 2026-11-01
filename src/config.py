@@ -74,7 +74,7 @@ DEFAULT_REPORT_INTERVAL_SECONDS = 60
 DEFAULT_WORKERS = 2
 DEFAULT_RATE = 4.0
 
-# Priority players are the top 5 by overall xp plus any names in
+# Priority tracking covers the top 5 by overall xp plus any names in
 # priority_players.json. They are fetched every 10 minutes and their
 # high-frequency data is kept for one day.
 DEFAULT_PRIORITY_INTERVAL_SECONDS = 10 * 60

@@ -393,7 +393,7 @@ def render_priority_page(data: PriorityData) -> str:
         '<body id="top">',
         '<div class="backlinks"><p class="sub">'
         '<a href="../latest.html">all rankings</a> · '
-        '<a href="index.html">priority players</a> · '
+        '<a href="index.html">priority tracking</a> · '
         f'<a href="{_esc(player_href)}">player page</a></p></div>',
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
@@ -461,12 +461,12 @@ def render_priority_index(players: list[str]) -> str:
         for name in players
     )
     if not items:
-        items = "<li>no priority players configured.</li>"
+        items = "<li>no players tracked right now.</li>"
     return "\n".join([
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>priority players - xp tracker</title>",
+        "<title>priority tracking - xp tracker</title>",
         f"<style>{_PLAYER_CSS}"
         "ul{max-width:44rem;margin:1rem auto;padding-left:1.4rem}"
         "p.blurb{max-width:44rem;margin:1rem auto;color:#888;"
@@ -474,7 +474,7 @@ def render_priority_index(players: list[str]) -> str:
         "</style></head><body id=\"top\">",
         '<div class="backlinks"><p class="sub">'
         '<a href="../latest.html">all rankings</a></p></div>',
-        "<h1>priority players</h1>",
+        "<h1>priority tracking</h1>",
         '<p class="blurb">the top 5 players by overall xp, and any players '
         "added to the priority list file, are fetched every 10 minutes. "
         "each page and rss feed covers the last 24 hours, with regular "

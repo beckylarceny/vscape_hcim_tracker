@@ -209,7 +209,7 @@ class HtmlReportTest(unittest.TestCase):
     def test_priority_players_link(self) -> None:
         page = render_html(self.make_data())
         self.assertIn(
-            '<a href="priority/index.html">priority players</a>', page
+            '<a href="priority/index.html">priority tracking</a>', page
         )
 
     def test_report_links_are_spaced_like_player_links(self) -> None:
@@ -226,7 +226,7 @@ class HtmlReportTest(unittest.TestCase):
         )
         priority = (
             '<p class="sub"><a href="priority/index.html">'
-            "priority players</a></p>"
+            "priority tracking</a></p>"
         )
         self.assertLess(page.index(title), page.index(text_report))
         self.assertLess(page.index(text_report), page.index(priority))
@@ -235,7 +235,7 @@ class HtmlReportTest(unittest.TestCase):
             '<a href="latest.txt">text report</a>', page
         )
         self.assertIn(
-            '<a href="priority/index.html">priority players</a>', page
+            '<a href="priority/index.html">priority tracking</a>', page
         )
 
     def test_player_columns_do_not_squish(self) -> None:

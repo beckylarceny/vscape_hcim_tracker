@@ -480,7 +480,7 @@ def render_html(data: ReportData) -> str:
         f"<style>{_CSS}</style></head><body id=\"top\">",
         "<h1>XP Tracker</h1>",
         '<p class="sub"><a href="latest.txt">text report</a></p>',
-        '<p class="sub"><a href="priority/index.html">priority players</a></p>',
+        '<p class="sub"><a href="priority/index.html">priority tracking</a></p>',
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         f'<p class="meta">players: {data.player_count}'
         + (
