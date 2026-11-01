@@ -559,6 +559,11 @@ svg text.xp{fill:#3b82f6}
 svg text.gain{fill:#22c55e}
 .empty{color:#888;margin:.2rem 0}
 a{color:inherit}
+.to-top{position:fixed;right:1rem;bottom:1rem;z-index:10;padding:.45rem .7rem;
+        background:#3b82f6;color:#fff;font-size:.85rem;line-height:1;
+        text-decoration:none;border:1px solid #8886;border-radius:0;
+        box-shadow:0 1px 4px #0003}
+.to-top:hover{background:#1d4ed8;color:#fff}
 @media (max-width:52rem){
   .charts,.gain-tables{grid-template-columns:1fr}
 }
@@ -576,7 +581,7 @@ def render_player_page(data: PlayerData) -> str:
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         f"<title>{_esc(data.username)} - XP Tracker</title>",
-        f"<style>{_PLAYER_CSS}</style></head><body>",
+        f"<style>{_PLAYER_CSS}</style></head><body id=\"top\">",
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
         "Vidyascape highscores</a></h2>",
@@ -625,5 +630,9 @@ def render_player_page(data: PlayerData) -> str:
         parts.append("</div>")
         parts.append("</section>")
 
+    parts.append(
+        '<a class="to-top" href="#top" aria-label="Back to top">'
+        "&#8593; Top</a>"
+    )
     parts.append("</body></html>")
     return "\n".join(parts) + "\n"

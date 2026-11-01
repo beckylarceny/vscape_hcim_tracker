@@ -171,6 +171,12 @@ class RenderTest(unittest.TestCase):
         page = render_player_page(fake_data())
         self.assertFalse(re.search(r"border-radius:\s*(?!0\b)\d", page))
 
+    def test_back_to_top_button(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn('<body id="top">', page)
+        self.assertIn('class="to-top" href="#top"', page)
+        self.assertIn("position:fixed", page)
+
     def test_empty_history_renders_no_data(self) -> None:
         data = fake_data()
         empty = data._replace(

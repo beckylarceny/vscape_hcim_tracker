@@ -196,6 +196,12 @@ class HtmlReportTest(unittest.TestCase):
             "padding-bottom:1.25rem;border-bottom:1px solid #8884", page
         )
 
+    def test_back_to_top_button(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn('<body id="top">', page)
+        self.assertIn('class="to-top" href="#top"', page)
+        self.assertIn("position:fixed", page)
+
     def test_player_columns_do_not_squish(self) -> None:
         page = render_html(self.make_data())
         self.assertIn("minmax(min(32rem,100%),1fr)", page)

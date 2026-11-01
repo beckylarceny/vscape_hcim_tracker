@@ -294,6 +294,11 @@ td.rank{width:2.5rem;color:#888}
 tr:nth-child(even) td{background:#8881}
 td.empty{text-align:center;color:#888}
 a{color:inherit}
+.to-top{position:fixed;right:1rem;bottom:1rem;z-index:10;padding:.45rem .7rem;
+        background:#3b82f6;color:#fff;font-size:.85rem;line-height:1;
+        text-decoration:none;border:1px solid #8886;border-radius:0;
+        box-shadow:0 1px 4px #0003}
+.to-top:hover{background:#1d4ed8;color:#fff}
 @media (max-width:48rem){
   table{font-size:.8em;table-layout:fixed;width:calc(100% - 2rem);
         margin-left:auto;margin-right:auto}
@@ -471,7 +476,7 @@ def render_html(data: ReportData) -> str:
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         f"<title>XP Tracker - {_esc(_date(data.now_epoch))}</title>",
-        f"<style>{_CSS}</style></head><body>",
+        f"<style>{_CSS}</style></head><body id=\"top\">",
         "<h1>XP Tracker</h1>",
         '<p class="sub"><a href="latest.txt">text report</a></p>',
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
@@ -517,6 +522,10 @@ def render_html(data: ReportData) -> str:
         parts.append("</div>")
         parts.append("</section>")
 
+    parts.append(
+        '<a class="to-top" href="#top" aria-label="Back to top">'
+        "&#8593; Top</a>"
+    )
     parts.append("</body></html>")
     return "\n".join(parts) + "\n"
 
