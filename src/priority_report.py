@@ -40,6 +40,7 @@ MAX_FEED_EVENTS = (
 class Event(NamedTuple):
     epoch: int
     changes: tuple[tuple[str, int], ...]
+    previous_epoch: int | None = None
 
 
 class PriorityData(NamedTuple):
@@ -237,15 +238,58 @@ def collect_events(
                 (skill, xp - previous[skill])
             )
         previous[skill] = xp
+
+    regular = conn.execute(
+        """
+        SELECT skill, observed_at, xp
+        FROM snapshots
+        WHERE username = %s AND observed_at >= %s
+        ORDER BY observed_at, skill
+        """,
+        (username, as_datetime(now_epoch - window - 86400)),
+    ).fetchall()
+    snapshot_times = sorted(
+        {int(row[1].timestamp()) for row in rows}
+        | {int(row[1].timestamp()) for row in regular}
+    )
+
     order = {skill: index for index, skill in enumerate(SKILLS)}
     start = now_epoch - window
-    events = [
-        Event(epoch, tuple(sorted(items, key=lambda item: order.get(item[0], 0))))
-        for epoch, items in changes.items()
-        if epoch >= start
-    ]
+    events = []
+    for epoch, items in changes.items():
+        if epoch < start:
+            continue
+        index = bisect_left(snapshot_times, epoch)
+        previous_epoch = snapshot_times[index - 1] if index > 0 else None
+        events.append(
+            Event(
+                epoch,
+                tuple(sorted(items, key=lambda item: order.get(item[0], 0))),
+                previous_epoch,
+            )
+        )
     events.sort(reverse=True)
     return events[:MAX_FEED_EVENTS]
+
+
+def _ago(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return "less than a minute"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} minute" + ("s" if minutes != 1 else "")
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        text = f"{hours} hour" + ("s" if hours != 1 else "")
+        if minutes:
+            text += f" {minutes} minute" + ("s" if minutes != 1 else "")
+        return text
+    days, hours = divmod(hours, 24)
+    text = f"{days} day" + ("s" if days != 1 else "")
+    if hours:
+        text += f" {hours} hour" + ("s" if hours != 1 else "")
+    return text
 
 
 def _gains_text(changes: tuple[tuple[str, int], ...]) -> str:
@@ -276,7 +320,14 @@ def render_feed(
             title = f"{username} xp update"
         else:
             title = f"{username} {overall:+,} xp"
-        description = _gains_text(event.changes)
+        if event.previous_epoch is None:
+            since = "last snapshot: unknown"
+        else:
+            since = (
+                "last snapshot: "
+                f"{_ago(event.epoch - event.previous_epoch)} ago"
+            )
+        description = since + "\n" + _gains_text(event.changes)
         items.append(
             "<item>"
             f"<title>{_esc(title)}</title>"

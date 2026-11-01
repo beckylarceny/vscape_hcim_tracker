@@ -134,6 +134,25 @@ class EventTest(unittest.TestCase):
         self.assertEqual(
             dict(events[1].changes), {"overall": 500}
         )
+        self.assertEqual(events[0].previous_epoch, NOW - 1800)
+        self.assertEqual(events[1].previous_epoch, NOW - 3600)
+
+    def test_previous_snapshot_can_come_from_regular_data(self) -> None:
+        priority = rows(
+            ("overall", NOW - 3600, 1000),
+            ("overall", NOW - 1800, 1500),
+            ("overall", NOW, 1800),
+        )
+        regular = rows(
+            ("overall", NOW - 2400, 1200),
+        )
+        conn = FakeConn(priority, regular=regular)
+        events = collect_events(conn, "alice", NOW)
+        by_epoch = {event.epoch: event for event in events}
+        self.assertEqual(
+            by_epoch[NOW - 1800].previous_epoch, NOW - 2400
+        )
+        self.assertEqual(by_epoch[NOW].previous_epoch, NOW - 1800)
 
     def test_old_events_are_dropped(self) -> None:
         conn = FakeConn(rows(
@@ -146,8 +165,8 @@ class EventTest(unittest.TestCase):
 class FeedTest(unittest.TestCase):
     def test_feed_has_one_item_per_change(self) -> None:
         events = [
-            Event(NOW, (("overall", 300), ("attack", 20))),
-            Event(NOW - 1800, (("overall", 500),)),
+            Event(NOW, (("overall", 300), ("attack", 20)), NOW - 600),
+            Event(NOW - 1800, (("overall", 500),), NOW - 3600),
         ]
         feed = render_feed(
             "A & B", "A_B", events, NOW, "https://example.test/"
@@ -156,6 +175,8 @@ class FeedTest(unittest.TestCase):
         self.assertIn("<title>A &amp; B +300 xp</title>", feed)
         self.assertIn("overall: +300 xp", feed)
         self.assertIn("attack: +20 xp", feed)
+        self.assertIn("last snapshot: 10 minutes ago", feed)
+        self.assertIn("last snapshot: 30 minutes ago", feed)
         self.assertIn(f"A_B-{NOW}", feed)
         self.assertEqual(feed.count("<item>"), 2)
         self.assertIn(

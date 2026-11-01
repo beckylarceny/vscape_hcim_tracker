@@ -141,7 +141,9 @@ Priority reports live under `reports/priority/` and are served at
   10-minute samples are filled from the normal snapshot history and drawn in
   orange.
 - `<name>.xml`: RSS 2.0 feed with one item per 10-minute fetch where at least one
-  xp value changed. The feed covers the retained day.
+  xp value changed. Each item starts with the time since the last priority or
+  regular snapshot, then lists the changed skills one per line. The feed covers
+  the retained day.
 
 Each priority player's normal player page also links to their priority report,
 and the priority page links to its RSS feed in a top subheading.
