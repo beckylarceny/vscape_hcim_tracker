@@ -20,6 +20,29 @@ text and HTML rankings.
   changes. Every fetched timestamp goes into `checkpoints`, so unchanged points
   are not fetched again. Missing xp is treated as the previous value.
 
+## Vidyascape API rate limits
+
+No request quota is documented, and
+`GET /api/highscores/player/{username}` returns no `RateLimit-*` headers
+(checked 2026-11-01). The limit is enforced indirectly: overlapping requests
+start returning HTTP 503.
+
+The client handles this as follows:
+
+- One global limiter spaces every request, across all worker threads and
+  including retries. `--rate` is total requests per second, not per worker.
+- Defaults are `--workers 2 --rate 4`: two players in flight, four requests per
+  second overall.
+- 429, 500, 502, 503 and 504 are tried up to five times with exponential
+  backoff of 2, 4, 8 and 16 seconds plus jitter. A `Retry-After` header is
+  honoured when present.
+- A checkpoint is recorded only after a successful fetch, so a failed one is
+  retried on the next run while it is inside `--retry-window` (7 days).
+
+In testing, eight concurrent requests produced roughly 50% HTTP 503 responses.
+Raising `--workers` or `--rate` does not lose data, because failed checkpoints
+are retried, but it makes the initial one-year backfill slower.
+
 ## Docker
 
 Three containers: `db` (PostgreSQL with the `pgdata` volume), `collector`
