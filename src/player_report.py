@@ -518,6 +518,8 @@ h3{font-size:1rem;margin:1.2rem 0 .3rem;text-transform:uppercase;
 h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:uppercase;
    letter-spacing:.04em}
 .sub{margin:.25rem 0 1rem}
+.subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
+            border:0;padding:0}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 table{width:100%;border-collapse:collapse;margin:.25rem 0 .75rem;
       table-layout:auto}
@@ -575,8 +577,9 @@ def render_player_page(data: PlayerData) -> str:
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         f"<title>{_esc(data.username)} - XP Tracker</title>",
         f"<style>{_PLAYER_CSS}</style></head><body>",
-        f'<h1><a href="{_esc(highscores_url(data.username))}">'
-        f"{_esc(data.username)}</a></h1>",
+        f"<h1>{_esc(data.username)}</h1>",
+        f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
+        "Vidyascape highscores</a></h2>",
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         '<p class="sub"><a href="../latest.html">all rankings</a></p>',
         "<h2>Current xp</h2>",

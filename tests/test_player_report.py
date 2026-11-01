@@ -108,10 +108,12 @@ class SlugTest(unittest.TestCase):
 
 
 class RenderTest(unittest.TestCase):
-    def test_heading_links_to_highscores(self) -> None:
+    def test_heading_and_highscores_subheading(self) -> None:
         page = render_player_page(fake_data())
+        self.assertIn("<h1>Fuck Jagex</h1>", page)
         self.assertIn(
-            f'<h1><a href="{highscores_url("Fuck Jagex")}">Fuck Jagex</a>',
+            '<h2 class="subheading"><a href="'
+            f'{highscores_url("Fuck Jagex")}">Vidyascape highscores</a></h2>',
             page,
         )
 
