@@ -196,6 +196,10 @@ class PageTest(unittest.TestCase):
         self.assertIn('viewBox="0 0 720 200"', page)
         self.assertIn("priority report: 10-minute updates", page)
         self.assertIn("generated at:", page)
+        version = "software version abc1234, updated 2026-11-01 13:00 UTC"
+        tagged = render_priority_page(self.make_data(), version)
+        self.assertIn(f'<footer class="version">{version}</footer>', tagged)
+        self.assertLess(tagged.index('class="to-top"'), tagged.index(version))
         self.assertIn(
             '<h2 class="subheading"><a href="alice.xml">rss feed</a></h2>',
             page,

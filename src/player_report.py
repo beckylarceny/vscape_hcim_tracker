@@ -784,6 +784,7 @@ a{color:#7BB59A}
         text-decoration:none;border:1px solid #8886;border-radius:0;
         box-shadow:0 1px 4px #0003}
 .to-top:hover{background:#7B659C;color:#fff}
+.version{text-align:right;color:#888;font-size:.75rem;margin:2rem 0 3.5rem}
 @media (max-width:52rem){
   .charts,.gain-tables{grid-template-columns:1fr}
 }
@@ -922,7 +923,11 @@ def _frequency_meta(data: PlayerData) -> str:
     return "".join(lines)
 
 
-def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
+def render_player_page(
+    data: PlayerData,
+    is_priority: bool = False,
+    version: str = "software version unknown",
+) -> str:
     parts: list[str] = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
@@ -990,5 +995,6 @@ def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"
     )
+    parts.append(f'<footer class="version">{_esc(version)}</footer>')
     parts.append("</body></html>")
     return "\n".join(parts) + "\n"

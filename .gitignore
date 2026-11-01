@@ -5,3 +5,4 @@ reports/
 ai_sessions/
 *.log
 backups/
+version

@@ -170,6 +170,30 @@ class HtmlReportTest(unittest.TestCase):
             [(0, 1, 1), (1, 1, 2), (2, 1, 1)],
         )
 
+    def test_version_footer_and_text_line(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from src.report import read_version
+
+        version = "software version abc1234, updated 2026-11-01 13:00 UTC"
+        data = self.make_data()._replace(version=version)
+        page = render_html(data)
+        self.assertIn(f'<footer class="version">{version}</footer>', page)
+        self.assertLess(
+            page.index('class="to-top"'), page.index(version)
+        )
+        text = render_text(data)
+        self.assertTrue(text.endswith(f"\n\n{version}\n"))
+
+        with tempfile.TemporaryDirectory() as directory:
+            report_dir = Path(directory)
+            self.assertEqual(read_version(report_dir), "software version unknown")
+            (report_dir / "version").write_text(
+                "abc1234 2026-11-01 13:00 UTC\n", encoding="utf-8"
+            )
+            self.assertEqual(read_version(report_dir), version)
+
     def test_skills_are_tabs(self) -> None:
         page = render_html(self.make_data())
         self.assertIn(

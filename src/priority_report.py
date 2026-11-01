@@ -364,7 +364,9 @@ p.blurb{max-width:44rem;margin:1rem auto;color:#888;font-size:.9rem;
 """
 
 
-def render_priority_page(data: PriorityData) -> str:
+def render_priority_page(
+    data: PriorityData, version: str = "software version unknown"
+) -> str:
     slug = player_slug(data.username)
     feed_href = f"{urllib.parse.quote(slug)}.xml"
     page_href = f"{urllib.parse.quote(slug)}.html"
@@ -431,11 +433,14 @@ def render_priority_page(data: PriorityData) -> str:
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"
     )
+    parts.append(f'<footer class="version">{_esc(version)}</footer>')
     parts.append("</body></html>")
     return "\n".join(parts) + "\n"
 
 
-def render_priority_index(players: list[str]) -> str:
+def render_priority_index(
+    players: list[str], version: str = "software version unknown"
+) -> str:
     items = "".join(
         f'<li><a href="{urllib.parse.quote(player_slug(name))}.html">'
         f"{_esc(name)}</a> · "
@@ -462,6 +467,7 @@ def render_priority_index(players: list[str]) -> str:
         f"<ul>{items}</ul>",
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>",
+        f'<footer class="version">{_esc(version)}</footer>',
         "</body></html>",
     ]) + "\n"
 
@@ -473,6 +479,7 @@ def write_priority_reports(
     now_epoch: int,
     generated: str,
     base_url: str,
+    version: str = "software version unknown",
 ) -> int:
     directory = report_dir / "priority"
     directory.mkdir(parents=True, exist_ok=True)
@@ -492,7 +499,7 @@ def write_priority_reports(
         events = collect_events(conn, canonical, now_epoch)
         _atomic_write(
             directory / f"{stem}.html",
-            render_priority_page(data),
+            render_priority_page(data, version),
         )
         _atomic_write(
             directory / f"{stem}.xml",
@@ -502,7 +509,7 @@ def write_priority_reports(
         expected.add(f"{stem}.xml")
         written += 1
     _atomic_write(
-        directory / "index.html", render_priority_index(resolved)
+        directory / "index.html", render_priority_index(resolved, version)
     )
     for pattern in ("*.html", "*.xml", ".*.tmp"):
         for path in directory.glob(pattern):

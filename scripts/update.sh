@@ -6,6 +6,12 @@ cd "$(dirname "$0")/.."
 echo "pulling from origin"
 git pull --ff-only
 
+hash=$(git rev-parse --short HEAD)
+stamp=$(date -u '+%Y-%m-%d %H:%M UTC')
+printf '%s %s\n' "$hash" "$stamp" > version
+mkdir -p reports
+cp version reports/version
+
 echo "building the image"
 docker compose build collector
 

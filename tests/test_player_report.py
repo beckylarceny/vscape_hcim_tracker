@@ -153,6 +153,11 @@ class RenderTest(unittest.TestCase):
         self.assertIn("&lt;bob&gt;", escaped)
         self.assertNotIn("<bob>", escaped)
 
+        version = "software version abc1234, updated 2026-11-01 13:00 UTC"
+        tagged = render_player_page(fake_data(), version=version)
+        self.assertIn(f'<footer class="version">{version}</footer>', tagged)
+        self.assertLess(tagged.index('class="to-top"'), tagged.index(version))
+
     def test_current_xp_levels_and_tables(self) -> None:
         page = render_player_page(fake_data())
         self.assertIn("Current xp", page)

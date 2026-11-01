@@ -68,6 +68,11 @@ hour and appends the output to `update.log`. Re-running replaces the entry
 instead of duplicating it. `./scripts/install-cron.sh --remove` deletes it.
 Cron must be installed and the user must be able to run `docker`.
 
+`scripts/update.sh` also writes `version` with the pulled commit hash and the
+update time, and copies it to `reports/version`. Reports show it as
+`software version <hash>, updated <time> UTC`: a grey right-aligned footer on every
+webpage, and the last line of `reports/latest.txt`.
+
 ## Backups
 
 ```sh

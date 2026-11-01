@@ -38,6 +38,21 @@ class ReportData(NamedTuple):
     records: dict[str, dict[str, list[Record]]]
     coverage: list[tuple[int, int]]
     players: tuple[str, ...] = ()
+    version: str = "software version unknown"
+
+
+def read_version(report_dir) -> str:
+    """One-line version label written by scripts/update.sh."""
+    try:
+        text = (report_dir / "version").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "software version unknown"
+    parts = text.split(maxsplit=1)
+    if not parts:
+        return "software version unknown"
+    if len(parts) == 1:
+        return f"software version {parts[0]}"
+    return f"software version {parts[0]}, updated {parts[1]}"
 
 
 def _hours(seconds: int) -> str:
@@ -249,7 +264,7 @@ def render_text(data: ReportData) -> str:
             ],
         )
 
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n\n" + data.version + "\n"
 
 
 _CSS = """
@@ -310,6 +325,7 @@ a{color:#7BB59A}
         text-decoration:none;border:1px solid #8886;border-radius:0;
         box-shadow:0 1px 4px #0003}
 .to-top:hover{background:#7B659C;color:#fff}
+.version{text-align:right;color:#888;font-size:.75rem;margin:2rem 0 3.5rem}
 @media (max-width:48rem){
   table{font-size:.8em;table-layout:fixed;width:calc(100% - 2rem);
         margin-left:auto;margin-right:auto}
@@ -520,6 +536,7 @@ def render_html(data: ReportData) -> str:
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"
     )
+    parts.append(f'<footer class="version">{_esc(data.version)}</footer>')
     parts.append("</body></html>")
     return "\n".join(parts) + "\n"
 

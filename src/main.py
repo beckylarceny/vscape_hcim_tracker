@@ -456,6 +456,7 @@ def write_player_pages(
     previous: dict[str, tuple[int, object]] | None,
     priority_names: tuple[str, ...] = (),
     force: bool = False,
+    version: str = "software version unknown",
 ) -> int:
     """Write one HTML report per player whose checkpoint history changed."""
     directory = report_dir / "players"
@@ -485,7 +486,7 @@ def write_player_pages(
                 data.interval, data.generated, data.collect_interval,
             )
             page = player_report.render_player_page(
-                page_data, is_priority=username in priority
+                page_data, is_priority=username in priority, version=version
             )
         except Exception:  # noqa: BLE001 - one page must not break the rest
             log.exception("could not build the player report for %r", username)
@@ -521,6 +522,7 @@ def write_report(
             conn, now_epoch, interval, lookback, top_n, player_count,
             collect_interval, coverage_total,
         )
+        data = data._replace(version=report.read_version(report_dir))
         text = report.render_text(data)
         page = report.render_html(data)
 
@@ -543,6 +545,7 @@ def write_report(
             count = write_player_pages(
                 conn, report_dir, data, watermarks, previous,
                 priority_names=priority_names, force=force,
+                version=data.version,
             )
             _PLAYER_WATERMARKS[key] = watermarks
             if count:
@@ -555,6 +558,7 @@ def write_report(
             conn, report_dir,
             priority_index_names(conn, priority_players),
             data.now_epoch, data.generated, base_url,
+            version=data.version,
         )
         if count:
             log.debug(
