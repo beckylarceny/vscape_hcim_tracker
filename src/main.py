@@ -11,11 +11,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from . import api, player_report, report, storage, web
+from . import api, player_report, priority_report, report, storage, web
 from .config import (
+    DEFAULT_BASE_URL,
     DEFAULT_COLLECT_INTERVAL_SECONDS,
     DEFAULT_INTERVAL_SECONDS,
     DEFAULT_LOOKBACK_SECONDS,
+    DEFAULT_PRIORITY_INTERVAL_SECONDS,
+    DEFAULT_PRIORITY_RETENTION_SECONDS,
     DEFAULT_RATE,
     DEFAULT_REPORT_INTERVAL_SECONDS,
     DEFAULT_RETRY_WINDOW_SECONDS,
@@ -23,6 +26,7 @@ from .config import (
     DEFAULT_WORKERS,
     HCIM,
     SKILLS,
+    parse_priority_players,
 )
 
 log = logging.getLogger("vscape_hcim_tracker")
@@ -207,6 +211,155 @@ def collect_all(
     return totals
 
 
+def collect_priority_player(
+    dsn: str,
+    username: str,
+    timestamp: int,
+    limiter: RateLimiter,
+) -> dict[str, int]:
+    """Fetch one 30-minute priority checkpoint and store it."""
+    stats = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
+    conn = storage.connect(dsn)
+    try:
+        try:
+            fetched = api.fetch_player_xp(username, wait=limiter.wait)
+            stats["requests"] += 1
+        except api.ApiError as error:
+            log.warning(
+                "priority highscores fetch for %r failed: %s", username, error
+            )
+            stats["failures"] += 1
+            return stats
+
+        if fetched is None:
+            log.warning("no highscores entry for priority player %r", username)
+            stats["failures"] += 1
+            return stats
+
+        ironman, xp_now = fetched
+        if ironman != HCIM:
+            log.info(
+                "skipping priority %r: ironman status is %d, not hardcore",
+                username, ironman,
+            )
+            return stats
+
+        storage.upsert_players(conn, [(username, ironman)])
+        stats["players"] = 1
+
+        age = max(0, int(time.time() - timestamp))
+        try:
+            gained = api.fetch_player_gains(
+                username, age, wait=limiter.wait
+            )
+        except api.ApiError as error:
+            log.warning(
+                "priority checkpoint %s for %r failed: %s",
+                timestamp, username, error,
+            )
+            stats["failures"] += 1
+            return stats
+        stats["requests"] += 1
+        if gained is None:
+            stats["failures"] += 1
+            return stats
+
+        observed = storage.as_datetime(timestamp)
+        last_xp = storage.latest_priority_xp_by_skill(conn, username)
+        rows: list[tuple] = []
+        for skill in SKILLS:
+            xp = xp_now[skill] - gained[skill]
+            if xp < 0:
+                xp = 0
+            if last_xp.get(skill) == xp:
+                continue
+            rows.append((username, skill, observed, xp))
+        if rows:
+            storage.insert_priority_snapshots(conn, rows)
+        storage.insert_priority_checkpoints(conn, username, [timestamp])
+        stats["rows"] = len(rows)
+        return stats
+    finally:
+        conn.close()
+
+
+def collect_priority_once(
+    args: argparse.Namespace, dsn: str, limiter: RateLimiter
+) -> dict[str, int]:
+    """Fetch the current 30-minute slot for every priority player, then prune."""
+    totals = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
+    names = list(getattr(args, "priority_players", ()))
+
+    now = int(time.time())
+    timestamp = (
+        now // DEFAULT_PRIORITY_INTERVAL_SECONDS
+    ) * DEFAULT_PRIORITY_INTERVAL_SECONDS
+
+    conn = storage.connect(dsn)
+    try:
+        storage.ensure_schema(conn)
+        storage.prune_priority_data(
+            conn, now - DEFAULT_PRIORITY_RETENTION_SECONDS
+        )
+    finally:
+        conn.close()
+
+    if not names:
+        return totals
+
+    for name in names:
+        try:
+            stats = collect_priority_player(
+                dsn, name, timestamp, limiter
+            )
+        except Exception:  # noqa: BLE001 - one player must not kill the run
+            log.exception("failed to collect priority player %r", name)
+            totals["failures"] += 1
+            continue
+        for key in totals:
+            totals[key] += stats[key]
+
+    log.info(
+        "priority collection: %d players, %d requests, %d rows, %d failures",
+        totals["players"], totals["requests"], totals["rows"],
+        totals["failures"],
+    )
+    return totals
+
+
+def _priority_loop(
+    args: argparse.Namespace,
+    dsn: str,
+    limiter: RateLimiter,
+    stop: threading.Event,
+) -> None:
+    while not stop.is_set():
+        try:
+            collect_priority_once(args, dsn, limiter)
+        except Exception:  # noqa: BLE001 - keep the loop alive
+            log.exception("priority collection failed")
+        now = time.time()
+        next_slot = (
+            int(now) // DEFAULT_PRIORITY_INTERVAL_SECONDS + 1
+        ) * DEFAULT_PRIORITY_INTERVAL_SECONDS + 5
+        stop.wait(max(1.0, next_slot - now))
+
+
+def start_priority_thread(
+    args: argparse.Namespace, dsn: str, limiter: RateLimiter
+) -> threading.Event:
+    """Prune and collect priority players every 30 minutes."""
+    stop = threading.Event()
+    thread = threading.Thread(
+        target=_priority_loop,
+        args=(args, dsn, limiter, stop),
+        name="vscape_hcim_tracker-priority",
+        daemon=True,
+    )
+    thread.start()
+    return stop
+
+
 def _atomic_write(path: Path, text: str) -> None:
     temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temp.write_text(text, encoding="utf-8")
@@ -305,6 +458,8 @@ def write_report(
     player_count: int,
     collect_interval: int,
     coverage_total: int | None = None,
+    priority_players: tuple[str, ...] = (),
+    base_url: str = DEFAULT_BASE_URL,
 ) -> Path:
     """Write the text and HTML reports from one shared computation."""
     with _REPORT_LOCK:
@@ -335,15 +490,27 @@ def write_report(
                     "wrote %d player reports to %s", count,
                     report_dir / "players",
                 )
+
+        count = priority_report.write_priority_reports(
+            conn, report_dir, priority_players, data.now_epoch,
+            data.generated, base_url,
+        )
+        if count:
+            log.debug(
+                "wrote %d priority reports to %s", count,
+                report_dir / "priority",
+            )
     log.info("wrote reports to %s and %s", text_path, html_path)
     return html_path
 
 
-def run_once(args: argparse.Namespace, dsn: str) -> None:
+def run_once(
+    args: argparse.Namespace, dsn: str, limiter: RateLimiter | None = None
+) -> None:
     interval = args.interval
     collect_interval = args.collect_interval
     lookback = args.lookback
-    limiter = RateLimiter(args.rate)
+    limiter = limiter or RateLimiter(args.rate)
     conn = storage.connect(dsn)
     try:
         storage.ensure_schema(conn)
@@ -400,6 +567,8 @@ def run_once(args: argparse.Namespace, dsn: str) -> None:
                     conn, Path(args.report_dir), now, interval, lookback,
                     args.top, player_count, collect_interval,
                     coverage_total=len(names) if names else None,
+                    priority_players=getattr(args, "priority_players", ()),
+                    base_url=getattr(args, "base_url", DEFAULT_BASE_URL),
                 )
         finally:
             storage.finish_run(
@@ -492,6 +661,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="entries per ranking (default: 5)",
     )
     parser.add_argument(
+        "--priority", action="append", default=None,
+        help=(
+            "priority player username; repeat or comma-separate "
+            "(default: $VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS)"
+        ),
+    )
+    parser.add_argument(
+        "--base-url", default=DEFAULT_BASE_URL,
+        help=(
+            "public URL used in RSS links "
+            f"(default: {DEFAULT_BASE_URL})"
+        ),
+    )
+    parser.add_argument(
         "--loop", action="store_true",
         help="run forever, collecting a new checkpoint every --collect-interval",
     )
@@ -529,6 +712,8 @@ def write_current_report(args: argparse.Namespace, dsn: str) -> None:
             conn, Path(args.report_dir), int(time.time()), args.interval,
             args.lookback, args.top, verified, args.collect_interval,
             coverage_total=candidates,
+            priority_players=getattr(args, "priority_players", ()),
+            base_url=getattr(args, "base_url", DEFAULT_BASE_URL),
         )
     finally:
         conn.close()
@@ -609,6 +794,9 @@ def main(argv: list[str] | None = None) -> int:
         log.error("no database configured: pass --dsn or set VSCAPE_HCIM_TRACKER_DSN")
         return 2
 
+    args.priority_players = parse_priority_players(args.priority)
+    args.base_url = args.base_url.rstrip("/")
+
     if args.serve_only:
         return _serve_forever(args, args.dsn)
 
@@ -648,9 +836,13 @@ def main(argv: list[str] | None = None) -> int:
                 "regenerating reports every %ds", args.report_interval
             )
 
+    limiter = RateLimiter(args.rate)
+    if args.loop and not args.report_only:
+        start_priority_thread(args, args.dsn, limiter)
+
     while True:
         try:
-            run_once(args, args.dsn)
+            run_once(args, args.dsn, limiter)
         except Exception:  # noqa: BLE001
             log.exception("run failed")
             if not args.loop:

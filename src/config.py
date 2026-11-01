@@ -52,3 +52,29 @@ DEFAULT_REPORT_INTERVAL_SECONDS = 60
 # The API returns 503 when several requests arrive at once; keep concurrency low.
 DEFAULT_WORKERS = 2
 DEFAULT_RATE = 4.0
+
+# Priority players are fetched every 30 minutes and their high-frequency data
+# is kept for one day. The list comes from the environment or --priority.
+DEFAULT_PRIORITY_INTERVAL_SECONDS = 30 * 60
+DEFAULT_PRIORITY_RETENTION_SECONDS = 24 * 3600
+
+
+def parse_priority_players(values: list[str] | None) -> tuple[str, ...]:
+    """Usernames from CLI values, or from the environment when omitted."""
+    if values is None:
+        raw = os.environ.get(
+            "VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS", ""
+        )
+        values = raw.split(",")
+    names: list[str] = []
+    for value in values:
+        for name in value.split(","):
+            name = name.strip()
+            if name and name not in names:
+                names.append(name)
+    return tuple(names)
+
+
+DEFAULT_BASE_URL = os.environ.get(
+    "VSCAPE_HCIM_TRACKER_BASE_URL", "http://localhost:8000"
+)

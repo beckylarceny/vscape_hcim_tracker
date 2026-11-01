@@ -104,6 +104,34 @@ row shows the sum of the other skills' levels (total level).
 Because storage is sparse, xp between two stored points is treated as constant;
 windows still have exactly the nominal span.
 
+## Priority players
+
+Priority players are fetched every 30 minutes, in addition to the normal 6h
+grid. Set them on both services, in `.env` or with repeated CLI flags:
+
+```sh
+VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS="alice,bob"
+# or
+python -m src --priority alice --priority bob
+```
+
+The collector service must run with `--loop`. High-frequency rows go into
+`priority_snapshots` and `priority_checkpoints` and are deleted after 24 hours;
+normal history is untouched. At most 48 checkpoints and 48 x 24 snapshot rows
+are kept per priority player.
+
+Priority reports live under `reports/priority/` and are served at
+`/priority/<name>.html` and `/priority/<name>.xml`:
+
+- `<name>.html`: current xp and one large chart per skill for the last 24 hours,
+  with the total xp line and the xp/hour area.
+- `<name>.xml`: RSS 2.0 feed with one item per 30-minute fetch where at least one
+  xp value changed. The feed covers the retained day.
+
+RSS links need absolute URLs. Set the public base URL with
+`VSCAPE_HCIM_TRACKER_BASE_URL` or `--base-url` (default
+`http://localhost:8000`). Changing the priority list requires a restart.
+
 ## Storage cost
 
 Measured on 75 players with roughly one year of data: 216 bytes per snapshot

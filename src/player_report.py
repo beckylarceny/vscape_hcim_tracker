@@ -373,11 +373,12 @@ def _short_number(value: float) -> str:
     return f"{value:,.1f}".removesuffix(".0")
 
 
-def _chart_svg(chart: ChartData, label: str) -> str:
+def _chart_svg(
+    chart: ChartData, label: str, width: int = 360, height: int = 118
+) -> str:
     if not chart.xp and not chart.gains:
         return '<p class="empty">(no data)</p>'
 
-    width, height = 360, 118
     left, right, top, bottom = 46, 46, 10, 18
     plot_width = width - left - right
     plot_height = height - top - bottom

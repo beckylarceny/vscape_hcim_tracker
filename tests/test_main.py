@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from src import api, main, storage
-from src.config import HCIM, SKILLS
+from src.config import HCIM, SKILLS, parse_priority_players
 
 COLLECT = 6 * 3600
 DAY = 24 * 3600
@@ -211,6 +212,119 @@ class ReportThreadTest(unittest.TestCase):
                 time.sleep(0.01)
             stop.set()
         self.assertGreaterEqual(writer.call_count, 1)
+
+
+class PriorityListTest(unittest.TestCase):
+    def test_cli_values_are_split_and_deduped(self) -> None:
+        self.assertEqual(
+            parse_priority_players(["a,b", " c ", "a"]),
+            ("a", "b", "c"),
+        )
+
+    def test_environment_is_used_when_cli_is_omitted(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS": "x, y"},
+        ):
+            self.assertEqual(parse_priority_players(None), ("x", "y"))
+
+
+class PriorityCollectTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.conn = MagicMock()
+        self.conn.close = MagicMock()
+        self.limiter = main.RateLimiter(0)
+
+    def collect(self, fetched, gains, last_xp=None):
+        with patch.object(main.storage, "connect", return_value=self.conn), \
+                patch.object(main.storage, "upsert_players"), \
+                patch.object(
+                    main.storage, "latest_priority_xp_by_skill",
+                    return_value=dict(last_xp or {}),
+                ), \
+                patch.object(
+                    main.storage, "insert_priority_snapshots"
+                ) as insert, \
+                patch.object(
+                    main.storage, "insert_priority_checkpoints"
+                ) as checkpoints, \
+                patch.object(
+                    main.api, "fetch_player_xp", return_value=fetched
+                ), \
+                patch.object(
+                    main.api, "fetch_player_gains", side_effect=gains
+                ):
+            stats = main.collect_priority_player(
+                "dsn", "alice", T1, self.limiter
+            )
+        return stats, insert, checkpoints
+
+    def test_hcim_priority_fetch_stores_changes(self) -> None:
+        stats, insert, checkpoints = self.collect(
+            (HCIM, xp(1000)), [xp(100)]
+        )
+        self.assertEqual(stats["players"], 1)
+        self.assertEqual(stats["rows"], len(SKILLS))
+        self.assertEqual(len(insert.call_args.args[1]), len(SKILLS))
+        self.assertEqual(checkpoints.call_args.args[2], [T1])
+
+    def test_unchanged_priority_xp_is_not_stored(self) -> None:
+        stats, insert, checkpoints = self.collect(
+            (HCIM, xp(1000)), [xp(0)], last_xp=xp(1000)
+        )
+        self.assertEqual(stats["rows"], 0)
+        insert.assert_not_called()
+        self.assertEqual(checkpoints.call_args.args[2], [T1])
+
+    def test_non_hcim_priority_player_is_skipped(self) -> None:
+        stats, insert, checkpoints = self.collect((1, xp(1000)), [xp(0)])
+        self.assertEqual(stats["players"], 0)
+        self.assertEqual(stats["requests"], 1)
+        insert.assert_not_called()
+        checkpoints.assert_not_called()
+
+    def test_priority_api_error_is_counted(self) -> None:
+        with patch.object(main.storage, "connect", return_value=self.conn), \
+                patch.object(
+                    main.api, "fetch_player_xp",
+                    side_effect=api.ApiError("503"),
+                ):
+            stats = main.collect_priority_player(
+                "dsn", "alice", T1, self.limiter
+            )
+        self.assertEqual(stats["failures"], 1)
+        self.assertEqual(stats["players"], 0)
+
+    def test_collect_once_uses_the_priority_list_and_prunes(self) -> None:
+        args = SimpleNamespace(priority_players=("alice", "bob"))
+        totals = {"requests": 2, "rows": 2, "failures": 0, "players": 1}
+        with patch.object(main.storage, "connect", return_value=self.conn), \
+                patch.object(main.storage, "ensure_schema"), \
+                patch.object(main.storage, "prune_priority_data") as prune, \
+                patch.object(
+                    main, "collect_priority_player", return_value=totals
+                ) as collect:
+            result = main.collect_priority_once(args, "dsn", self.limiter)
+        self.assertEqual(collect.call_count, 2)
+        prune.assert_called_once()
+        self.assertEqual(result["players"], 2)
+
+    def test_priority_thread_starts_without_players_to_prune(self) -> None:
+        args = SimpleNamespace(priority_players=())
+
+        def fake_loop(thread_args, dsn, limiter, stop):
+            stop.set()
+
+        with patch.object(
+            main, "_priority_loop", side_effect=fake_loop
+        ) as loop:
+            stop = main.start_priority_thread(args, "dsn", self.limiter)
+            self.assertIsNotNone(stop)
+            for _ in range(50):
+                if loop.call_count:
+                    break
+                time.sleep(0.01)
+        self.assertGreaterEqual(loop.call_count, 1)
 
 
 if __name__ == "__main__":

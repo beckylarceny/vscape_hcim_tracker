@@ -31,7 +31,8 @@ class DatabaseTest(unittest.TestCase):
         self.conn = connect_or_skip()
         self.addCleanup(self.conn.close)
         self.conn.execute(
-            "TRUNCATE checkpoints, snapshots, runs, players CASCADE"
+            "TRUNCATE priority_checkpoints, priority_snapshots, "
+            "checkpoints, snapshots, runs, players CASCADE"
         )
         self.conn.commit()
 
@@ -59,7 +60,10 @@ class SchemaTest(DatabaseTest):
         ).fetchall()
         names = {row[0] for row in rows}
         self.assertTrue(
-            {"players", "snapshots", "checkpoints", "runs"} <= names
+            {
+                "players", "snapshots", "checkpoints", "runs",
+                "priority_snapshots", "priority_checkpoints",
+            } <= names
         )
 
 
@@ -164,6 +168,38 @@ class SnapshotTest(DatabaseTest):
         with self.assertRaises(Exception):
             self.add_snapshot("ghost", "overall", T1, 1)
         self.conn.rollback()
+
+
+class PriorityStorageTest(DatabaseTest):
+    def test_insert_is_idempotent(self) -> None:
+        self.add_player("alice")
+        row = ("alice", "overall", storage.as_datetime(T1), 100)
+        storage.insert_priority_snapshots(self.conn, [row, row])
+        rows = self.conn.execute(
+            "SELECT count(*) FROM priority_snapshots"
+        ).fetchone()
+        self.assertEqual(rows[0], 1)
+
+    def test_latest_and_prune(self) -> None:
+        self.add_player("alice")
+        storage.insert_priority_snapshots(self.conn, [
+            ("alice", "overall", storage.as_datetime(T1), 100),
+            ("alice", "overall", storage.as_datetime(T2), 200),
+        ])
+        storage.insert_priority_checkpoints(self.conn, "alice", [T1, T2])
+        self.assertEqual(
+            storage.latest_priority_xp_by_skill(self.conn, "alice"),
+            {"overall": 200},
+        )
+
+        storage.prune_priority_data(self.conn, T2)
+        snapshots = self.conn.execute(
+            "SELECT count(*) FROM priority_snapshots"
+        ).fetchone()[0]
+        checkpoints = self.conn.execute(
+            "SELECT count(*) FROM priority_checkpoints"
+        ).fetchone()[0]
+        self.assertEqual((snapshots, checkpoints), (1, 1))
 
 
 class CoverageTest(DatabaseTest):

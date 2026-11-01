@@ -39,6 +39,26 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS priority_snapshots (
+        username    text NOT NULL REFERENCES players (username) ON DELETE CASCADE,
+        skill       text NOT NULL,
+        observed_at timestamptz NOT NULL,
+        xp          bigint NOT NULL CHECK (xp >= 0),
+        PRIMARY KEY (username, skill, observed_at)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS priority_snapshots_user_time
+        ON priority_snapshots (username, observed_at DESC) INCLUDE (skill, xp)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS priority_checkpoints (
+        username    text NOT NULL REFERENCES players (username) ON DELETE CASCADE,
+        observed_at timestamptz NOT NULL,
+        PRIMARY KEY (username, observed_at)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS runs (
         id               bigserial PRIMARY KEY,
         started_at       timestamptz NOT NULL,
@@ -132,6 +152,22 @@ def latest_xp_by_skill(
     return {skill: xp for skill, xp in rows}
 
 
+def latest_priority_xp_by_skill(
+    conn: psycopg.Connection, username: str
+) -> dict[str, int]:
+    """Most recent high-frequency xp per skill for one player."""
+    rows = conn.execute(
+        """
+        SELECT DISTINCT ON (skill) skill, xp
+        FROM priority_snapshots
+        WHERE username = %s
+        ORDER BY skill, observed_at DESC
+        """,
+        (username,),
+    ).fetchall()
+    return {skill: xp for skill, xp in rows}
+
+
 def insert_checkpoints(
     conn: psycopg.Connection, username: str, timestamps: Sequence[int]
 ) -> None:
@@ -161,6 +197,52 @@ def insert_snapshots(conn: psycopg.Connection, rows: Sequence[tuple]) -> None:
             """,
             rows,
         )
+    conn.commit()
+
+
+def insert_priority_snapshots(
+    conn: psycopg.Connection, rows: Sequence[tuple]
+) -> None:
+    if not rows:
+        return
+    with conn.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO priority_snapshots (username, skill, observed_at, xp)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (username, skill, observed_at) DO NOTHING
+            """,
+            rows,
+        )
+    conn.commit()
+
+
+def insert_priority_checkpoints(
+    conn: psycopg.Connection, username: str, timestamps: Sequence[int]
+) -> None:
+    if not timestamps:
+        return
+    with conn.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO priority_checkpoints (username, observed_at)
+            VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            [(username, as_datetime(epoch)) for epoch in timestamps],
+        )
+    conn.commit()
+
+
+def prune_priority_data(conn: psycopg.Connection, cutoff_epoch: int) -> None:
+    """Drop high-frequency rows older than the retention cutoff."""
+    cutoff = as_datetime(cutoff_epoch)
+    conn.execute(
+        "DELETE FROM priority_snapshots WHERE observed_at < %s", (cutoff,)
+    )
+    conn.execute(
+        "DELETE FROM priority_checkpoints WHERE observed_at < %s", (cutoff,)
+    )
     conn.commit()
 
 
