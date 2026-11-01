@@ -71,9 +71,9 @@ Every player also gets `reports/players/<name>.html`, with the username linked
 to their Vidyascape highscores page, current xp and OSRS level per skill, past
 and best gains in separate tables for each span, and a 2x2 grid of inline SVG
 charts per skill (day/week/month/year). Each chart plots total xp as a line and
-xp gained per stored data point as an area for that window. These pages are
-rewritten only when that player gains new checkpoint rows, not on the
-one-minute report timer.
+normalised xp/hour between stored data points as a stepped area for that
+window. These pages are rewritten only when that player gains new checkpoint
+rows, not on the one-minute report timer.
 
 The levels use the OSRS experience thresholds for levels 1-99; the `overall`
 row shows the sum of the other skills' levels (total level).

@@ -135,7 +135,8 @@ class RenderTest(unittest.TestCase):
         page = render_player_page(fake_data())
         # 23 real skills, each at 1,000 xp = level 9.
         self.assertIn(
-            '<tr><td>overall</td><td class="num">207</td>', page
+            '<a href="#skill-overall">overall</a></td>'
+            '<td class="num">207</td>', page
         )
         self.assertIn("current xp: 1,000 (total level 207)", page)
 
@@ -144,14 +145,21 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(
             page.count("<svg"), len(SKILLS) * len(SPANS)
         )
-        self.assertIn("overall day: total xp and gains", page)
+        self.assertIn("overall day: total xp and xp/h", page)
         self.assertIn('class="area"', page)
         self.assertIn('class="line"', page)
+        self.assertIn('class="key area-key">xp/h</span>', page)
 
     def test_username_is_escaped(self) -> None:
         page = render_player_page(fake_data(username="<bob>"))
         self.assertIn("&lt;bob&gt;", page)
         self.assertNotIn("<bob>", page)
+
+    def test_current_table_links_skills_to_sections(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn('<a href="#skill-attack">attack</a>', page)
+        self.assertIn('<a href="#skill-overall">overall</a>', page)
+        self.assertIn('<section id="skill-attack">', page)
 
     def test_current_table_is_narrow(self) -> None:
         page = render_player_page(fake_data())
@@ -282,7 +290,8 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(chart.end_epoch, NOW)
         self.assertEqual(chart.xp[0], (NOW - DAY, 3000))
         self.assertEqual(chart.xp[-1], (NOW, 4000))
-        self.assertEqual(chart.gains, [(NOW, 1000)])
+        self.assertEqual(chart.gains[0][0], NOW)
+        self.assertAlmostEqual(chart.gains[0][1], 1000 / 24)
 
     def test_longer_window_includes_every_stored_point(self) -> None:
         conn = FakeConn(rows(
@@ -293,7 +302,23 @@ class CollectTest(unittest.TestCase):
         ))
         chart = self.collect(conn).charts["overall"]["week"]
         self.assertEqual([xp for _, xp in chart.xp], [1000, 2000, 3000, 4000])
-        self.assertEqual([gain for _, gain in chart.gains], [1000, 1000, 1000])
+        self.assertEqual(len(chart.gains), 3)
+        for _, rate in chart.gains:
+            self.assertAlmostEqual(rate, 1000 / 24)
+
+    def test_gain_rate_normalizes_datapoint_interval(self) -> None:
+        conn = FakeConn(rows(
+            ("overall", NOW - 30 * 3600, 0),
+            ("overall", NOW - 24 * 3600, 100),
+            ("overall", NOW, 500),
+        ))
+        rates = [
+            rate for _, rate in self.collect(conn).charts["overall"]["week"].gains
+        ]
+        self.assertEqual(len(rates), 2)
+        self.assertAlmostEqual(rates[0], 100 / 6)
+        self.assertAlmostEqual(rates[1], 400 / 24)
+        self.assertAlmostEqual(rates[0], rates[1])
 
     def test_skills_without_snapshots_are_absent(self) -> None:
         conn = FakeConn([])

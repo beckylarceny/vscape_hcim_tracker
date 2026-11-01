@@ -7,7 +7,7 @@ import heapq
 import html
 import re
 import urllib.parse
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
 if TYPE_CHECKING:
     import psycopg
@@ -18,6 +18,8 @@ from .storage import as_datetime
 PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/highscores?player={username}"
 
 _UNSAFE_SLUG = re.compile(r"[^A-Za-z0-9._-]+")
+
+_Number = TypeVar("_Number", int, float)
 
 # Total xp needed for levels 1-99, from the OSRS experience table:
 # https://oldschool.runescape.wiki/w/Experience#Levels_1%E2%80%9399
@@ -48,7 +50,7 @@ class ChartData(NamedTuple):
     start_epoch: int
     end_epoch: int
     xp: list[tuple[int, int]]
-    gains: list[tuple[int, int]]
+    gains: list[tuple[int, float]]
 
 
 class PlayerData(NamedTuple):
@@ -200,7 +202,9 @@ def _past_gain(
     return max(0, latest - earlier)
 
 
-def _thin(points: list[tuple[int, int]], limit: int) -> list[tuple[int, int]]:
+def _thin(
+    points: list[tuple[int, _Number]], limit: int
+) -> list[tuple[int, _Number]]:
     """Evenly reduce a series while keeping its endpoints."""
     if len(points) <= limit:
         return points
@@ -218,7 +222,7 @@ def _chart_data(
     span: int,
     now_epoch: int,
 ) -> ChartData:
-    """Total xp and per-stored-point gains for the last `span` seconds."""
+    """Total xp and xp/hour between stored points for the last `span`."""
     start = now_epoch - span
     if not points:
         return ChartData(start, now_epoch, [], [])
@@ -228,20 +232,26 @@ def _chart_data(
         # Include the point at or before the window start, pinned to the edge.
         line = [(start, points[index][1])]
         rest = points[index + 1:]
-        previous = points[index][1]
+        previous_xp = points[index][1]
+        previous_time = points[index][0]
     else:
         line = []
         rest = points
-        previous = None
+        previous_xp = None
+        previous_time = None
 
-    gains: list[tuple[int, int]] = []
+    gains: list[tuple[int, float]] = []
     for timestamp, xp in rest:
         if timestamp > now_epoch:
             break
         line.append((timestamp, xp))
-        if previous is not None:
-            gains.append((timestamp, max(0, xp - previous)))
-        previous = xp
+        if previous_xp is not None and previous_time is not None:
+            elapsed = timestamp - previous_time
+            if elapsed > 0:
+                rate = max(0, xp - previous_xp) * 3600 / elapsed
+                gains.append((timestamp, rate))
+        previous_xp = xp
+        previous_time = timestamp
 
     return ChartData(
         start, now_epoch, _thin(line, 180), _thin(gains, 180)
@@ -312,13 +322,16 @@ def _num(value: int) -> str:
     return f"{value:,}"
 
 
-def _short_number(value: int) -> str:
+def _short_number(value: float) -> str:
+    value = max(0.0, float(value))
     for size, suffix in ((1_000_000_000, "B"), (1_000_000, "M"),
                          (1_000, "k")):
         if value >= size:
             text = f"{value / size:.1f}".removesuffix(".0")
             return f"{text}{suffix}"
-    return str(value)
+    if value >= 100:
+        return f"{value:,.0f}"
+    return f"{value:,.1f}".removesuffix(".0")
 
 
 def _chart_svg(chart: ChartData, label: str) -> str:
@@ -349,7 +362,7 @@ def _chart_svg(chart: ChartData, label: str) -> str:
         ratio = (value - xp_min) / xp_span
         return top + plot_height * (1 - ratio)
 
-    def y_gain(value: int) -> float:
+    def y_gain(value: float) -> float:
         return top + plot_height * (1 - value / gain_span)
 
     baseline = top + plot_height
@@ -433,7 +446,7 @@ def _current_table(data: PlayerData) -> str:
         else:
             level = str(level_for_xp(value))
         rows.append(
-            f"<tr><td>{_esc(skill)}</td>"
+            f'<tr><td><a href="#skill-{_esc(skill)}">{_esc(skill)}</a></td>'
             f'<td class="num">{level}</td>'
             f'<td class="num">{shown}</td></tr>'
         )
@@ -594,11 +607,11 @@ def render_player_page(data: PlayerData) -> str:
         parts.append("<h3>Charts</h3>")
         parts.append('<div class="charts">')
         for name in SPANS:
-            label = f"{skill} {name}: total xp and gains"
+            label = f"{skill} {name}: total xp and xp/h"
             parts.append(
                 f"<figure><figcaption><b>{_esc(name)}</b>"
                 '<span class="key line-key">total xp</span>'
-                '<span class="key area-key">gains</span></figcaption>'
+                '<span class="key area-key">xp/h</span></figcaption>'
                 f"{_chart_svg(data.charts[skill][name], label)}"
                 "</figure>"
             )
