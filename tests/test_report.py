@@ -214,14 +214,19 @@ class HtmlReportTest(unittest.TestCase):
             ".sub{margin:.2rem 0 .8rem;font-size:1.05rem}", page
         )
 
-    def test_backlinks_are_at_the_top(self) -> None:
+    def test_backlinks_are_under_the_title(self) -> None:
         page = render_html(self.make_data())
-        self.assertLess(
-            page.index('class="backlinks"'), page.index("<h1>")
+        title = "<h1>XP Tracker</h1>"
+        text_report = (
+            '<p class="sub"><a href="latest.txt">text report</a></p>'
         )
-        self.assertIn(
-            ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
+        priority = (
+            '<p class="sub"><a href="priority/index.html">'
+            "priority players</a></p>"
         )
+        self.assertLess(page.index(title), page.index(text_report))
+        self.assertLess(page.index(text_report), page.index(priority))
+        self.assertNotIn('class="backlinks"', page)
         self.assertIn(
             '<a href="latest.txt">text report</a>', page
         )
