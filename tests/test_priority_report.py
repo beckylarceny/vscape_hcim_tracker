@@ -305,6 +305,10 @@ class WriteTest(unittest.TestCase):
                 'href="alice.html"',
                 index.read_text(encoding="utf-8"),
             )
+            self.assertIn(
+                "the top 5 players by overall xp",
+                index.read_text(encoding="utf-8"),
+            )
 
             stale = report_dir / "priority" / "old.html"
             stale.write_text("old", encoding="utf-8")

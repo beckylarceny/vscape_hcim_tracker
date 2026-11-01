@@ -186,6 +186,37 @@ def latest_priority_xp_by_skill(
     return {skill: xp for skill, xp in rows}
 
 
+def top_players_by_xp(
+    conn: psycopg.Connection, skill: str, limit: int
+) -> list[str]:
+    """Players with the highest latest xp in one skill, highest first."""
+    if limit <= 0:
+        return []
+    rows = conn.execute(
+        """
+        SELECT DISTINCT ON (username) username, xp
+        FROM snapshots
+        WHERE skill = %s
+        ORDER BY username, observed_at DESC
+        """,
+        (skill,),
+    ).fetchall()
+    ranked = sorted(rows, key=lambda row: (-int(row[1]), row[0]))
+    return [username for username, _ in ranked[:limit]]
+
+
+def priority_snapshot_players(conn: psycopg.Connection) -> list[str]:
+    """Players that still hold unpruned high-frequency rows."""
+    rows = conn.execute(
+        """
+        SELECT DISTINCT username
+        FROM priority_snapshots
+        ORDER BY username
+        """
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
 def insert_checkpoints(
     conn: psycopg.Connection, username: str, timestamps: Sequence[int]
 ) -> None:

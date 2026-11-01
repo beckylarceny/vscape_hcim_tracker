@@ -280,9 +280,9 @@ class PriorityListTest(unittest.TestCase):
         ):
             self.assertEqual(parse_priority_players(None), ("x", "y"))
 
-    def test_default_file_has_cojultad(self) -> None:
+    def test_default_list_is_empty(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
-            self.assertIn("cojultad", parse_priority_players(None))
+            self.assertEqual(parse_priority_players(None), ())
 
     def test_json_file_is_used_when_env_is_unset(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -323,7 +323,7 @@ class PriorityListTest(unittest.TestCase):
             clear=True,
         ):
             self.assertEqual(
-                parse_priority_players(None), ("cojultad",)
+                parse_priority_players(None), ()
             )
 
     def test_cli_values_override_the_file(self) -> None:
@@ -349,6 +349,37 @@ class PriorityListTest(unittest.TestCase):
             main.refresh_priority_players(args)
         parse.assert_not_called()
         self.assertEqual(args.priority_players, ("fixed",))
+
+
+class PriorityTrackingTest(unittest.TestCase):
+    def test_top_players_come_before_manual_names(self) -> None:
+        spelling = {"cojultad": "Cojultad"}
+        with patch.object(
+            main.storage, "top_players_by_xp", return_value=["Cojultad"]
+        ), patch.object(
+            main.storage, "canonical_username",
+            side_effect=lambda conn, name: spelling.get(name),
+        ):
+            self.assertEqual(
+                main.tracked_priority_names(
+                    MagicMock(), ("cojultad", "Wolfy")
+                ),
+                ("Cojultad", "Wolfy"),
+            )
+
+    def test_index_adds_players_with_remaining_priority_rows(self) -> None:
+        with patch.object(
+            main.storage, "top_players_by_xp", return_value=["alice"]
+        ), patch.object(
+            main.storage, "canonical_username", return_value=None
+        ), patch.object(
+            main.storage, "priority_snapshot_players",
+            return_value=["alice", "bob"],
+        ):
+            self.assertEqual(
+                main.priority_index_names(MagicMock(), ()),
+                ("alice", "bob"),
+            )
 
 
 class PriorityCollectTest(unittest.TestCase):
@@ -440,12 +471,39 @@ class PriorityCollectTest(unittest.TestCase):
                 patch.object(main.storage, "ensure_schema"), \
                 patch.object(main.storage, "prune_priority_data") as prune, \
                 patch.object(
+                    main.storage, "top_players_by_xp", return_value=[]
+                ), \
+                patch.object(
+                    main.storage, "canonical_username", return_value=None
+                ), \
+                patch.object(
                     main, "collect_priority_player", return_value=totals
                 ) as collect:
             result = main.collect_priority_once(args, "dsn", self.limiter)
         self.assertEqual(collect.call_count, 2)
         prune.assert_called_once()
         self.assertEqual(result["players"], 2)
+
+    def test_collect_once_includes_top_players_without_manual_entries(
+        self,
+    ) -> None:
+        args = SimpleNamespace(priority_players=())
+        totals = {"requests": 2, "rows": 2, "failures": 0, "players": 1}
+        with patch.object(main.storage, "connect", return_value=self.conn), \
+                patch.object(main.storage, "ensure_schema"), \
+                patch.object(main.storage, "prune_priority_data"), \
+                patch.object(
+                    main.storage, "top_players_by_xp",
+                    return_value=["Cojultad"],
+                ), \
+                patch.object(
+                    main.storage, "canonical_username", return_value=None
+                ), \
+                patch.object(
+                    main, "collect_priority_player", return_value=totals
+                ) as collect:
+            main.collect_priority_once(args, "dsn", self.limiter)
+        self.assertEqual(collect.call_args.args[1], "Cojultad")
 
     def test_priority_thread_starts_without_players_to_prune(self) -> None:
         args = SimpleNamespace(priority_players=())

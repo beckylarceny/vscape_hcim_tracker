@@ -19,6 +19,7 @@ from .config import (
     DEFAULT_LOOKBACK_SECONDS,
     DEFAULT_PRIORITY_INTERVAL_SECONDS,
     DEFAULT_PRIORITY_RETENTION_SECONDS,
+    DEFAULT_PRIORITY_TOP,
     DEFAULT_RATE,
     DEFAULT_REPORT_INTERVAL_SECONDS,
     DEFAULT_RETRY_WINDOW_SECONDS,
@@ -300,7 +301,6 @@ def collect_priority_once(
 ) -> dict[str, int]:
     """Fetch the current 10-minute slot for every priority player, then prune."""
     totals = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
-    names = list(getattr(args, "priority_players", ()))
 
     now = int(time.time())
     timestamp = (
@@ -312,6 +312,11 @@ def collect_priority_once(
         storage.ensure_schema(conn)
         storage.prune_priority_data(
             conn, now - DEFAULT_PRIORITY_RETENTION_SECONDS
+        )
+        names = list(
+            tracked_priority_names(
+                conn, getattr(args, "priority_players", ())
+            )
         )
     finally:
         conn.close()
@@ -395,15 +400,30 @@ _PLAYER_WATERMARKS: dict[Path, dict[str, tuple[int, object]]] = {}
 _PLAYER_PRIORITY_STATE: dict[Path, frozenset[str]] = {}
 
 
-def resolve_priority_names(
+def tracked_priority_names(
     conn, players: tuple[str, ...] | list[str]
 ) -> tuple[str, ...]:
-    """Canonical stored spelling for each configured priority player."""
+    """Top players by overall xp plus the manual list, in stored spelling."""
     names: list[str] = []
-    for username in players:
+    candidates = list(
+        storage.top_players_by_xp(conn, "overall", DEFAULT_PRIORITY_TOP)
+    )
+    candidates.extend(players)
+    for username in candidates:
         canonical = storage.canonical_username(conn, username) or username
         if canonical not in names:
             names.append(canonical)
+    return tuple(names)
+
+
+def priority_index_names(
+    conn, players: tuple[str, ...] | list[str]
+) -> tuple[str, ...]:
+    """Tracked players plus anyone still holding unpruned priority rows."""
+    names = list(tracked_priority_names(conn, players))
+    for username in storage.priority_snapshot_players(conn):
+        if username not in names:
+            names.append(username)
     return tuple(names)
 
 
@@ -510,7 +530,7 @@ def write_report(
         _remove_old_reports(report_dir)
 
         key = report_dir.resolve()
-        priority_names = resolve_priority_names(conn, priority_players)
+        priority_names = tracked_priority_names(conn, priority_players)
         priority_key = frozenset(priority_names)
         force = _PLAYER_PRIORITY_STATE.get(key) != priority_key
         _PLAYER_PRIORITY_STATE[key] = priority_key
@@ -530,8 +550,9 @@ def write_report(
                 )
 
         count = priority_report.write_priority_reports(
-            conn, report_dir, priority_names, data.now_epoch,
-            data.generated, base_url,
+            conn, report_dir,
+            priority_index_names(conn, priority_players),
+            data.now_epoch, data.generated, base_url,
         )
         if count:
             log.debug(

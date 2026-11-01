@@ -74,12 +74,13 @@ DEFAULT_REPORT_INTERVAL_SECONDS = 60
 DEFAULT_WORKERS = 2
 DEFAULT_RATE = 4.0
 
-# Priority players are fetched every 10 minutes and their high-frequency data
-# is kept for one day. The list comes from priority_players.json, unless the
-# environment or --priority overrides it.
+# Priority players are the top 5 by overall xp plus any names in
+# priority_players.json. They are fetched every 10 minutes and their
+# high-frequency data is kept for one day.
 DEFAULT_PRIORITY_INTERVAL_SECONDS = 10 * 60
 DEFAULT_PRIORITY_RETENTION_SECONDS = 24 * 3600
-DEFAULT_PRIORITY_PLAYERS = ("cojultad",)
+DEFAULT_PRIORITY_PLAYERS: tuple[str, ...] = ()
+DEFAULT_PRIORITY_TOP = 5
 PRIORITY_FILE_ENV = "VSCAPE_HCIM_TRACKER_PRIORITY_FILE"
 DEFAULT_PRIORITY_FILE = _PROJECT_ROOT / "priority_players.json"
 

@@ -154,6 +154,35 @@ class SnapshotTest(DatabaseTest):
             {"overall": 200, "attack": 50},
         )
 
+    def test_top_players_by_xp_uses_latest_overall_xp(self) -> None:
+        for name, value in (("alice", 300), ("bob", 500), ("carol", 100)):
+            self.add_player(name)
+            self.add_snapshot(name, "overall", T1, value)
+        self.add_snapshot("alice", "overall", T2, 900)
+        self.assertEqual(
+            storage.top_players_by_xp(self.conn, "overall", 2),
+            ["alice", "bob"],
+        )
+
+    def test_top_players_by_xp_honours_the_limit(self) -> None:
+        self.add_player("alice")
+        self.add_snapshot("alice", "overall", T1, 300)
+        self.assertEqual(
+            storage.top_players_by_xp(self.conn, "overall", 0), []
+        )
+
+    def test_priority_snapshot_players_lists_distinct_names(self) -> None:
+        self.add_player("alice")
+        self.add_player("bob")
+        storage.insert_priority_snapshots(self.conn, [
+            ("alice", "overall", storage.as_datetime(T1), 10),
+            ("alice", "attack", storage.as_datetime(T1), 5),
+            ("bob", "overall", storage.as_datetime(T1), 20),
+        ])
+        self.assertEqual(
+            storage.priority_snapshot_players(self.conn), ["alice", "bob"]
+        )
+
     def test_xp_at_or_before_picks_latest_row(self) -> None:
         self.add_player("alice")
         self.add_player("bob")

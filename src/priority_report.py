@@ -469,10 +469,17 @@ def render_priority_index(players: list[str]) -> str:
         "<title>priority players - xp tracker</title>",
         f"<style>{_PLAYER_CSS}"
         "ul{max-width:44rem;margin:1rem auto;padding-left:1.4rem}"
+        "p.blurb{max-width:44rem;margin:1rem auto;color:#888;"
+        "font-size:.9rem;line-height:1.5}"
         "</style></head><body id=\"top\">",
         '<div class="backlinks"><p class="sub">'
         '<a href="../latest.html">all rankings</a></p></div>',
         "<h1>priority players</h1>",
+        '<p class="blurb">the top 5 players by overall xp, and any players '
+        "added to the priority list file, are fetched every 10 minutes. "
+        "each page and rss feed covers the last 24 hours, with regular "
+        "snapshots filling the gaps in orange. players who leave the list "
+        "stay here until their high-frequency data is pruned.</p>",
         f"<ul>{items}</ul>",
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>",

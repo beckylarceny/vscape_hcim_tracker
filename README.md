@@ -118,11 +118,12 @@ is treated as constant between stored points.
 
 ## Priority players
 
-Priority players are fetched every 10 minutes, in addition to the 6h grid. Edit
-`priority_players.json`:
+Priority players are the five players with the highest `overall` xp, plus any
+names in `priority_players.json`. Both sets are fetched every 10 minutes, in
+addition to the 6h grid. The file ships with an empty list:
 
 ```json
-{"players": ["cojultad"]}
+{"players": []}
 ```
 
 The collector re-reads it before every fetch and the web every report cycle, so
@@ -132,7 +133,8 @@ path. High-frequency rows are pruned after 24 hours.
 
 `reports/priority/` contains:
 
-- `index.html` - priority player list.
+- `index.html` - top players, manual names, and any player still holding
+  unpruned high-frequency rows.
 - `<name>.html` - one large 24h chart per skill, `hh:mm` ticks, regular snapshot
   data in orange.
 - `<name>.xml` - RSS feed, one item per 10-minute fetch with changed xp,
