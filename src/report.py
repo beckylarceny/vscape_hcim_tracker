@@ -266,7 +266,7 @@ h2{font-size:1.5rem;margin:2.75rem 0 .6rem;border-bottom:1px solid #8884;
 h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 .sub{margin:.2rem 0 .8rem;font-size:1.05rem}
-.coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
+.coverage{display:flex;gap:3px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;border-radius:0;overflow:hidden}
 .coverage span{flex:1;background:#9079B6;min-width:1em}
 .coverage span.zero{background:#8883;opacity:1}
