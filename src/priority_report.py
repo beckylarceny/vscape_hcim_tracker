@@ -19,6 +19,8 @@ from .config import (
 )
 from .player_report import (
     ChartData,
+    SKILL_TABS_CSS,
+    SKILL_TAB_SCRIPT,
     _PLAYER_CSS,
     _chart_svg,
     _esc,
@@ -27,6 +29,8 @@ from .player_report import (
     highscores_url,
     level_for_xp,
     player_slug,
+    skill_panel_open,
+    skill_tabs_html,
     total_level,
 )
 from .storage import as_datetime, canonical_username
@@ -389,7 +393,7 @@ def render_priority_page(data: PriorityData) -> str:
         f"<title>{_esc(data.username.lower())} priority - xp tracker</title>",
         '<link rel="alternate" type="application/rss+xml" '
         f'title="{_esc(data.username)} priority xp" href="{_esc(feed_href)}">',
-        f"<style>{_PLAYER_CSS}{_PRIORITY_CSS}</style></head>"
+        f"<style>{_PLAYER_CSS}{SKILL_TABS_CSS}{_PRIORITY_CSS}</style></head>"
         '<body id="top">',
         '<div class="backlinks"><p class="sub">'
         '<a href="../latest.html">all rankings</a> · '
@@ -401,23 +405,18 @@ def render_priority_page(data: PriorityData) -> str:
         f'<h2 class="subheading"><a href="{_esc(feed_href)}">rss feed</a></h2>',
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         '<p class="meta">priority report: 10-minute updates, last 24 hours</p>',
-        '<nav class="skill-nav">'
-        + " ".join(
-            f'<a href="#skill-{_esc(skill)}">{_esc(skill)}</a>'
-            for skill in SKILLS
-        )
-        + "</nav>",
+        skill_tabs_html(),
         '<div class="stats">',
     ]
 
-    for skill in SKILLS:
+    for index, skill in enumerate(SKILLS):
         value = data.current.get(skill)
         chart = data.charts[skill]
         regular_key = (
             '<span class="key regular-key">regular data</span>'
             if chart.regular_xp or chart.regular_gains else ""
         )
-        parts.append(f'<section id="skill-{_esc(skill)}">')
+        parts.append(skill_panel_open(index, skill))
         parts.append(f"<h2>{_esc(skill)}</h2>")
         parts.append(
             '<p class="meta">current xp: '
@@ -439,6 +438,7 @@ def render_priority_page(data: PriorityData) -> str:
         parts.append("</section>")
 
     parts.append("</div>")
+    parts.append(SKILL_TAB_SCRIPT)
     parts.append(
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"

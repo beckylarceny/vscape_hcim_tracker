@@ -170,14 +170,18 @@ class RenderTest(unittest.TestCase):
 
     def test_skill_links_are_under_the_header(self) -> None:
         page = render_player_page(fake_data())
-        self.assertIn('<nav class="skill-nav">', page)
-        self.assertIn('<a href="#skill-attack">attack</a>', page)
-        self.assertIn('<a href="#skill-overall">overall</a>', page)
+        self.assertIn(
+            '<div class="tabs" id="skill-tabs" role="tablist">', page
+        )
+        self.assertIn('data-skill="attack"', page)
+        self.assertIn('aria-selected="true">overall</button>', page)
+        self.assertNotIn('<nav class="skill-nav">', page)
         self.assertLess(
-            page.index('class="skill-nav"'),
+            page.index('id="skill-tabs"'),
             page.index('<div class="stats">'),
         )
-        self.assertIn(".skill-nav{display:flex", page)
+        self.assertIn(".tabs{display:flex", page)
+        self.assertIn(".tab-panel[hidden]{display:none}", page)
 
     def test_current_table_skills_are_not_links(self) -> None:
         page = render_player_page(fake_data())

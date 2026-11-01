@@ -631,8 +631,6 @@ h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
 .subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
             border:0;padding:0}
 .priority-link{margin:.1rem 0 .9rem}
-.skill-nav{display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:1rem 0 1.5rem;
-           font-size:.85rem}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;overflow:hidden}
@@ -746,13 +744,67 @@ def _coverage_bar(data: PlayerData) -> str:
     )
 
 
+SKILL_TABS_CSS = """
+.tabs{display:flex;flex-wrap:wrap;gap:.3rem;margin:1rem 0 1.5rem}
+.tab{font:inherit;font-size:.85rem;padding:.35rem .8rem;border:1px solid #8886;
+     border-radius:0;background:transparent;color:inherit;cursor:pointer}
+.tab[aria-selected="true"]{background:#3b82f6;color:#fff;border-color:#3b82f6}
+.tab-panel[hidden]{display:none}
+.tab-panel>h2:first-child{margin-top:.6rem}
+"""
+
+SKILL_TAB_SCRIPT = (
+    "<script>"
+    "const TABS=document.querySelectorAll('[role=tab]');"
+    "const PANELS=document.querySelectorAll('.tab-panel');"
+    "function showSkill(name){"
+    "TABS.forEach(function(tab){"
+    "tab.setAttribute('aria-selected',"
+    "tab.dataset.skill===name?'true':'false');});"
+    "PANELS.forEach(function(panel){"
+    "panel.hidden=panel.id!=='skill-'+name;});"
+    "if(location.hash!=='#skill-'+name){"
+    "history.replaceState(null,'','#skill-'+name);}}"
+    "TABS.forEach(function(tab){"
+    "tab.addEventListener('click',function(){"
+    "showSkill(tab.dataset.skill);"
+    "const bar=document.getElementById('skill-tabs');"
+    "if(bar.getBoundingClientRect().top<0){bar.scrollIntoView();}"
+    "});});"
+    "var initial=(location.hash||'').replace('#skill-','');"
+    "if(document.getElementById('skill-'+initial)){showSkill(initial);}"
+    "</script>"
+)
+
+
+def skill_tabs_html() -> str:
+    buttons = "".join(
+        f'<button class="tab" type="button" role="tab" '
+        f'id="tab-{_esc(skill)}" data-skill="{_esc(skill)}" '
+        f'aria-controls="skill-{_esc(skill)}" '
+        f'aria-selected="{"true" if index == 0 else "false"}">'
+        f"{_esc(skill)}</button>"
+        for index, skill in enumerate(SKILLS)
+    )
+    return f'<div class="tabs" id="skill-tabs" role="tablist">{buttons}</div>'
+
+
+def skill_panel_open(index: int, skill: str) -> str:
+    hidden = "" if index == 0 else " hidden"
+    return (
+        f'<section id="skill-{_esc(skill)}" class="tab-panel" '
+        f'role="tabpanel" aria-labelledby="tab-{_esc(skill)}"{hidden}>'
+    )
+
+
 def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
     parts: list[str] = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         f"<title>{_esc(data.username.lower())} - xp tracker</title>",
-        f"<style>{_PLAYER_CSS}</style></head><body id=\"top\">",
+        f"<style>{_PLAYER_CSS}{SKILL_TABS_CSS}</style></head>"
+        '<body id="top">',
         '<div class="backlinks">'
         '<p class="sub"><a href="../latest.html">all rankings</a></p>'
         "</div>",
@@ -769,19 +821,14 @@ def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
         ),
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         _coverage_bar(data),
-        '<nav class="skill-nav">'
-        + " ".join(
-            f'<a href="#skill-{_esc(skill)}">{_esc(skill)}</a>'
-            for skill in SKILLS
-        )
-        + "</nav>",
+        skill_tabs_html(),
         '<div class="stats">',
         "<h2>Current xp</h2>",
         _current_table(data),
     ]
 
-    for skill in SKILLS:
-        parts.append(f'<section id="skill-{_esc(skill)}">')
+    for index, skill in enumerate(SKILLS):
+        parts.append(skill_panel_open(index, skill))
         parts.append(f"<h2>{_esc(skill)}</h2>")
         value = data.current.get(skill)
         if value is None:
@@ -820,6 +867,7 @@ def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
         parts.append("</section>")
 
     parts.append("</div>")
+    parts.append(SKILL_TAB_SCRIPT)
     parts.append(
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"

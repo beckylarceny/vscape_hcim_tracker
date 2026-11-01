@@ -239,16 +239,27 @@ class PageTest(unittest.TestCase):
 
     def test_skill_links_under_the_header(self) -> None:
         page = render_priority_page(self.make_data())
-        self.assertIn('<nav class="skill-nav">', page)
         self.assertIn(
-            '<a href="#skill-overall">overall</a>', page
+            '<div class="tabs" id="skill-tabs" role="tablist">', page
         )
-        self.assertIn('<a href="#skill-attack">attack</a>', page)
+        self.assertIn('data-skill="overall"', page)
+        self.assertIn('data-skill="attack"', page)
         self.assertLess(
-            page.index('class="skill-nav"'),
-            page.index('<section id="skill-overall">'),
+            page.index('id="skill-tabs"'),
+            page.index('<div class="stats">'),
         )
-        self.assertIn(".skill-nav{display:flex", page)
+        self.assertIn(
+            '<section id="skill-overall" class="tab-panel" '
+            'role="tabpanel" aria-labelledby="tab-overall">',
+            page,
+        )
+        self.assertIn(
+            '<section id="skill-attack" class="tab-panel" '
+            'role="tabpanel" aria-labelledby="tab-attack" hidden>',
+            page,
+        )
+        self.assertIn(".tab-panel[hidden]{display:none}", page)
+        self.assertNotIn('<nav class="skill-nav">', page)
 
     def test_regular_data_is_marked_and_coloured(self) -> None:
         data = self.make_data()
