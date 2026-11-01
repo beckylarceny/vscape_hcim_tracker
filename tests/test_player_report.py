@@ -369,6 +369,50 @@ class CollectTest(unittest.TestCase):
         chart = self.collect(conn).charts["overall"]["day"]
         self.assertEqual(chart.xp, [(NOW - DAY, 500), (NOW, 500)])
 
+    def test_missing_shading_follows_fetched_checkpoints(self) -> None:
+        # xp only changes twice, but the last 10 days and 30-40 days ago were
+        # fetched daily; the 20 days in between were never fetched.
+        checkpoints = sorted(
+            [NOW - day * DAY for day in range(11)]
+            + [NOW - day * DAY for day in range(30, 41)]
+        )
+        conn = FakeConn(
+            rows(
+                ("overall", NOW - 20 * DAY, 1000),
+                ("overall", NOW, 2000),
+            ),
+            checkpoints=checkpoints,
+        )
+        data = self.collect(conn)
+
+        # Idle time with checkpoints is not missing data.
+        self.assertEqual(data.charts["overall"]["day"].missing, ())
+        self.assertEqual(data.charts["overall"]["week"].missing, ())
+        self.assertEqual(
+            data.charts["overall"]["month"].missing,
+            ((NOW - 30 * DAY, NOW - 10 * DAY),),
+        )
+        self.assertEqual(
+            data.charts["overall"]["year"].missing,
+            (
+                (NOW - 365 * DAY, NOW - 40 * DAY),
+                (NOW - 30 * DAY, NOW - 10 * DAY),
+            ),
+        )
+        self.assertEqual(
+            data.charts["overall"]["all"].missing,
+            (
+                (DATA_START_EPOCH, NOW - 40 * DAY),
+                (NOW - 30 * DAY, NOW - 10 * DAY),
+            ),
+        )
+
+        # No checkpoints at all: the whole window is uncollected.
+        empty = self.collect(FakeConn([]))
+        self.assertEqual(
+            empty.charts["overall"]["day"].missing, ((NOW - DAY, NOW),)
+        )
+
     def test_coverage_and_absent_skills(self) -> None:
         conn = FakeConn(
             [], checkpoints=[NOW - 30 * DAY, NOW - 20 * DAY, NOW - 10 * DAY]

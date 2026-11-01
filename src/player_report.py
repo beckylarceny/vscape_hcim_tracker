@@ -280,8 +280,9 @@ def _thin(
 
 
 CHART_POINTS = 90
-# A chart window with no stored point for this long looks empty.
-MISSING_AFTER_SECONDS = 7 * 86400
+# Checkpoints are fetched at least once a day, so a longer break between them
+# means that stretch of the window was never collected.
+MISSING_AFTER_SECONDS = 36 * 3600
 WIDE_CHART_POINTS = 160
 
 
@@ -379,6 +380,22 @@ def _snapshot_times(
     return [int(row[0].timestamp()) for row in rows]
 
 
+def _checkpoint_times(
+    conn: psycopg.Connection, username: str, start_epoch: int, end_epoch: int
+) -> list[int]:
+    """Times at which this player's xp was actually fetched."""
+    rows = conn.execute(
+        """
+        SELECT observed_at
+        FROM checkpoints
+        WHERE username = %s AND observed_at >= %s AND observed_at <= %s
+        ORDER BY observed_at
+        """,
+        (username, as_datetime(start_epoch), as_datetime(end_epoch)),
+    ).fetchall()
+    return [int(row[0].timestamp()) for row in rows]
+
+
 def _frequency_name(seconds: int) -> str:
     if seconds < 3600:
         return f"{seconds // 60} minute"
@@ -449,8 +466,11 @@ def collect_player_data(
     """Load one player's stored history and derive every displayed value."""
     points_by_skill = _points_by_skill(conn, username, 0)
     spans = list(SPANS.items())
-    missing_limit = max(MISSING_AFTER_SECONDS, 2 * slack)
     all_start = min(DATA_START_EPOCH, now_epoch)
+    missing_limit = max(MISSING_AFTER_SECONDS, 2 * live_interval)
+    checkpoint_times = _checkpoint_times(
+        conn, username, all_start, now_epoch
+    )
 
     current: dict[str, int] = {}
     past: dict[str, dict[str, int | None]] = {}
@@ -481,7 +501,7 @@ def collect_player_data(
             chart = _chart_data(epochs, points, span, now_epoch)
             charts[skill][name] = chart._replace(
                 missing=_missing_ranges(
-                    [stamp for stamp in epochs if stamp >= chart.start_epoch],
+                    checkpoint_times,
                     chart.start_epoch, now_epoch, missing_limit,
                 )
             )
@@ -491,8 +511,7 @@ def collect_player_data(
         )
         charts[skill]["all"] = all_chart._replace(
             missing=_missing_ranges(
-                [stamp for stamp in epochs if stamp >= all_start],
-                all_start, now_epoch, missing_limit,
+                checkpoint_times, all_start, now_epoch, missing_limit,
             )
         )
 
