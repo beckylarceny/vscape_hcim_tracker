@@ -165,8 +165,8 @@ def _merged_chart(
     return ChartData(
         start_epoch,
         end_epoch,
-        _thin(line, 180),
-        _thin(gains, 180),
+        _thin(line, 120),
+        _thin(gains, 120),
         frozenset(regular_xp),
         frozenset(regular_gains),
     )

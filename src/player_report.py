@@ -257,11 +257,16 @@ def _thin(
     return thinned
 
 
+CHART_POINTS = 90
+WIDE_CHART_POINTS = 160
+
+
 def _chart_data(
     epochs: list[int],
     points: list[tuple[int, int]],
     span: int,
     now_epoch: int,
+    max_points: int = CHART_POINTS,
 ) -> ChartData:
     """Total xp and xp/hour between stored points for the last `span`."""
     start = now_epoch - span
@@ -299,7 +304,7 @@ def _chart_data(
         line.append((now_epoch, line[-1][1]))
 
     return ChartData(
-        start, now_epoch, _thin(line, 180), _thin(gains, 180)
+        start, now_epoch, _thin(line, max_points), _thin(gains, max_points)
     )
 
 
@@ -398,9 +403,7 @@ def collect_player_data(
     live_interval: int = 6 * 3600,
 ) -> PlayerData:
     """Load one player's stored history and derive every displayed value."""
-    points_by_skill = _points_by_skill(
-        conn, username, now_epoch - lookback - max(SPANS.values())
-    )
+    points_by_skill = _points_by_skill(conn, username, 0)
     spans = list(SPANS.items())
 
     current: dict[str, int] = {}
@@ -432,6 +435,10 @@ def collect_player_data(
             charts[skill][name] = _chart_data(
                 epochs, points, span, now_epoch
             )
+        all_span = max(1, now_epoch - epochs[0]) if epochs else 0
+        charts[skill]["all"] = _chart_data(
+            epochs, points, all_span, now_epoch, WIDE_CHART_POINTS
+        )
 
     coverage = _coverage_buckets(
         conn, username, now_epoch - lookback, now_epoch, lookback
@@ -759,6 +766,7 @@ table.best th:nth-child(1),table.best td:nth-child(1){width:25%}
 .charts{display:grid;align-items:start;
         grid-template-columns:repeat(2,minmax(0,1fr));
         gap:.75rem 1rem}
+.charts figure.wide{grid-column:1/-1}
 figure{min-width:0;margin:0;padding:.5rem .6rem .35rem;
        border:1px solid #8883;border-radius:0}
 figcaption{font-size:.8rem;color:#888;margin-bottom:.25rem}
@@ -986,6 +994,13 @@ def render_player_page(
                 f"{_chart_svg(data.charts[skill][name], label)}"
                 "</figure>"
             )
+        parts.append(
+            f'<figure class="wide"><figcaption><b>all time</b>'
+            '<span class="key line-key">total xp</span>'
+            '<span class="key area-key">xp/h</span></figcaption>'
+            f"{_chart_svg(data.charts[skill]['all'], f'{skill} all time: total xp and xp/h')}"
+            "</figure>"
+        )
         parts.append("</div>")
         parts.append("</section>")
 

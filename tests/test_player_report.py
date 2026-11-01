@@ -94,6 +94,8 @@ def fake_data(username: str = "Fuck Jagex") -> PlayerData:
         }
         for skill in SKILLS
     }
+    for skill in SKILLS:
+        charts[skill]["all"] = charts[skill]["year"]
     return PlayerData(
         username=username,
         generated="2026-01-01 00:00 UTC",
@@ -175,8 +177,13 @@ class RenderTest(unittest.TestCase):
 
     def test_one_chart_per_skill_and_span(self) -> None:
         page = render_player_page(fake_data())
-        self.assertEqual(page.count("<svg"), len(SKILLS) * len(SPANS))
+        self.assertEqual(
+            page.count("<svg"), len(SKILLS) * (len(SPANS) + 1)
+        )
         self.assertIn("overall day: total xp and xp/h", page)
+        self.assertIn("overall all time: total xp and xp/h", page)
+        self.assertIn('<figure class="wide">', page)
+        self.assertIn(".charts figure.wide{grid-column:1/-1}", page)
         self.assertIn('class="area"', page)
         self.assertIn('class="line"', page)
 
@@ -190,6 +197,7 @@ class RenderTest(unittest.TestCase):
                     name: ChartData(NOW - SPANS[name], NOW, [], [])
                     for name in SPANS
                 }
+                | {"all": ChartData(NOW - LOOKBACK, NOW, [], [])}
                 for skill in SKILLS
             },
         )
@@ -296,10 +304,15 @@ class CollectTest(unittest.TestCase):
             ("overall", NOW - DAY, 3000),
             ("overall", NOW, 4000),
         ))
-        chart = self.collect(conn).charts["overall"]["day"]
+        data = self.collect(conn)
+        chart = data.charts["overall"]["day"]
         self.assertEqual(chart.xp[0], (NOW - DAY, 3000))
         self.assertEqual(chart.xp[-1], (NOW, 4000))
         self.assertAlmostEqual(chart.gains[0][1], 1000 / 24)
+        self.assertEqual(
+            data.charts["overall"]["all"].start_epoch, NOW - 3 * DAY
+        )
+        self.assertLessEqual(len(data.charts["overall"]["all"].xp), 160)
 
         week = self.collect(conn).charts["overall"]["week"]
         self.assertEqual([xp for _, xp in week.xp], [1000, 2000, 3000, 4000])
