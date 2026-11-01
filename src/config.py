@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 import sys
@@ -54,18 +55,50 @@ DEFAULT_WORKERS = 2
 DEFAULT_RATE = 4.0
 
 # Priority players are fetched every 30 minutes and their high-frequency data
-# is kept for one day. The list comes from the environment or --priority.
+# is kept for one day. The list comes from priority_players.json, unless the
+# environment or --priority overrides it.
 DEFAULT_PRIORITY_INTERVAL_SECONDS = 30 * 60
 DEFAULT_PRIORITY_RETENTION_SECONDS = 24 * 3600
+DEFAULT_PRIORITY_PLAYERS = ("cojultad",)
+PRIORITY_FILE_ENV = "VSCAPE_HCIM_TRACKER_PRIORITY_FILE"
+DEFAULT_PRIORITY_FILE = _DATA_DIR / "priority_players.json"
+
+
+def priority_file_path() -> pathlib.Path:
+    override = os.environ.get(PRIORITY_FILE_ENV)
+    if override:
+        return pathlib.Path(override).expanduser()
+    return DEFAULT_PRIORITY_FILE
+
+
+def _load_priority_file() -> tuple[str, ...]:
+    try:
+        data = json.loads(
+            priority_file_path().read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return DEFAULT_PRIORITY_PLAYERS
+    if isinstance(data, dict):
+        data = data.get("players")
+    if not isinstance(data, list):
+        return DEFAULT_PRIORITY_PLAYERS
+    names: list[str] = []
+    for value in data:
+        name = str(value).strip()
+        if name and name not in names:
+            names.append(name)
+    return tuple(names)
 
 
 def parse_priority_players(values: list[str] | None) -> tuple[str, ...]:
-    """Usernames from CLI values, or from the environment when omitted."""
+    """Usernames from CLI values, the environment, or the JSON file."""
     if values is None:
         raw = os.environ.get(
             "VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS", ""
-        )
-        values = raw.split(",")
+        ).strip()
+        if not raw:
+            return _load_priority_file()
+        values = [raw]
     names: list[str] = []
     for value in values:
         for name in value.split(","):

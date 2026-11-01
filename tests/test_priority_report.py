@@ -29,12 +29,19 @@ class FakeResult:
     def fetchall(self):
         return self.rows
 
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
 
 class FakeConn:
-    def __init__(self, rows) -> None:
+    def __init__(self, rows, canonical=None) -> None:
         self.rows = rows
+        self.canonical = canonical
 
     def execute(self, sql, params=None):
+        if "FROM players" in sql:
+            rows = [(self.canonical,)] if self.canonical else []
+            return FakeResult(rows)
         return FakeResult(self.rows)
 
 
@@ -144,7 +151,11 @@ class PageTest(unittest.TestCase):
         self.assertEqual(page.count("<svg"), len(SKILLS))
         self.assertIn('viewBox="0 0 720 200"', page)
         self.assertIn("priority report: 30-minute updates", page)
-        self.assertIn('href="alice.xml"', page)
+        self.assertIn(
+            '<h2 class="subheading"><a href="alice.xml">rss feed</a></h2>',
+            page,
+        )
+        self.assertEqual(page.count('class="subheading"'), 2)
         self.assertIn('href="../players/alice.html"', page)
         self.assertIn('type="application/rss+xml"', page)
 
@@ -174,11 +185,17 @@ class WriteTest(unittest.TestCase):
             self.assertEqual(written, 1)
             page = report_dir / "priority" / "alice.html"
             feed = report_dir / "priority" / "alice.xml"
+            index = report_dir / "priority" / "index.html"
             self.assertTrue(page.exists())
             self.assertTrue(feed.exists())
+            self.assertTrue(index.exists())
             self.assertIn(
                 "alice priority - xp tracker",
                 page.read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                'href="alice.html"',
+                index.read_text(encoding="utf-8"),
             )
 
             stale = report_dir / "priority" / "old.html"
@@ -190,6 +207,28 @@ class WriteTest(unittest.TestCase):
             self.assertFalse(page.exists())
             self.assertFalse(feed.exists())
             self.assertFalse(stale.exists())
+            self.assertEqual(
+                index.read_text(encoding="utf-8").count(
+                    "no priority players configured"
+                ),
+                1,
+            )
+
+    def test_configured_name_resolves_to_canonical_player(self) -> None:
+        conn = FakeConn(
+            rows(("overall", NOW - 1800, 1000)),
+            canonical="Cojultad",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            report_dir = Path(directory)
+            write_priority_reports(
+                conn, report_dir, ("cojultad",), NOW, "generated",
+                "http://localhost:8000",
+            )
+            priority = report_dir / "priority"
+            self.assertTrue((priority / "Cojultad.html").exists())
+            self.assertTrue((priority / "Cojultad.xml").exists())
+            self.assertFalse((priority / "cojultad.html").exists())
 
 
 if __name__ == "__main__":

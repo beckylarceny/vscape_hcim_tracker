@@ -103,7 +103,25 @@ def as_datetime(epoch: int) -> dt.datetime:
     return dt.datetime.fromtimestamp(int(epoch), tz=dt.timezone.utc)
 
 
-def upsert_players(conn: psycopg.Connection, players: Iterable[tuple[str, int]]) -> None:
+def canonical_username(
+    conn: psycopg.Connection, username: str
+) -> str | None:
+    """Stored spelling of a player name, matched case-insensitively."""
+    row = conn.execute(
+        """
+        SELECT username FROM players
+        WHERE lower(username) = lower(%s)
+        ORDER BY username
+        LIMIT 1
+        """,
+        (username,),
+    ).fetchone()
+    return row[0] if row else None
+
+
+def upsert_players(
+    conn: psycopg.Connection, players: Iterable[tuple[str, int]]
+) -> None:
     with conn.cursor() as cursor:
         cursor.executemany(
             """

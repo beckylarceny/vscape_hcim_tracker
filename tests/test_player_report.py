@@ -203,6 +203,16 @@ class RenderTest(unittest.TestCase):
         self.assertIn('class="to-top" href="#top"', page)
         self.assertIn("position:fixed", page)
 
+    def test_priority_link_is_shown_only_for_priority_players(self) -> None:
+        page = render_player_page(fake_data(), is_priority=True)
+        self.assertIn(
+            '<p class="priority-link"><a href="../priority/Fuck_Jagex.html">'
+            "priority report</a></p>",
+            page,
+        )
+        normal = render_player_page(fake_data())
+        self.assertNotIn("priority report", normal)
+
     def test_coverage_bar_is_rendered_at_the_top(self) -> None:
         page = render_player_page(fake_data())
         self.assertIn("data coverage:", page)
@@ -214,10 +224,17 @@ class RenderTest(unittest.TestCase):
 
     def test_all_rankings_link_is_separated(self) -> None:
         page = render_player_page(fake_data())
+        link = (
+            '<p class="sub"><a href="../latest.html">'
+            "all rankings</a></p>"
+        )
+        self.assertIn(link, page)
         self.assertIn(
             ".sub{margin:1rem 0 1.5rem;padding-bottom:.9rem;", page
         )
         self.assertIn("border-bottom:1px solid #8884}", page)
+        self.assertLess(page.index(link), page.index('<div class="stats">'))
+        self.assertNotIn('class="topnav"', page)
 
     def test_headings_after_current_xp_are_centered(self) -> None:
         page = render_player_page(fake_data())

@@ -28,7 +28,7 @@ from .player_report import (
     player_slug,
     total_level,
 )
-from .storage import as_datetime
+from .storage import as_datetime, canonical_username
 
 WINDOW_SECONDS = DEFAULT_PRIORITY_RETENTION_SECONDS
 
@@ -230,12 +230,12 @@ def render_priority_page(data: PriorityData) -> str:
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
         "vidyascape highscores</a></h2>",
+        f'<h2 class="subheading"><a href="{_esc(feed_href)}">rss feed</a></h2>',
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         '<p class="meta">priority report: 30-minute updates, last 24 hours</p>',
         '<p class="sub">'
         '<a href="../latest.html">all rankings</a> · '
-        f'<a href="{_esc(player_href)}">player page</a> · '
-        f'<a href="{_esc(feed_href)}">rss</a></p>',
+        f'<a href="{_esc(player_href)}">player page</a></p>',
         '<div class="stats">',
     ]
 
@@ -272,6 +272,32 @@ def _atomic_write(path: Path, text: str) -> None:
     os.replace(temp, path)
 
 
+def render_priority_index(players: list[str]) -> str:
+    items = "".join(
+        f'<li><a href="{urllib.parse.quote(player_slug(name))}.html">'
+        f"{_esc(name)}</a> · "
+        f'<a href="{urllib.parse.quote(player_slug(name))}.xml">rss</a></li>'
+        for name in players
+    )
+    if not items:
+        items = "<li>no priority players configured.</li>"
+    return "\n".join([
+        "<!doctype html>",
+        '<html lang="en"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        "<title>priority players - xp tracker</title>",
+        f"<style>{_PLAYER_CSS}"
+        "ul{max-width:44rem;margin:1rem auto;padding-left:1.4rem}"
+        "</style></head><body id=\"top\">",
+        "<h1>priority players</h1>",
+        '<p class="sub"><a href="../latest.html">all rankings</a></p>',
+        f"<ul>{items}</ul>",
+        '<a class="to-top" href="#top" aria-label="back to top">'
+        "&#8593; Top</a>",
+        "</body></html>",
+    ]) + "\n"
+
+
 def write_priority_reports(
     conn: psycopg.Connection,
     report_dir: Path,
@@ -281,27 +307,35 @@ def write_priority_reports(
     base_url: str,
 ) -> int:
     directory = report_dir / "priority"
-    if not players and not directory.exists():
-        return 0
     directory.mkdir(parents=True, exist_ok=True)
-    expected: set[str] = set()
+    expected: set[str] = {"index.html"}
     written = 0
+    seen: set[str] = set()
+    resolved: list[str] = []
     for username in players:
-        slug = player_slug(username)
+        canonical = canonical_username(conn, username) or username
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        resolved.append(canonical)
+        slug = player_slug(canonical)
         stem = urllib.parse.quote(slug)
-        data = collect_priority_data(conn, username, now_epoch, generated)
-        events = collect_events(conn, username, now_epoch)
+        data = collect_priority_data(conn, canonical, now_epoch, generated)
+        events = collect_events(conn, canonical, now_epoch)
         _atomic_write(
             directory / f"{stem}.html",
             render_priority_page(data),
         )
         _atomic_write(
             directory / f"{stem}.xml",
-            render_feed(username, slug, events, now_epoch, base_url),
+            render_feed(canonical, slug, events, now_epoch, base_url),
         )
         expected.add(f"{stem}.html")
         expected.add(f"{stem}.xml")
         written += 1
+    _atomic_write(
+        directory / "index.html", render_priority_index(resolved)
+    )
     for pattern in ("*.html", "*.xml", ".*.tmp"):
         for path in directory.glob(pattern):
             if path.name not in expected:

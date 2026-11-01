@@ -211,6 +211,13 @@ def collect_all(
     return totals
 
 
+def refresh_priority_players(args: argparse.Namespace) -> None:
+    """Re-read the JSON list unless CLI values pinned it."""
+    if getattr(args, "priority", None) is not None:
+        return
+    args.priority_players = parse_priority_players(None)
+
+
 def collect_priority_player(
     dsn: str,
     username: str,
@@ -221,6 +228,10 @@ def collect_priority_player(
     stats = {"requests": 0, "rows": 0, "failures": 0, "players": 0}
     conn = storage.connect(dsn)
     try:
+        canonical = storage.canonical_username(conn, username)
+        if canonical:
+            username = canonical
+
         try:
             fetched = api.fetch_player_xp(username, wait=limiter.wait)
             stats["requests"] += 1
@@ -334,6 +345,7 @@ def _priority_loop(
     stop: threading.Event,
 ) -> None:
     while not stop.is_set():
+        refresh_priority_players(args)
         try:
             collect_priority_once(args, dsn, limiter)
         except Exception:  # noqa: BLE001 - keep the loop alive
@@ -379,6 +391,19 @@ def _remove_old_reports(report_dir: Path) -> None:
 
 
 _PLAYER_WATERMARKS: dict[Path, dict[str, tuple[int, object]]] = {}
+_PLAYER_PRIORITY_STATE: dict[Path, frozenset[str]] = {}
+
+
+def resolve_priority_names(
+    conn, players: tuple[str, ...] | list[str]
+) -> tuple[str, ...]:
+    """Canonical stored spelling for each configured priority player."""
+    names: list[str] = []
+    for username in players:
+        canonical = storage.canonical_username(conn, username) or username
+        if canonical not in names:
+            names.append(canonical)
+    return tuple(names)
 
 
 def _player_watermarks(conn) -> dict[str, tuple[int, object]]:
@@ -405,17 +430,21 @@ def write_player_pages(
     conn, report_dir: Path, data,
     watermarks: dict[str, tuple[int, object]],
     previous: dict[str, tuple[int, object]] | None,
+    priority_names: tuple[str, ...] = (),
+    force: bool = False,
 ) -> int:
     """Write one HTML report per player whose checkpoint history changed."""
     directory = report_dir / "players"
     directory.mkdir(parents=True, exist_ok=True)
+    priority = set(priority_names)
     expected: set[str] = set()
     stale: list[str] = []
     for username in data.players:
         name = f"{player_report.player_slug(username)}.html"
         expected.add(name)
         if (
-            previous is None
+            force
+            or previous is None
             or previous.get(username) != watermarks.get(username)
             or not (directory / name).exists()
         ):
@@ -429,7 +458,9 @@ def write_player_pages(
                 conn, username, data.now_epoch, data.lookback,
                 data.interval, data.generated,
             )
-            page = player_report.render_player_page(page_data)
+            page = player_report.render_player_page(
+                page_data, is_priority=username in priority
+            )
         except Exception:  # noqa: BLE001 - one page must not break the rest
             log.exception("could not build the player report for %r", username)
             continue
@@ -478,11 +509,17 @@ def write_report(
         _remove_old_reports(report_dir)
 
         key = report_dir.resolve()
+        priority_names = resolve_priority_names(conn, priority_players)
+        priority_key = frozenset(priority_names)
+        force = _PLAYER_PRIORITY_STATE.get(key) != priority_key
+        _PLAYER_PRIORITY_STATE[key] = priority_key
+
         watermarks = _player_watermarks(conn)
         previous = _PLAYER_WATERMARKS.get(key)
-        if previous != watermarks:
+        if previous != watermarks or force:
             count = write_player_pages(
-                conn, report_dir, data, watermarks, previous
+                conn, report_dir, data, watermarks, previous,
+                priority_names=priority_names, force=force,
             )
             _PLAYER_WATERMARKS[key] = watermarks
             if count:
@@ -492,7 +529,7 @@ def write_report(
                 )
 
         count = priority_report.write_priority_reports(
-            conn, report_dir, priority_players, data.now_epoch,
+            conn, report_dir, priority_names, data.now_epoch,
             data.generated, base_url,
         )
         if count:
@@ -723,6 +760,7 @@ def _report_loop(
     args: argparse.Namespace, dsn: str, stop: threading.Event
 ) -> None:
     while not stop.wait(args.report_interval):
+        refresh_priority_players(args)
         try:
             write_current_report(args, dsn)
         except Exception:  # noqa: BLE001 - keep the loop alive
@@ -841,6 +879,7 @@ def main(argv: list[str] | None = None) -> int:
         start_priority_thread(args, args.dsn, limiter)
 
     while True:
+        refresh_priority_players(args)
         try:
             run_once(args, args.dsn, limiter)
         except Exception:  # noqa: BLE001

@@ -202,6 +202,12 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn('class="to-top" href="#top"', page)
         self.assertIn("position:fixed", page)
 
+    def test_priority_players_link(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn(
+            '<a href="priority/index.html">priority players</a>', page
+        )
+
     def test_player_columns_do_not_squish(self) -> None:
         page = render_html(self.make_data())
         self.assertIn("minmax(min(32rem,100%),1fr)", page)

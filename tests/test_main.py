@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import time
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from src import api, main, storage
-from src.config import HCIM, SKILLS, parse_priority_players
+from src.config import (
+    HCIM,
+    PRIORITY_FILE_ENV,
+    SKILLS,
+    parse_priority_players,
+)
 
 COLLECT = 6 * 3600
 DAY = 24 * 3600
@@ -228,6 +235,76 @@ class PriorityListTest(unittest.TestCase):
         ):
             self.assertEqual(parse_priority_players(None), ("x", "y"))
 
+    def test_default_file_has_cojultad(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(parse_priority_players(None), ("cojultad",))
+
+    def test_json_file_is_used_when_env_is_unset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "priority.json")
+            path.write_text(
+                '{"players": ["alice", "bob", "alice"]}',
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ, {PRIORITY_FILE_ENV: str(path)}, clear=True
+            ):
+                self.assertEqual(
+                    parse_priority_players(None), ("alice", "bob")
+                )
+
+    def test_plain_json_array_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "priority.json")
+            path.write_text('["alice"]', encoding="utf-8")
+            with patch.dict(
+                os.environ, {PRIORITY_FILE_ENV: str(path)}, clear=True
+            ):
+                self.assertEqual(parse_priority_players(None), ("alice",))
+
+    def test_empty_json_disables_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "priority.json")
+            path.write_text("[]", encoding="utf-8")
+            with patch.dict(
+                os.environ, {PRIORITY_FILE_ENV: str(path)}, clear=True
+            ):
+                self.assertEqual(parse_priority_players(None), ())
+
+    def test_missing_file_uses_the_default(self) -> None:
+        with patch.dict(
+            os.environ,
+            {PRIORITY_FILE_ENV: "/nonexistent/priority.json"},
+            clear=True,
+        ):
+            self.assertEqual(
+                parse_priority_players(None), ("cojultad",)
+            )
+
+    def test_cli_values_override_the_file(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                parse_priority_players(["alice,bob"]),
+                ("alice", "bob"),
+            )
+
+    def test_refresh_reloads_the_file(self) -> None:
+        args = SimpleNamespace(priority=None, priority_players=("old",))
+        with patch.object(
+            main, "parse_priority_players", return_value=("new",)
+        ):
+            main.refresh_priority_players(args)
+        self.assertEqual(args.priority_players, ("new",))
+
+    def test_refresh_does_not_override_cli_values(self) -> None:
+        args = SimpleNamespace(
+            priority=["fixed"], priority_players=("fixed",)
+        )
+        with patch.object(main, "parse_priority_players") as parse:
+            main.refresh_priority_players(args)
+        parse.assert_not_called()
+        self.assertEqual(args.priority_players, ("fixed",))
+
 
 class PriorityCollectTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -235,8 +312,12 @@ class PriorityCollectTest(unittest.TestCase):
         self.conn.close = MagicMock()
         self.limiter = main.RateLimiter(0)
 
-    def collect(self, fetched, gains, last_xp=None):
+    def collect(self, fetched, gains, last_xp=None, canonical=None):
         with patch.object(main.storage, "connect", return_value=self.conn), \
+                patch.object(
+                    main.storage, "canonical_username",
+                    return_value=canonical,
+                ), \
                 patch.object(main.storage, "upsert_players"), \
                 patch.object(
                     main.storage, "latest_priority_xp_by_skill",
@@ -268,6 +349,15 @@ class PriorityCollectTest(unittest.TestCase):
         self.assertEqual(len(insert.call_args.args[1]), len(SKILLS))
         self.assertEqual(checkpoints.call_args.args[2], [T1])
 
+    def test_priority_uses_the_canonical_username(self) -> None:
+        _, insert, checkpoints = self.collect(
+            (HCIM, xp(1000)), [xp(100)], canonical="Cojultad"
+        )
+        self.assertTrue(
+            all(row[0] == "Cojultad" for row in insert.call_args.args[1])
+        )
+        self.assertEqual(checkpoints.call_args.args[1], "Cojultad")
+
     def test_unchanged_priority_xp_is_not_stored(self) -> None:
         stats, insert, checkpoints = self.collect(
             (HCIM, xp(1000)), [xp(0)], last_xp=xp(1000)
@@ -285,6 +375,9 @@ class PriorityCollectTest(unittest.TestCase):
 
     def test_priority_api_error_is_counted(self) -> None:
         with patch.object(main.storage, "connect", return_value=self.conn), \
+                patch.object(
+                    main.storage, "canonical_username", return_value=None
+                ), \
                 patch.object(
                     main.api, "fetch_player_xp",
                     side_effect=api.ApiError("503"),

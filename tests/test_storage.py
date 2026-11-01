@@ -88,6 +88,15 @@ class PlayerTest(DatabaseTest):
         ).fetchone()
         self.assertTrue(row[0])
 
+    def test_canonical_username_is_case_insensitive(self) -> None:
+        self.add_player("Cojultad")
+        self.assertEqual(
+            storage.canonical_username(self.conn, "cojultad"), "Cojultad"
+        )
+        self.assertIsNone(
+            storage.canonical_username(self.conn, "nobody")
+        )
+
 
 class SnapshotTest(DatabaseTest):
     def test_insert_is_idempotent(self) -> None:
@@ -296,8 +305,10 @@ class ReportTest(DatabaseTest):
             )
             names = sorted(p.name for p in Path(directory).iterdir())
             self.assertEqual(
-                names, ["latest.html", "latest.txt", "players"]
+                names,
+                ["latest.html", "latest.txt", "players", "priority"],
             )
+            self.assertTrue(Path(directory, "priority", "index.html").exists())
 
     def test_write_report_creates_latest_files(self) -> None:
         now = 1_800_000_000
@@ -314,6 +325,9 @@ class ReportTest(DatabaseTest):
             text_path = Path(directory, "latest.txt")
             self.assertTrue(html_path.exists())
             self.assertTrue(text_path.exists())
+            self.assertTrue(
+                Path(directory, "priority", "index.html").exists()
+            )
             page = html_path.read_text(encoding="utf-8")
             self.assertIn("alice", page)
             player_page = Path(directory, "players", "alice.html")

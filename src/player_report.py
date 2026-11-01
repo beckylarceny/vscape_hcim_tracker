@@ -558,6 +558,7 @@ h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
      border-bottom:1px solid #8884}
 .subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
             border:0;padding:0}
+.priority-link{margin:.1rem 0 .9rem}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;overflow:hidden}
@@ -670,7 +671,7 @@ def _coverage_bar(data: PlayerData) -> str:
     )
 
 
-def render_player_page(data: PlayerData) -> str:
+def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
     parts: list[str] = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
@@ -680,6 +681,14 @@ def render_player_page(data: PlayerData) -> str:
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
         "Vidyascape highscores</a></h2>",
+        *(
+            [
+                '<p class="priority-link"><a href="../priority/'
+                f'{urllib.parse.quote(player_slug(data.username))}.html">'
+                "priority report</a></p>"
+            ]
+            if is_priority else []
+        ),
         f'<p class="meta">generated: {_esc(data.generated)}</p>',
         _coverage_bar(data),
         '<p class="sub"><a href="../latest.html">all rankings</a></p>',

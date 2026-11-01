@@ -107,7 +107,17 @@ windows still have exactly the nominal span.
 ## Priority players
 
 Priority players are fetched every 30 minutes, in addition to the normal 6h
-grid. Set them on both services, in `.env` or with repeated CLI flags:
+grid. The list lives in `priority_players.json` at the project root:
+
+```json
+{"players": ["cojultad"]}
+```
+
+The default is `cojultad`. The collector re-reads the file before every
+30-minute fetch and the web container re-reads it every report cycle, so edits
+apply without a restart. Compose bind-mounts the file into both services.
+
+Environment or CLI values override the file:
 
 ```sh
 VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS="alice,bob"
@@ -115,7 +125,8 @@ VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS="alice,bob"
 python -m src --priority alice --priority bob
 ```
 
-The collector service must run with `--loop`. High-frequency rows go into
+`VSCAPE_HCIM_TRACKER_PRIORITY_FILE` points at a different JSON file. The
+collector service must run with `--loop`. High-frequency rows go into
 `priority_snapshots` and `priority_checkpoints` and are deleted after 24 hours;
 normal history is untouched. At most 48 checkpoints and 48 x 24 snapshot rows
 are kept per priority player.
@@ -123,10 +134,15 @@ are kept per priority player.
 Priority reports live under `reports/priority/` and are served at
 `/priority/<name>.html` and `/priority/<name>.xml`:
 
+- `index.html`: list of the configured priority players, linked to their pages
+  and feeds. The general report links here.
 - `<name>.html`: current xp and one large chart per skill for the last 24 hours,
   with the total xp line and the xp/hour area.
 - `<name>.xml`: RSS 2.0 feed with one item per 30-minute fetch where at least one
   xp value changed. The feed covers the retained day.
+
+Each priority player's normal player page also links to their priority report,
+and the priority page links to its RSS feed in a top subheading.
 
 RSS links need absolute URLs. Set the public base URL with
 `VSCAPE_HCIM_TRACKER_BASE_URL` or `--base-url` (default
