@@ -55,6 +55,25 @@ docker compose exec db psql -U xp_tracker -d xp_tracker \
 uid 1000 on startup, so a directory created by Docker as root does not block
 report writes.
 
+## Backups
+
+```sh
+./backup.sh
+```
+
+Writes a compressed custom-format `pg_dump` to `backups/` on the host. The `db`
+service must be running. Set `BACKUP_DIR` to use another output directory.
+
+Restore:
+
+```sh
+docker compose exec -T db sh -c \
+  'PGPASSWORD="$POSTGRES_PASSWORD" pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
+  < backups/<file>.dump
+```
+
+Omit `--clean --if-exists` when restoring into an empty database.
+
 ## API rate limits
 
 No quota is documented and `/api/highscores/player/...` returns no rate-limit
