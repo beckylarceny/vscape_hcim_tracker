@@ -33,7 +33,9 @@ docker compose up -d --force-recreate
 - page: <http://localhost:8000/>
 - text: `reports/latest.txt`
 - logs: `docker compose logs -f collector` or `docker compose logs -f web`
-- stop: `docker compose down` keeps the database
+- start: `./scripts/start.sh`
+- stop: `./scripts/stop.sh` keeps the containers and the database
+- remove: `docker compose down` keeps the database
 - delete data: `docker compose down -v`
 - update: `./scripts/update.sh` pulls, rebuilds the image and recreates
   `collector` and `web`; the database container is left running
@@ -153,8 +155,28 @@ is treated as constant between stored points.
   and the `spans` used for xp records.
 - `db.yaml`: database fallbacks `host`, `port`, `database`, `user`.
 
+Recommended values live in `config/defaults/`. The active files are copies and
+can be edited by hand.
+
 `src/utility.py` loads all three at import (`VSCAPE_HCIM_TRACKER_CONFIG_DIR`
 overrides the directory) and provides `build_dsn` and `parse_priority_players`.
+
+## Interactive setup
+
+```sh
+./scripts/setup.sh
+```
+
+Prompts for every configurable value, showing the recommended default from
+`config/defaults/`. Durations accept `10m`, `6h`, `7d`; the start date accepts
+`YYYY-MM-DD`. The first question offers to revert everything to defaults.
+`./scripts/setup.sh --defaults` does that without prompting.
+
+```sh
+./scripts/reset-config.sh
+```
+
+Restores `config/*.yaml` from `config/defaults/` and leaves no other changes.
 
 ## Priority tracking
 
