@@ -208,6 +208,19 @@ class PageTest(unittest.TestCase):
         self.assertEqual(len(labels), len(SKILLS) * 7)
         self.assertNotIn("2027-01-15<", page)
 
+    def test_skill_links_under_the_header(self) -> None:
+        page = render_priority_page(self.make_data())
+        self.assertIn('<nav class="skill-nav">', page)
+        self.assertIn(
+            '<a href="#skill-overall">overall</a>', page
+        )
+        self.assertIn('<a href="#skill-attack">attack</a>', page)
+        self.assertLess(
+            page.index('class="skill-nav"'),
+            page.index('<section id="skill-overall">'),
+        )
+        self.assertIn(".skill-nav{display:flex", page)
+
     def test_regular_data_is_marked_and_coloured(self) -> None:
         data = self.make_data()
         chart = ChartData(

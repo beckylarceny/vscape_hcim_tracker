@@ -303,6 +303,8 @@ def render_feed(
 _PRIORITY_CSS = """
 figure.big{margin:.5rem 0 1.75rem;padding:.6rem .7rem .4rem}
 figure.big figcaption{text-align:center}
+.skill-nav{display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:1rem 0 1.5rem;
+           font-size:.85rem}
 svg .line.regular{stroke:#f59e0b;stroke-dasharray:4 3}
 svg .area.regular{fill:#f59e0b33;stroke:#f59e0b33}
 svg .dot.regular{fill:#f59e0b}
@@ -346,6 +348,12 @@ def render_priority_page(data: PriorityData) -> str:
         '<p class="sub">'
         '<a href="../latest.html">all rankings</a> · '
         f'<a href="{_esc(player_href)}">player page</a></p>',
+        '<nav class="skill-nav">'
+        + " ".join(
+            f'<a href="#skill-{_esc(skill)}">{_esc(skill)}</a>'
+            for skill in SKILLS
+        )
+        + "</nav>",
         '<div class="stats">',
     ]
 
