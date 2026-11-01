@@ -212,6 +212,11 @@ class HtmlReportTest(unittest.TestCase):
         )
         self.assertIn("@media (max-width:48rem)", page)
 
+    def test_single_column_tables_are_narrow_and_centered(self) -> None:
+        page = render_html(self.make_data())
+        self.assertIn("max-width:44rem", page)
+        self.assertIn("margin:.25rem auto 1rem", page)
+
     def test_mobile_tables_fit_the_viewport(self) -> None:
         page = render_html(self.make_data())
         self.assertIn("table{font-size:.8em;table-layout:fixed;", page)
