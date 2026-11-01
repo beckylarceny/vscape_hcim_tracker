@@ -111,7 +111,7 @@ def total_level(current: dict[str, int]) -> int | None:
 
 def _bucket_count(lookback: int) -> int:
     """One coverage bucket per day, clamped to a readable bar."""
-    return max(30, min(500, (lookback + 86399) // 86400))
+    return max(30, min(300, (lookback + 86399) // 86400))
 
 
 def _current_line(
@@ -745,7 +745,7 @@ h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;overflow:hidden}
-.coverage span{flex:1;background:#9079B6;min-width:1px}
+.coverage span{flex:1;background:#9079B6;min-width:3px}
 .coverage span.zero{background:#8883}
 .range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
 table{width:auto;max-width:100%;border-collapse:collapse;

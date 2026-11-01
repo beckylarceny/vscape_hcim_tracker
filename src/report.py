@@ -280,7 +280,7 @@ h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
 .sub{margin:.2rem 0 .8rem;font-size:1.05rem}
 .coverage{display:flex;gap:1px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;border-radius:0;overflow:hidden}
-.coverage span{flex:1;background:#9079B6;min-width:1px}
+.coverage span{flex:1;background:#9079B6;min-width:3px}
 .coverage span.zero{background:#8883;opacity:1}
 .range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
 .find{display:flex;gap:.5rem;margin:1.25rem 0 2.5rem;

@@ -265,6 +265,37 @@ def insert_checkpoints(
     _insert_checkpoints(conn, "checkpoints", username, timestamps)
 
 
+def insert_checkpoint_pairs(
+    conn: psycopg.Connection, pairs: Sequence[tuple[str, int]]
+) -> None:
+    """Insert (username, timestamp) checkpoint rows in one round trip."""
+    if not pairs:
+        return
+    with conn.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO checkpoints (username, observed_at)
+            VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            [(username, as_datetime(epoch)) for username, epoch in pairs],
+        )
+    conn.commit()
+
+
+def checkpoint_times_by_player(
+    conn: psycopg.Connection,
+) -> dict[str, set[int]]:
+    """Every fetched checkpoint timestamp, grouped by player."""
+    rows = conn.execute(
+        "SELECT username, observed_at FROM checkpoints"
+    ).fetchall()
+    result: dict[str, set[int]] = {}
+    for username, observed_at in rows:
+        result.setdefault(username, set()).add(int(observed_at.timestamp()))
+    return result
+
+
 def insert_snapshots(conn: psycopg.Connection, rows: Sequence[tuple]) -> None:
     _insert_rows(conn, "snapshots", rows)
 

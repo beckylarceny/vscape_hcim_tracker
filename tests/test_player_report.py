@@ -345,9 +345,11 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(chart.xp, [(NOW - DAY, 500), (NOW, 500)])
 
     def test_coverage_and_absent_skills(self) -> None:
-        conn = FakeConn([], checkpoints=[NOW - 3 * DAY, NOW - DAY, NOW])
+        conn = FakeConn(
+            [], checkpoints=[NOW - 30 * DAY, NOW - 20 * DAY, NOW - 10 * DAY]
+        )
         data = self.collect(conn)
-        self.assertEqual(len(data.coverage), 365)
+        self.assertEqual(len(data.coverage), 300)
         covered = [flag for _, flag in data.coverage]
         self.assertEqual(sum(covered), 3)
 

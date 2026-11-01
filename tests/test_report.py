@@ -6,6 +6,7 @@ import unittest
 
 from src.utility import SKILLS, SPANS
 from src.main import parse_duration
+from src.player_report import _bucket_count
 from src.report import (
     Record,
     ReportData,
@@ -154,6 +155,8 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn('class="coverage"', page)
         self.assertIn("1/2 players (50%)", page)
         self.assertIn('class="zero"', page)
+        self.assertIn("min-width:3px", page)
+        self.assertEqual(_bucket_count(1000 * 86400), 300)
 
         page = render_html(self.make_data()._replace(coverage_total=4))
         self.assertIn("2/4 players (50%)", page)

@@ -14,6 +14,8 @@ text and HTML rankings.
 - Backfills everything since 2025-01-26 on a 24h grid, adds a 6h checkpoint per
   run, and rechecks the last 7 days so failed fetches are retried. That epoch is
   the earliest data the API holds.
+- Backfill is interval-major: for each timestamp, newest first, every player is
+  fetched before moving to the previous timestamp.
 - Only accounts whose highscores entry still reports `ironman == 2` (hardcore)
   are recorded.
 - Storage is sparse: a `snapshots` row is written only when a skill's xp
