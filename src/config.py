@@ -5,33 +5,31 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import sys
 
+_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-def _data_dir() -> pathlib.Path:
-    """Directory holding data.py: env override, then nearest parent that has it."""
-    override = os.environ.get("VSCAPE_HCIM_TRACKER_DATA_DIR")
-    if override:
-        return pathlib.Path(override).expanduser().resolve()
-    here = pathlib.Path(__file__).resolve()
-    for parent in here.parents:
-        if (parent / "data.py").is_file():
-            return parent
-    return here.parents[2]
-
-
-_DATA_DIR = _data_dir()
-if str(_DATA_DIR) not in sys.path:
-    sys.path.insert(0, str(_DATA_DIR))
-
-from data import (  # noqa: E402
-    PLAYER_HIGHSCORES_URL,
-    PLAYER_TRACKER_URL,
-    SKILLS,
-    account_filter_code,
+SKILLS: tuple[str, ...] = (
+    "overall",
+    "attack", "defence", "strength", "hitpoints", "ranged", "prayer", "magic",
+    "cooking", "woodcutting", "fletching", "fishing", "firemaking", "crafting",
+    "smithing", "mining", "herblore", "agility", "thieving", "slayer", "farming",
+    "runecrafting", "hunter", "construction",
 )
-
+account_filter_code = {
+    "NOFILTER": 0,
+    "ALL_IRONMAN": 1,
+    "HARDCORE_IRONMAN": 2,
+    "ULTIMATE_IRONMAN": 3,
+}
 HCIM = account_filter_code["HARDCORE_IRONMAN"]
+PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/api/highscores/player/{username}"
+PLAYER_TRACKER_URL = (
+    "https://vidyaplace.org/api/tracker/player/{username}?time={seconds}"
+)
+SKILL_TRACKER_URL = (
+    "https://vidyaplace.org/api/tracker/skill/{skill}/{page}"
+    "?time={seconds}&ironman={ironman}"
+)
 
 # Fixed durations, in seconds, used for the "current top gains" and record scans.
 SPANS: dict[str, int] = {
@@ -61,7 +59,7 @@ DEFAULT_PRIORITY_INTERVAL_SECONDS = 10 * 60
 DEFAULT_PRIORITY_RETENTION_SECONDS = 24 * 3600
 DEFAULT_PRIORITY_PLAYERS = ("cojultad",)
 PRIORITY_FILE_ENV = "VSCAPE_HCIM_TRACKER_PRIORITY_FILE"
-DEFAULT_PRIORITY_FILE = _DATA_DIR / "priority_players.json"
+DEFAULT_PRIORITY_FILE = _PROJECT_ROOT / "priority_players.json"
 
 
 def priority_file_path() -> pathlib.Path:

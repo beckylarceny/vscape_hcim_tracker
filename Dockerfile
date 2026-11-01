@@ -9,8 +9,7 @@ WORKDIR /app
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# The build context is the project root so the shared data.py is included.
-COPY data.py ./data.py
+# The build context is the project root.
 COPY priority_players.json ./priority_players.json
 COPY src/ ./src/
 COPY tests/ ./tests/
