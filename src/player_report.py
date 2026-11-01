@@ -366,11 +366,17 @@ def _chart_svg(chart: ChartData, label: str) -> str:
         )
 
     if chart.gains:
-        area = [f"{x(chart.gains[0][0]):.1f},{baseline:.1f}"]
-        area += [
-            f"{x(timestamp):.1f},{y_gain(value):.1f}"
-            for timestamp, value in chart.gains
+        first_time, first_gain = chart.gains[0]
+        area = [
+            f"{x(first_time):.1f},{baseline:.1f}",
+            f"{x(first_time):.1f},{y_gain(first_gain):.1f}",
         ]
+        previous_gain = first_gain
+        for timestamp, value in chart.gains[1:]:
+            # Hold the previous gain until this point, then step vertically.
+            area.append(f"{x(timestamp):.1f},{y_gain(previous_gain):.1f}")
+            area.append(f"{x(timestamp):.1f},{y_gain(value):.1f}")
+            previous_gain = value
         area.append(f"{x(chart.gains[-1][0]):.1f},{baseline:.1f}")
         parts.append(f'<polygon class="area" points="{" ".join(area)}"/>')
 
@@ -505,9 +511,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;
 td.date,th.date{text-align:right;font-variant-numeric:tabular-nums;
                 white-space:nowrap}
 tr:nth-child(even) td{background:#8881}
-table.current th:nth-child(1),table.current td:nth-child(1){width:52%}
-table.current th:nth-child(2),table.current td:nth-child(2){width:20%}
-table.current th:nth-child(3),table.current td:nth-child(3){width:28%}
+table.current{width:auto;max-width:32rem}
 table.past th:nth-child(1),table.past td:nth-child(1){width:45%}
 table.best th:nth-child(1),table.best td:nth-child(1){width:25%}
 .gain-tables{display:grid;align-items:start;

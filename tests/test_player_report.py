@@ -153,6 +153,10 @@ class RenderTest(unittest.TestCase):
         self.assertIn("&lt;bob&gt;", page)
         self.assertNotIn("<bob>", page)
 
+    def test_current_table_is_narrow(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn("table.current{width:auto;max-width:32rem}", page)
+
     def test_no_rounded_corners(self) -> None:
         page = render_player_page(fake_data())
         self.assertFalse(re.search(r"border-radius:\s*(?!0\b)\d", page))
@@ -176,6 +180,33 @@ class RenderTest(unittest.TestCase):
         self.assertIn("(no data)", page)
         self.assertEqual(page.count("<svg"), 0)
 
+
+class ChartTest(unittest.TestCase):
+    def test_gains_area_is_a_step_shape(self) -> None:
+        from src.player_report import ChartData, _chart_svg
+
+        chart = ChartData(
+            start_epoch=NOW - 1000,
+            end_epoch=NOW,
+            xp=[(NOW - 1000, 0), (NOW, 3)],
+            gains=[(NOW - 800, 10), (NOW - 400, 20), (NOW, 30)],
+        )
+        svg = _chart_svg(chart, "test")
+        match = re.search(r'<polygon class="area" points="([^"]+)"', svg)
+        self.assertIsNotNone(match)
+        coords = [
+            tuple(float(part) for part in point.split(","))
+            for point in match.group(1).split()
+        ]
+        pairs = list(zip(coords, coords[1:]))
+        self.assertTrue(any(
+            first[0] == second[0] and first[1] != second[1]
+            for first, second in pairs
+        ))
+        self.assertTrue(any(
+            first[1] == second[1] and first[0] != second[0]
+            for first, second in pairs
+        ))
 
 class ThinTest(unittest.TestCase):
     def test_long_series_keeps_endpoints(self) -> None:
