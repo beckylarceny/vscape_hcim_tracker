@@ -2,6 +2,7 @@ name: vscape_hcim_tracker
 
 x-app: &app
   image: vscape_hcim_tracker-app:latest
+  pull_policy: build
   build:
     context: .
     dockerfile: Dockerfile
