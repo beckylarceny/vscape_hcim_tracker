@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from .config import SKILLS, SPANS
+from .config import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
 from .player_report import (
     Record,
     SKILL_TABS_CSS,
@@ -213,8 +213,9 @@ def render_text(data: ReportData) -> str:
         ("generated at", data.generated),
         ("grid end", _date(data.now_epoch)),
         ("backfill interval", _hours(data.interval)),
-        ("collect interval", _hours(data.collect_interval)),
-        ("lookback interval", _years_months(data.lookback)),
+        ("live interval", _hours(data.collect_interval)),
+        ("priority interval", f"{DEFAULT_PRIORITY_INTERVAL_SECONDS // 60} minutes"),
+        ("lookback", _years_months(data.lookback)),
         ("players logged", _players_line(data)),
     ):
         lines.append(f"{name + ':':<20}{value}")
@@ -470,8 +471,9 @@ def render_html(data: ReportData) -> str:
             ("generated at", _esc(data.generated)),
             ("players logged", _players_line(data)),
             ("backfill interval", _hours(data.interval)),
-            ("collect interval", _hours(data.collect_interval)),
-            ("lookback interval", _years_months(data.lookback)),
+            ("live interval", _hours(data.collect_interval)),
+            ("priority interval", f"{DEFAULT_PRIORITY_INTERVAL_SECONDS // 60} minutes"),
+            ("lookback", _years_months(data.lookback)),
         )
     )
     parts: list[str] = [

@@ -16,6 +16,7 @@ from src.player_report import (
     PlayerData,
     Record,
     _chart_svg,
+    _frequency_info,
     _thin,
     collect_player_data,
     highscores_url,
@@ -40,8 +41,9 @@ class FakeResult:
 
 
 class FakeConn:
-    def __init__(self, rows, checkpoints=()) -> None:
+    def __init__(self, rows, checkpoints=(), priority=()) -> None:
         self.rows = rows
+        self.priority = priority
         self.checkpoints = [
             dt.datetime.fromtimestamp(epoch, tz=dt.timezone.utc)
             for epoch in checkpoints
@@ -51,7 +53,8 @@ class FakeConn:
         if "FROM checkpoints" in sql:
             return FakeResult([(checkpoint,) for checkpoint in self.checkpoints])
         if "DISTINCT observed_at" in sql:
-            return FakeResult([(row[1],) for row in self.rows])
+            source = self.priority if "priority_snapshots" in sql else self.rows
+            return FakeResult([(row[1],) for row in source])
         return FakeResult(self.rows)
 
 
@@ -133,6 +136,9 @@ class RenderTest(unittest.TestCase):
         self.assertIn('class="zero"', page)
         self.assertLess(
             page.index("data coverage:"), page.index("<h2>Current xp</h2>")
+        )
+        self.assertLess(
+            page.index("generated at:"), page.index("data coverage:")
         )
 
         priority = render_player_page(fake_data(), is_priority=True)
@@ -257,13 +263,26 @@ class CollectTest(unittest.TestCase):
         self.assertIsNotNone(record)
         self.assertEqual(record.gain, 1000)
 
-        info = {item.name: item for item in data.intervals}
-        self.assertEqual(info["day"].snapshots, 2)
-        self.assertEqual(info["week"].snapshots, 4)
+        info = {item.name: item for item in data.frequencies}
+        self.assertEqual(info["6 hour"].snapshots, 4)
+        self.assertEqual(info["24 hour"].snapshots, 0)
+        self.assertEqual(info["10 minute priority"].snapshots, 0)
         page = render_player_page(data)
         self.assertIn("generated at: 2026-01-01", page)
-        self.assertIn("week interval: 4 snapshots, 2027-01-12 to 2027-01-15", page)
-        self.assertIn("day interval: 2 snapshots, 2027-01-14 to 2027-01-15", page)
+        self.assertIn("6 hour snapshots: 4, 2027-01-12 to 2027-01-15", page)
+        self.assertIn("24 hour snapshots: 0", page)
+        self.assertIn("10 minute priority snapshots: 0", page)
+
+        mixed = _frequency_info(
+            [172800, 172800 + 21600, 172800 + 43200],
+            [172800 + 600],
+            21600,
+            86400,
+        )
+        self.assertEqual(
+            [(item.name, item.snapshots) for item in mixed],
+            [("10 minute priority", 1), ("6 hour", 2), ("24 hour", 1)],
+        )
 
     def test_chart_points_and_rates(self) -> None:
         conn = FakeConn(rows(
@@ -335,6 +354,7 @@ class WritePagesTest(unittest.TestCase):
             now_epoch=NOW,
             lookback=LOOKBACK,
             interval=DAY,
+            collect_interval=6 * 3600,
             generated=generated,
         )
 

@@ -482,7 +482,7 @@ def write_player_pages(
         try:
             page_data = player_report.collect_player_data(
                 conn, username, data.now_epoch, data.lookback,
-                data.interval, data.generated,
+                data.interval, data.generated, data.collect_interval,
             )
             page = player_report.render_player_page(
                 page_data, is_priority=username in priority

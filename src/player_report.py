@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, NamedTuple, TypeVar
 if TYPE_CHECKING:
     import psycopg
 
-from .config import SKILLS, SPANS
+from .config import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
 from .storage import as_datetime
 
 PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/highscores?player={username}"
@@ -57,7 +57,7 @@ class ChartData(NamedTuple):
     regular_gains: frozenset[int] = frozenset()
 
 
-class Interval(NamedTuple):
+class Frequency(NamedTuple):
     name: str
     snapshots: int
     first_epoch: int | None
@@ -74,7 +74,7 @@ class PlayerData(NamedTuple):
     best: dict[str, dict[str, Record | None]]
     charts: dict[str, dict[str, ChartData]]
     coverage: list[tuple[int, bool]] = ()
-    intervals: tuple[Interval, ...] = ()
+    frequencies: tuple[Frequency, ...] = ()
 
 
 def player_slug(username: str) -> str:
@@ -333,13 +333,15 @@ def _coverage_buckets(
 
 
 def _snapshot_times(
-    conn: psycopg.Connection, username: str, earliest: int
+    conn: psycopg.Connection, username: str, earliest: int, table: str
 ) -> list[int]:
-    """Distinct times at which this player has stored snapshots."""
+    """Distinct times at which this player has snapshots in one table."""
+    if table not in ("snapshots", "priority_snapshots"):
+        raise ValueError(table)
     rows = conn.execute(
-        """
+        f"""
         SELECT DISTINCT observed_at
-        FROM snapshots
+        FROM {table}
         WHERE username = %s AND observed_at >= %s
         ORDER BY observed_at
         """,
@@ -348,22 +350,42 @@ def _snapshot_times(
     return [int(row[0].timestamp()) for row in rows]
 
 
-def _interval_info(
-    times: list[int], now_epoch: int
-) -> tuple[Interval, ...]:
-    """Snapshot count and covered date range inside each span."""
-    intervals: list[Interval] = []
-    for name, span in SPANS.items():
-        inside = [t for t in times if now_epoch - span <= t <= now_epoch]
-        intervals.append(
-            Interval(
-                name,
-                len(inside),
-                inside[0] if inside else None,
-                inside[-1] if inside else None,
-            )
+def _frequency_name(seconds: int) -> str:
+    if seconds < 3600:
+        return f"{seconds // 60} minute"
+    return f"{seconds // 3600:g} hour"
+
+
+def _frequency_info(
+    times: list[int],
+    priority_times: list[int],
+    live_interval: int,
+    backfill_interval: int,
+) -> tuple[Frequency, ...]:
+    """Snapshot count and covered date range per fetching frequency."""
+    live: list[int] = []
+    backfill: list[int] = []
+    for timestamp in times:
+        target = backfill if timestamp % backfill_interval == 0 else live
+        target.append(timestamp)
+
+    entries = (
+        (
+            f"{_frequency_name(DEFAULT_PRIORITY_INTERVAL_SECONDS)} priority",
+            priority_times,
+        ),
+        (_frequency_name(live_interval), live),
+        (_frequency_name(backfill_interval), backfill),
+    )
+    return tuple(
+        Frequency(
+            name,
+            len(stamps),
+            stamps[0] if stamps else None,
+            stamps[-1] if stamps else None,
         )
-    return tuple(intervals)
+        for name, stamps in entries
+    )
 
 
 def collect_player_data(
@@ -373,6 +395,7 @@ def collect_player_data(
     lookback: int,
     slack: int,
     generated: str,
+    live_interval: int = 6 * 3600,
 ) -> PlayerData:
     """Load one player's stored history and derive every displayed value."""
     points_by_skill = _points_by_skill(
@@ -413,8 +436,13 @@ def collect_player_data(
     coverage = _coverage_buckets(
         conn, username, now_epoch - lookback, now_epoch, lookback
     )
-    intervals = _interval_info(
-        _snapshot_times(conn, username, now_epoch - lookback), now_epoch
+    frequencies = _frequency_info(
+        _snapshot_times(conn, username, now_epoch - lookback, "snapshots"),
+        _snapshot_times(
+            conn, username, now_epoch - lookback, "priority_snapshots"
+        ),
+        live_interval,
+        slack,
     )
 
     return PlayerData(
@@ -427,7 +455,7 @@ def collect_player_data(
         best=best,
         charts=charts,
         coverage=coverage,
-        intervals=intervals,
+        frequencies=frequencies,
     )
 
 
@@ -876,21 +904,20 @@ def skill_panel_open(index: int, skill: str) -> str:
     )
 
 
-def _interval_meta(data: PlayerData) -> str:
+def _frequency_meta(data: PlayerData) -> str:
     lines: list[str] = []
-    for info in data.intervals:
+    for info in data.frequencies:
         if info.first_epoch is None:
             lines.append(
-                f'<p class="meta">{_esc(info.name)} interval: '
-                "0 snapshots</p>"
+                f'<p class="meta">{_esc(info.name)} snapshots: 0</p>'
             )
             continue
         first = _date(info.first_epoch)
         last = _date(info.last_epoch)
         when = first if first == last else f"{first} to {last}"
         lines.append(
-            f'<p class="meta">{_esc(info.name)} interval: '
-            f"{info.snapshots} snapshots, {when}</p>"
+            f'<p class="meta">{_esc(info.name)} snapshots: '
+            f"{info.snapshots}, {when}</p>"
         )
     return "".join(lines)
 
@@ -918,8 +945,8 @@ def render_player_page(data: PlayerData, is_priority: bool = False) -> str:
             if is_priority else []
         ),
         f'<p class="meta">generated at: {_esc(data.generated)}</p>',
+        _frequency_meta(data),
         _coverage_bar(data),
-        _interval_meta(data),
         '<div class="stats">',
         "<h2>Current xp</h2>",
         _current_table(data),

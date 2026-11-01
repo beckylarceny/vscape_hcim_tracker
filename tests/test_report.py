@@ -131,6 +131,9 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn("    Year (8760h)", text)
         self.assertIn("players logged:", text)
         self.assertIn("backfill interval:", text)
+        self.assertIn("live interval:", text)
+        self.assertIn("priority interval:", text)
+        self.assertIn("10 minutes", text)
         self.assertIn("1. alice", text)
 
     def test_player_names_link_to_player_pages_and_finder(self) -> None:
