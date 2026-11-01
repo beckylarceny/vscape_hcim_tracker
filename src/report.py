@@ -267,6 +267,7 @@ h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
 nav{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.5rem 0 1rem;font-size:.85rem}
 h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:uppercase;
    letter-spacing:.04em}
+h2,h3,h4{text-align:center}
 .tables{display:grid;align-items:start;
         grid-template-columns:repeat(auto-fit,minmax(min(32rem,100%),1fr));
         gap:.75rem 2rem}
