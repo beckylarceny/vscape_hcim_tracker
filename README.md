@@ -120,7 +120,8 @@ path. High-frequency rows are pruned after 24 hours.
 - `<name>.html` - one large 24h chart per skill, `hh:mm` ticks, regular snapshot
   data in orange.
 - `<name>.xml` - RSS feed, one item per 10-minute fetch with changed xp,
-  starting with the time since the last priority or regular snapshot.
+  starting with the time since the last priority or regular snapshot; entries
+  are separated by ` | `.
 
 RSS links use `VSCAPE_HCIM_TRACKER_BASE_URL` or `--base-url` (default
 `http://localhost:8000`).

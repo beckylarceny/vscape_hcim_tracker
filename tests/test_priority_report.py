@@ -177,6 +177,11 @@ class FeedTest(unittest.TestCase):
         self.assertIn("attack: +20 xp", feed)
         self.assertIn("last snapshot: 10 minutes ago", feed)
         self.assertIn("last snapshot: 30 minutes ago", feed)
+        self.assertIn(
+            "last snapshot: 10 minutes ago | overall: +300 xp | "
+            "attack: +20 xp",
+            feed,
+        )
         self.assertIn(f"A_B-{NOW}", feed)
         self.assertEqual(feed.count("<item>"), 2)
         self.assertIn(

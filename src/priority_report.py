@@ -293,7 +293,7 @@ def _ago(seconds: int) -> str:
 
 
 def _gains_text(changes: tuple[tuple[str, int], ...]) -> str:
-    return "\n".join(
+    return " | ".join(
         f"{skill}: {gain:+,} xp" for skill, gain in changes
     )
 
@@ -327,7 +327,7 @@ def render_feed(
                 "last snapshot: "
                 f"{_ago(event.epoch - event.previous_epoch)} ago"
             )
-        description = since + "\n" + _gains_text(event.changes)
+        description = since + " | " + _gains_text(event.changes)
         items.append(
             "<item>"
             f"<title>{_esc(title)}</title>"
