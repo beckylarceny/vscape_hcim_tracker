@@ -68,19 +68,23 @@ a data-coverage bar for backfill progress and gaps. Because storage is sparse,
 xp between two stored points is treated as constant; windows still have exactly
 the nominal span.
 
-## Tests
+## Storage cost
 
-```sh
-python -m unittest discover -s tests
+Measured on 75 players with roughly one year of data: 216 bytes per snapshot
+row and 111 bytes per checkpoint row, including indexes.
 
-createdb xp_tracker_test
-VSCAPE_HCIM_TRACKER_TEST_DSN=postgresql:///xp_tracker_test \
-  python -m unittest discover -s tests -v
+- Per player, first year: about 537 snapshot rows (only xp changes) and 387
+  checkpoints (daily backfill plus the retry window).
+- Full backfill, 371 players: about 199,000 snapshot rows (~43 MB) and 144,000
+  checkpoints (~16 MB); roughly 60-70 MB of database in total.
+- Ongoing 6h collection: `371 × 1,460 = 541,000` checkpoints per year (~60 MB)
+  plus about 199,000 snapshot rows per year (~43 MB), so roughly 100 MB/year.
+- Checkpoints grow for every player regardless of activity. Snapshots only grow
+  with xp changes; a player who never gains xp costs 24 rows in total (one
+  baseline per skill).
 
-# in Docker
-docker compose exec db createdb -U xp_tracker xp_tracker_test
-docker compose run --rm collector python -m unittest discover -s tests
-```
+The Docker volume also holds WAL and preallocated files; at a 16 MB database it
+was about 7 times that size.
 
 ## Notes
 
