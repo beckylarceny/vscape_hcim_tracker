@@ -144,16 +144,31 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn("    Day (24h)", text)
         self.assertIn("    Year (8760h)", text)
 
-    def test_player_names_link_to_highscores(self) -> None:
+    def test_player_names_link_to_player_pages(self) -> None:
         data = self.make_data()
         gains = {span: dict(skills) for span, skills in data.gains.items()}
         gains["day"]["overall"] = [("Fuck Jagex", 100)]
         page = render_html(data._replace(gains=gains))
         self.assertIn(
-            'href="https://vidyaplace.org/highscores?player=Fuck%20Jagex"',
+            'href="players/Fuck_Jagex.html"',
             page,
         )
         self.assertIn(">Fuck Jagex</a>", page)
+
+    def test_player_finder_maps_names_to_pages(self) -> None:
+        data = self.make_data()._replace(players=("Alice", "Fuck Jagex"))
+        page = render_html(data)
+        self.assertIn('<form class="find"', page)
+        self.assertIn('<button type="submit">Go</button>', page)
+        self.assertIn('<option value="Alice">', page)
+        self.assertIn(
+            '"alice": "players/Alice.html"',
+            page,
+        )
+        self.assertIn(
+            '"fuck jagex": "players/Fuck_Jagex.html"',
+            page,
+        )
 
     def test_coverage_bar_renders_runs(self) -> None:
         page = render_html(self.make_data())

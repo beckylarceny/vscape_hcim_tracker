@@ -259,7 +259,9 @@ class ReportTest(DatabaseTest):
                 21600,
             )
             names = sorted(p.name for p in Path(directory).iterdir())
-            self.assertEqual(names, ["latest.html", "latest.txt"])
+            self.assertEqual(
+                names, ["latest.html", "latest.txt", "players"]
+            )
 
     def test_write_report_creates_latest_files(self) -> None:
         now = 1_800_000_000
@@ -278,6 +280,13 @@ class ReportTest(DatabaseTest):
             self.assertTrue(text_path.exists())
             page = html_path.read_text(encoding="utf-8")
             self.assertIn("alice", page)
+            player_page = Path(directory, "players", "alice.html")
+            self.assertTrue(player_page.exists())
+            player_html = player_page.read_text(encoding="utf-8")
+            self.assertIn(
+                "https://vidyaplace.org/highscores?player=alice", player_html
+            )
+            self.assertIn("Current xp", player_html)
 
 
 if __name__ == "__main__":

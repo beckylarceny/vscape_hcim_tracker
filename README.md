@@ -38,8 +38,8 @@ docker compose down -v    # deletes stored xp
 The first collector run is the one-year backfill: about 136,000 requests, or
 roughly 9.5 hours at the default 4 req/s. Later runs fetch only the current 6h
 checkpoint plus retries. Defaults (`--workers 2 --rate 4`) are conservative
-because the API returns 503 under concurrent load. Reports are regenerated
-every minute by `web`.
+because the API returns 503 under concurrent load. The general page is
+regenerated every minute by `web`.
 
 ## Local usage
 
@@ -60,13 +60,26 @@ Key options: `--interval 24h` (backfill step), `--collect-interval 6h`,
 
 ## Reports
 
-Only `reports/latest.txt` and `reports/latest.html` are kept; older report
+`reports/latest.txt` and `reports/latest.html` hold the rankings; older report
 files are deleted. For each skill and `overall` they show the top 5 gains over
 the past day/week/month/year and each player's best window of that length
-(players with zero gain are omitted). The page additionally shows metadata and
-a data-coverage bar for backfill progress and gaps. Because storage is sparse,
-xp between two stored points is treated as constant; windows still have exactly
-the nominal span.
+(players with zero gain are omitted). The page additionally shows metadata, a
+data-coverage bar for backfill progress and gaps, and a name box with a **Go**
+button that opens that player's page. Usernames in the tables link there too.
+
+Every player also gets `reports/players/<name>.html`, with the username linked
+to their Vidyascape highscores page, current xp and OSRS level per skill, past
+and best gains in separate tables for each span, and a 2x2 grid of inline SVG
+charts per skill (day/week/month/year). Each chart plots total xp as a line and
+xp gained per stored data point as an area for that window. These pages are
+rewritten only when that player gains new checkpoint rows, not on the
+one-minute report timer.
+
+The levels use the OSRS experience thresholds for levels 1-99; `overall` has no
+level and shows `-`.
+
+Because storage is sparse, xp between two stored points is treated as constant;
+windows still have exactly the nominal span.
 
 ## Storage cost
 
@@ -85,6 +98,11 @@ row and 111 bytes per checkpoint row, including indexes.
 
 The Docker volume also holds WAL and preallocated files; at a 16 MB database it
 was about 7 times that size.
+
+The player pages are static files, not database rows: measured at about 117 KB
+per player on average, so roughly 43 MB for 371 players in
+`reports/players/`. They are fully rewritten only when a player's data
+changes.
 
 ## Notes
 

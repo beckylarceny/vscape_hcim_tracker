@@ -3,23 +3,20 @@
 from __future__ import annotations
 
 import datetime as dt
-import heapq
 import html
-import urllib.parse
+import json
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     import psycopg
 
 from .config import SKILLS, SPANS
+from .player_report import (
+    Record,
+    player_page_href,
+    scan_player_points as _scan_player_points,
+)
 from .storage import as_datetime, coverage_buckets, xp_at_or_before
-
-
-class Record(NamedTuple):
-    gain: int
-    end_epoch: int
-    username: str
-    start_epoch: int
 
 
 class ReportData(NamedTuple):
@@ -33,6 +30,7 @@ class ReportData(NamedTuple):
     gains: dict[str, dict[str, list[tuple[str, int]]]]
     records: dict[str, dict[str, list[Record]]]
     coverage: list[tuple[int, int]]
+    players: tuple[str, ...] = ()
 
 
 def _date(epoch: int) -> str:
@@ -130,63 +128,6 @@ def _scan_records_for_skill(
     return result
 
 
-def _scan_player_points(
-    username: str,
-    points: list[tuple[int, int]],
-    spans: list[tuple[str, int]],
-    now_epoch: int,
-    lookback: int,
-    slack: int,
-    top_n: int,
-    heaps: dict[str, list[Record]],
-) -> None:
-    if not points:
-        return
-    oldest_start = now_epoch - lookback - slack
-    pointers = {name: 0 for name, _ in spans}
-    best: dict[str, Record | None] = {name: None for name, _ in spans}
-    for end_epoch, end_xp in points:
-        if end_epoch > now_epoch:
-            continue
-        for name, span in spans:
-            start_epoch = end_epoch - span
-            if start_epoch < oldest_start:
-                continue
-            pointer = pointers[name]
-            while (
-                pointer + 1 < len(points)
-                and points[pointer + 1][0] <= start_epoch
-            ):
-                pointer += 1
-            pointers[name] = pointer
-            if points[pointer][0] > start_epoch:
-                # No stored baseline at or before the window start.
-                continue
-            gain = end_xp - points[pointer][1]
-            if gain <= 0:
-                # Players sitting at zero xp do not get a record row.
-                continue
-            current = best[name]
-            if current is None or gain > current.gain:
-                best[name] = Record(
-                    gain=gain,
-                    end_epoch=end_epoch,
-                    username=username,
-                    start_epoch=start_epoch,
-                )
-
-    # One row per player: only their best window for each span.
-    for name, _ in spans:
-        record = best[name]
-        if record is None:
-            continue
-        heap = heaps[name]
-        if len(heap) < top_n:
-            heapq.heappush(heap, record)
-        elif record > heap[0]:
-            heapq.heapreplace(heap, record)
-
-
 def build_report_data(
     conn: psycopg.Connection,
     now_epoch: int,
@@ -227,6 +168,13 @@ def build_report_data(
         conn, now_epoch - lookback, now_epoch, buckets
     )
 
+    players = tuple(
+        row[0]
+        for row in conn.execute(
+            "SELECT username FROM players ORDER BY lower(username)"
+        ).fetchall()
+    )
+
     return ReportData(
         generated=generated,
         now_epoch=now_epoch,
@@ -238,6 +186,7 @@ def build_report_data(
         gains=gains,
         records=records,
         coverage=coverage,
+        players=players,
     )
 
 
@@ -308,6 +257,11 @@ h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
 .coverage span{flex:1;background:#3b82f6;min-width:1px}
 .coverage span.zero{background:#8883;opacity:1}
 .range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
+.find{display:flex;gap:.5rem;margin:1rem 0 .25rem;max-width:26rem}
+.find input{flex:1;min-width:0;padding:.4rem .55rem;font:inherit;color:inherit;
+            background:transparent;border:1px solid #8886;border-radius:4px}
+.find button{padding:.4rem .9rem;font:inherit;border:1px solid #8886;
+             border-radius:4px;background:#3b82f6;color:#fff;cursor:pointer}
 nav{display:flex;flex-wrap:wrap;gap:.75rem;margin:1rem 0;font-size:.85rem}
 h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:uppercase;
    letter-spacing:.04em}
@@ -348,14 +302,8 @@ def _esc(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
-PLAYER_PAGE_URL = "https://vidyaplace.org/highscores?player={username}"
-
-
 def _player_link(username: str) -> str:
-    url = PLAYER_PAGE_URL.format(
-        username=urllib.parse.quote(username, safe="")
-    )
-    return f'<a href="{_esc(url)}">{_esc(username)}</a>'
+    return f'<a href="{_esc(player_page_href(username))}">{_esc(username)}</a>'
 
 
 def _gains_table(gains: list[tuple[str, int]]) -> str:
@@ -473,6 +421,41 @@ def _coverage_bar(data: ReportData) -> str:
     )
 
 
+def _js_literal(value: object) -> str:
+    """JSON that is safe to embed in an inline <script> element."""
+    text = json.dumps(value, ensure_ascii=True)
+    for char, escape in (
+        ("&", "\\u0026"),
+        ("<", "\\u003c"),
+        (">", "\\u003e"),
+        ("\u2028", "\\u2028"),
+        ("\u2029", "\\u2029"),
+    ):
+        text = text.replace(char, escape)
+    return text
+
+
+def _player_finder(data: ReportData) -> str:
+    ordered = sorted(data.players, key=str.casefold)
+    options = "".join(
+        f'<option value="{_esc(name)}"></option>' for name in ordered
+    )
+    lookup = {name.casefold(): player_page_href(name) for name in ordered}
+    return (
+        '<form class="find" onsubmit="return findPlayer(this)">'
+        '<input name="player" list="player-list" placeholder="player name" '
+        'aria-label="player name" autocomplete="off" required>'
+        f'<datalist id="player-list">{options}</datalist>'
+        '<button type="submit">Go</button></form>'
+        f"<script>const PLAYERS={_js_literal(lookup)};"
+        "function findPlayer(form){"
+        "const name=form.player.value.trim();"
+        "const url=PLAYERS[name.toLowerCase()];"
+        "if(!url){alert('Unknown player: '+name);return false;}"
+        "window.location.href=url;return false;}</script>"
+    )
+
+
 def render_html(data: ReportData) -> str:
     parts: list[str] = [
         "<!doctype html>",
@@ -494,6 +477,7 @@ def render_html(data: ReportData) -> str:
         f'<p class="meta">lookback: {_years_months(data.lookback)}</p>',
         '<p class="meta">data coverage:</p>',
         _coverage_bar(data),
+        _player_finder(data),
     ]
 
     nav = " ".join(

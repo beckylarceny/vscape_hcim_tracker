@@ -1,0 +1,589 @@
+"""Per-player HTML reports with inline SVG xp charts."""
+
+from __future__ import annotations
+
+import bisect
+import heapq
+import html
+import re
+import urllib.parse
+from typing import TYPE_CHECKING, NamedTuple
+
+if TYPE_CHECKING:
+    import psycopg
+
+from .config import SKILLS, SPANS
+from .storage import as_datetime
+
+PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/highscores?player={username}"
+
+_UNSAFE_SLUG = re.compile(r"[^A-Za-z0-9._-]+")
+
+# Total xp needed for levels 1-99, from the OSRS experience table:
+# https://oldschool.runescape.wiki/w/Experience#Levels_1%E2%80%9399
+XP_THRESHOLDS: tuple[int, ...] = (
+    0, 83, 174, 276, 388, 512, 650, 801, 969, 1154,
+    1358, 1584, 1833, 2107, 2411, 2746, 3115, 3523, 3973, 4470,
+    5018, 5624, 6291, 7028, 7842, 8740, 9730, 10824, 12031, 13363,
+    14833, 16456, 18247, 20224, 22406, 24815, 27473, 30408, 33648, 37224,
+    41171, 45529, 50339, 55649, 61512, 67983, 75127, 83014, 91721, 101333,
+    111945, 123660, 136594, 150872, 166636, 184040, 203254, 224466,
+    247886, 273742, 302288, 333804, 368599, 407015, 449428, 496254,
+    547953, 605032, 668051, 737627, 814445, 899257, 992895, 1096278,
+    1210421, 1336443, 1475581, 1629200, 1798808, 1986068, 2192818,
+    2421087, 2673114, 2951373, 3258594, 3597792, 3972294, 4385776,
+    4842295, 5346332, 5902831, 6517253, 7195629, 7944614, 8771558,
+    9684577, 10692629, 11805606, 13034431,
+)
+
+
+class Record(NamedTuple):
+    gain: int
+    end_epoch: int
+    username: str
+    start_epoch: int
+
+
+class ChartData(NamedTuple):
+    start_epoch: int
+    end_epoch: int
+    xp: list[tuple[int, int]]
+    gains: list[tuple[int, int]]
+
+
+class PlayerData(NamedTuple):
+    username: str
+    generated: str
+    now_epoch: int
+    lookback: int
+    current: dict[str, int]
+    past: dict[str, dict[str, int | None]]
+    best: dict[str, dict[str, Record | None]]
+    charts: dict[str, dict[str, ChartData]]
+
+
+def player_slug(username: str) -> str:
+    """Filesystem- and URL-safe file stem for one player."""
+    slug = _UNSAFE_SLUG.sub("_", username).strip("._-")
+    return slug or "player"
+
+
+def player_page_href(username: str) -> str:
+    slug = player_slug(username)
+    return f"players/{urllib.parse.quote(slug, safe='')}.html"
+
+
+def highscores_url(username: str) -> str:
+    return PLAYER_HIGHSCORES_URL.format(
+        username=urllib.parse.quote(username, safe="")
+    )
+
+
+def level_for_xp(xp: int) -> int:
+    """OSRS level for a skill's total xp, capped at 99."""
+    return bisect.bisect_right(XP_THRESHOLDS, max(0, xp))
+
+
+def scan_player_points(
+    username: str,
+    points: list[tuple[int, int]],
+    spans: list[tuple[str, int]],
+    now_epoch: int,
+    lookback: int,
+    slack: int,
+    top_n: int,
+    heaps: dict[str, list[Record]],
+) -> None:
+    """Best window of each span, sliding across the whole lookback period.
+
+    Stored points are sparse: a skill's xp is treated as constant between two
+    stored points. A window therefore needs only one stored point at or before
+    its start, and one at its end.
+    """
+    if not points:
+        return
+    oldest_start = now_epoch - lookback - slack
+    pointers = {name: 0 for name, _ in spans}
+    best: dict[str, Record | None] = {name: None for name, _ in spans}
+    for end_epoch, end_xp in points:
+        if end_epoch > now_epoch:
+            continue
+        for name, span in spans:
+            start_epoch = end_epoch - span
+            if start_epoch < oldest_start:
+                continue
+            pointer = pointers[name]
+            while (
+                pointer + 1 < len(points)
+                and points[pointer + 1][0] <= start_epoch
+            ):
+                pointer += 1
+            pointers[name] = pointer
+            if points[pointer][0] > start_epoch:
+                # No stored baseline at or before the window start.
+                continue
+            gain = end_xp - points[pointer][1]
+            if gain <= 0:
+                # Players sitting at zero xp do not get a record row.
+                continue
+            current = best[name]
+            if current is None or gain > current.gain:
+                best[name] = Record(
+                    gain=gain,
+                    end_epoch=end_epoch,
+                    username=username,
+                    start_epoch=start_epoch,
+                )
+
+    # One row per player: only their best window for each span.
+    for name, _ in spans:
+        record = best[name]
+        if record is None:
+            continue
+        heap = heaps[name]
+        if len(heap) < top_n:
+            heapq.heappush(heap, record)
+        elif record > heap[0]:
+            heapq.heapreplace(heap, record)
+
+
+def _date(epoch: int) -> str:
+    return as_datetime(epoch).strftime("%Y-%m-%d")
+
+
+def _points_by_skill(
+    conn: psycopg.Connection, username: str, earliest: int
+) -> dict[str, list[tuple[int, int]]]:
+    rows = conn.execute(
+        """
+        SELECT skill, observed_at, xp
+        FROM snapshots
+        WHERE username = %s AND observed_at >= %s
+        ORDER BY skill, observed_at
+        """,
+        (username, as_datetime(earliest)),
+    ).fetchall()
+    points: dict[str, list[tuple[int, int]]] = {}
+    for skill, observed_at, xp in rows:
+        points.setdefault(skill, []).append(
+            (int(observed_at.timestamp()), int(xp))
+        )
+    return points
+
+
+def _xp_at(
+    epochs: list[int], points: list[tuple[int, int]], timestamp: int
+) -> int | None:
+    index = bisect.bisect_right(epochs, timestamp) - 1
+    if index < 0:
+        return None
+    return points[index][1]
+
+
+def _past_gain(
+    epochs: list[int], points: list[tuple[int, int]], span: int, now_epoch: int
+) -> int | None:
+    latest = _xp_at(epochs, points, now_epoch)
+    earlier = _xp_at(epochs, points, now_epoch - span)
+    if latest is None or earlier is None:
+        return None
+    return max(0, latest - earlier)
+
+
+def _thin(points: list[tuple[int, int]], limit: int) -> list[tuple[int, int]]:
+    """Evenly reduce a series while keeping its endpoints."""
+    if len(points) <= limit:
+        return points
+    step = len(points) / (limit - 1)
+    thinned = [points[0]]
+    for index in range(1, limit - 1):
+        thinned.append(points[int(round(index * step))])
+    thinned.append(points[-1])
+    return thinned
+
+
+def _chart_data(
+    epochs: list[int],
+    points: list[tuple[int, int]],
+    span: int,
+    now_epoch: int,
+) -> ChartData:
+    """Total xp and per-stored-point gains for the last `span` seconds."""
+    start = now_epoch - span
+    if not points:
+        return ChartData(start, now_epoch, [], [])
+
+    index = bisect.bisect_right(epochs, start) - 1
+    if index >= 0:
+        # Include the point at or before the window start, pinned to the edge.
+        line = [(start, points[index][1])]
+        rest = points[index + 1:]
+        previous = points[index][1]
+    else:
+        line = []
+        rest = points
+        previous = None
+
+    gains: list[tuple[int, int]] = []
+    for timestamp, xp in rest:
+        if timestamp > now_epoch:
+            break
+        line.append((timestamp, xp))
+        if previous is not None:
+            gains.append((timestamp, max(0, xp - previous)))
+        previous = xp
+
+    return ChartData(
+        start, now_epoch, _thin(line, 180), _thin(gains, 180)
+    )
+
+
+def collect_player_data(
+    conn: psycopg.Connection,
+    username: str,
+    now_epoch: int,
+    lookback: int,
+    slack: int,
+    generated: str,
+) -> PlayerData:
+    """Load one player's stored history and derive every displayed value."""
+    points_by_skill = _points_by_skill(
+        conn, username, now_epoch - lookback - max(SPANS.values())
+    )
+    spans = list(SPANS.items())
+
+    current: dict[str, int] = {}
+    past: dict[str, dict[str, int | None]] = {}
+    best: dict[str, dict[str, Record | None]] = {}
+    charts: dict[str, dict[str, ChartData]] = {}
+
+    for skill in SKILLS:
+        points = points_by_skill.get(skill, [])
+        epochs = [epoch for epoch, _ in points]
+
+        latest = _xp_at(epochs, points, now_epoch)
+        if latest is not None:
+            current[skill] = latest
+
+        heaps: dict[str, list[Record]] = {name: [] for name, _ in spans}
+        scan_player_points(
+            username, points, spans, now_epoch, lookback, slack, 1, heaps
+        )
+
+        past[skill] = {}
+        best[skill] = {}
+        charts[skill] = {}
+        for name, span in spans:
+            past[skill][name] = _past_gain(
+                epochs, points, span, now_epoch
+            )
+            best[skill][name] = heaps[name][0] if heaps[name] else None
+            charts[skill][name] = _chart_data(
+                epochs, points, span, now_epoch
+            )
+
+    return PlayerData(
+        username=username,
+        generated=generated,
+        now_epoch=now_epoch,
+        lookback=lookback,
+        current=current,
+        past=past,
+        best=best,
+        charts=charts,
+    )
+
+
+def _esc(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _num(value: int) -> str:
+    return f"{value:,}"
+
+
+def _short_number(value: int) -> str:
+    for size, suffix in ((1_000_000_000, "B"), (1_000_000, "M"),
+                         (1_000, "k")):
+        if value >= size:
+            text = f"{value / size:.1f}".removesuffix(".0")
+            return f"{text}{suffix}"
+    return str(value)
+
+
+def _chart_svg(chart: ChartData, label: str) -> str:
+    if not chart.xp and not chart.gains:
+        return '<p class="empty">(no data)</p>'
+
+    width, height = 360, 118
+    left, right, top, bottom = 46, 46, 10, 18
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+    window = max(1, chart.end_epoch - chart.start_epoch)
+
+    def x(timestamp: int) -> float:
+        ratio = (timestamp - chart.start_epoch) / window
+        return left + plot_width * min(1.0, max(0.0, ratio))
+
+    xp_values = [value for _, value in chart.xp]
+    gain_values = [value for _, value in chart.gains]
+    xp_min = min(xp_values) if xp_values else 0
+    xp_max = max(xp_values) if xp_values else 0
+    gain_max = max(gain_values) if gain_values else 0
+    xp_span = xp_max - xp_min
+    gain_span = gain_max or 1
+
+    def y_xp(value: int) -> float:
+        if not xp_span:
+            return top + plot_height / 2
+        ratio = (value - xp_min) / xp_span
+        return top + plot_height * (1 - ratio)
+
+    def y_gain(value: int) -> float:
+        return top + plot_height * (1 - value / gain_span)
+
+    baseline = top + plot_height
+    parts = [
+        f'<svg viewBox="0 0 {width} {height}" role="img" '
+        f'aria-label="{_esc(label)}">',
+        f"<title>{_esc(label)}</title>",
+    ]
+    for step in range(3):
+        line_y = top + plot_height * step / 2
+        parts.append(
+            f'<line class="grid" x1="{left}" y1="{line_y:.1f}" '
+            f'x2="{width - right}" y2="{line_y:.1f}"/>'
+        )
+
+    if chart.gains:
+        area = [f"{x(chart.gains[0][0]):.1f},{baseline:.1f}"]
+        area += [
+            f"{x(timestamp):.1f},{y_gain(value):.1f}"
+            for timestamp, value in chart.gains
+        ]
+        area.append(f"{x(chart.gains[-1][0]):.1f},{baseline:.1f}")
+        parts.append(f'<polygon class="area" points="{" ".join(area)}"/>')
+
+    if len(chart.xp) > 1:
+        points = " ".join(
+            f"{x(timestamp):.1f},{y_xp(value):.1f}"
+            for timestamp, value in chart.xp
+        )
+        parts.append(f'<polyline class="line" points="{points}"/>')
+    elif chart.xp:
+        timestamp, value = chart.xp[0]
+        parts.append(
+            f'<circle class="dot" cx="{x(timestamp):.1f}" '
+            f'cy="{y_xp(value):.1f}" r="2"/>'
+        )
+
+    parts.append(
+        f'<text class="xp" x="{left - 3}" y="{top + 4}" '
+        f'text-anchor="end">{_esc(_short_number(xp_max))}</text>'
+    )
+    parts.append(
+        f'<text class="xp" x="{left - 3}" y="{baseline + 4}" '
+        f'text-anchor="end">{_esc(_short_number(xp_min))}</text>'
+    )
+    parts.append(
+        f'<text class="gain" x="{width - right + 3}" y="{top + 4}">'
+        f"{_esc(_short_number(gain_max))}</text>"
+    )
+    parts.append(
+        f'<text class="gain" x="{width - right + 3}" y="{baseline + 4}">'
+        "0</text>"
+    )
+    parts.append(
+        f'<text x="{left}" y="{height - 3}">{_date(chart.start_epoch)}</text>'
+    )
+    parts.append(
+        f'<text x="{width - right}" y="{height - 3}" '
+        f'text-anchor="end">{_date(chart.end_epoch)}</text>'
+    )
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def _current_table(data: PlayerData) -> str:
+    rows: list[str] = []
+    for skill in SKILLS:
+        value = data.current.get(skill)
+        shown = _num(value) if value is not None else "-"
+        if skill == "overall" or value is None:
+            level = "-"
+        else:
+            level = str(level_for_xp(value))
+        rows.append(
+            f"<tr><td>{_esc(skill)}</td>"
+            f'<td class="num">{level}</td>'
+            f'<td class="num">{shown}</td></tr>'
+        )
+    return (
+        '<table class="current"><thead><tr><th>Skill</th>'
+        '<th class="num">Level</th><th class="num">XP</th></tr></thead>'
+        "<tbody>" + "".join(rows) + "</tbody></table>"
+    )
+
+
+def _past_table(data: PlayerData, skill: str) -> str:
+    rows: list[str] = []
+    for name in SPANS:
+        past = data.past[skill][name]
+        shown = _num(past) if past is not None else "-"
+        rows.append(
+            f'<tr><td>{_esc(name.capitalize())}</td>'
+            f'<td class="num">{shown}</td></tr>'
+        )
+    return (
+        '<table class="past"><thead><tr><th>Span</th>'
+        '<th class="num">Past XP</th></tr></thead><tbody>'
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def _best_table(data: PlayerData, skill: str) -> str:
+    rows: list[str] = []
+    for name in SPANS:
+        record = data.best[skill][name]
+        if record is None:
+            cells = (
+                '<td class="num">-</td><td class="date">-</td>'
+                '<td class="date">-</td>'
+            )
+        else:
+            cells = (
+                f'<td class="num">{_num(record.gain)}</td>'
+                f'<td class="date">{_date(record.start_epoch)}</td>'
+                f'<td class="date">{_date(record.end_epoch)}</td>'
+            )
+        rows.append(
+            f"<tr><td>{_esc(name.capitalize())}</td>{cells}</tr>"
+        )
+    return (
+        '<table class="best"><thead><tr><th>Span</th>'
+        '<th class="num">Best XP</th><th class="num">Start</th>'
+        '<th class="num">End</th></tr></thead><tbody>'
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+_PLAYER_CSS = """
+:root{color-scheme:light dark}
+*{box-sizing:border-box}
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0 auto;
+     padding:2rem 1rem;max-width:64rem}
+h1{font-size:1.9rem;margin:0 0 .35rem}
+h2{font-size:1.5rem;margin:2.5rem 0 .5rem;border-bottom:1px solid #8884;
+   padding-bottom:.3rem}
+h3{font-size:1rem;margin:1.2rem 0 .3rem;text-transform:uppercase;
+   letter-spacing:.04em;color:#888}
+h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:uppercase;
+   letter-spacing:.04em}
+.sub{margin:.25rem 0 1rem}
+.meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
+table{width:100%;border-collapse:collapse;margin:.25rem 0 .75rem;
+      table-layout:auto}
+th,td{text-align:left;padding:.25rem .55rem;border-bottom:1px solid #8884}
+th{font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;
+              white-space:nowrap}
+td.date,th.date{text-align:right;font-variant-numeric:tabular-nums;
+                white-space:nowrap}
+tr:nth-child(even) td{background:#8881}
+table.current th:nth-child(1),table.current td:nth-child(1){width:52%}
+table.current th:nth-child(2),table.current td:nth-child(2){width:20%}
+table.current th:nth-child(3),table.current td:nth-child(3){width:28%}
+table.past th:nth-child(1),table.past td:nth-child(1){width:45%}
+table.best th:nth-child(1),table.best td:nth-child(1){width:25%}
+.gain-tables{display:grid;align-items:start;
+             grid-template-columns:repeat(2,minmax(0,1fr));
+             gap:.5rem 1.5rem}
+.charts{display:grid;align-items:start;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:.75rem 1rem}
+figure{min-width:0;margin:0;padding:.5rem .6rem .35rem;
+       border:1px solid #8883;border-radius:6px}
+figcaption{font-size:.8rem;color:#888;margin-bottom:.25rem}
+.key{font-size:.7rem;color:#888;margin-left:.45rem}
+.key::before{content:"";display:inline-block;width:.55em;height:.55em;
+             margin-right:.25em;border-radius:1px}
+.line-key::before{background:#3b82f6}
+.area-key::before{background:#22c55e}
+svg{display:block;width:100%;height:auto}
+svg .grid{stroke:#8884;stroke-width:.5}
+svg .line{fill:none;stroke:#3b82f6;stroke-width:1.5;
+          vector-effect:non-scaling-stroke}
+svg .area{fill:#22c55e33;stroke:#22c55e;stroke-width:1;
+          vector-effect:non-scaling-stroke}
+svg .dot{fill:#3b82f6}
+svg text{fill:#888;font-size:9px}
+svg text.xp{fill:#3b82f6}
+svg text.gain{fill:#22c55e}
+.empty{color:#888;margin:.2rem 0}
+a{color:inherit}
+@media (max-width:52rem){
+  .charts,.gain-tables{grid-template-columns:1fr}
+}
+@media (max-width:40rem){
+  body{padding:1.25rem .85rem}
+  table{font-size:.85em}
+  th,td{padding:.2rem .4rem}
+}
+"""
+
+
+def render_player_page(data: PlayerData) -> str:
+    parts: list[str] = [
+        "<!doctype html>",
+        '<html lang="en"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        f"<title>{_esc(data.username)} - XP Tracker</title>",
+        f"<style>{_PLAYER_CSS}</style></head><body>",
+        f'<h1><a href="{_esc(highscores_url(data.username))}">'
+        f"{_esc(data.username)}</a></h1>",
+        f'<p class="meta">generated: {_esc(data.generated)}</p>',
+        '<p class="sub"><a href="../latest.html">all rankings</a></p>',
+        "<h2>Current xp</h2>",
+        _current_table(data),
+    ]
+
+    for skill in SKILLS:
+        parts.append(f'<section id="skill-{_esc(skill)}">')
+        parts.append(f"<h2>{_esc(skill)}</h2>")
+        value = data.current.get(skill)
+        if value is None:
+            shown = "no data"
+        elif skill == "overall":
+            shown = _num(value)
+        else:
+            shown = (
+                f"{_num(value)} (level {level_for_xp(value)})"
+            )
+        parts.append(f'<p class="meta">current xp: {shown}</p>')
+        parts.append("<h3>Gains</h3>")
+        parts.append('<div class="gain-tables">')
+        parts.append(
+            f"<div><h4>Past</h4>{_past_table(data, skill)}</div>"
+        )
+        parts.append(
+            f"<div><h4>Best</h4>{_best_table(data, skill)}</div>"
+        )
+        parts.append("</div>")
+        parts.append("<h3>Charts</h3>")
+        parts.append('<div class="charts">')
+        for name in SPANS:
+            label = f"{skill} {name}: total xp and gains"
+            parts.append(
+                f"<figure><figcaption><b>{_esc(name)}</b>"
+                '<span class="key line-key">total xp</span>'
+                '<span class="key area-key">gains</span></figcaption>'
+                f"{_chart_svg(data.charts[skill][name], label)}"
+                "</figure>"
+            )
+        parts.append("</div>")
+        parts.append("</section>")
+
+    parts.append("</body></html>")
+    return "\n".join(parts) + "\n"

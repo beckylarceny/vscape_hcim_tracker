@@ -1,0 +1,319 @@
+"""Tests for the per-player reports (no database needed)."""
+
+from __future__ import annotations
+
+import datetime as dt
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+from src import main
+from src.config import SKILLS, SPANS
+from src.player_report import (
+    ChartData,
+    PlayerData,
+    Record,
+    collect_player_data,
+    highscores_url,
+    level_for_xp,
+    player_page_href,
+    player_slug,
+    render_player_page,
+)
+
+NOW = 1_800_000_000
+DAY = 86400
+LOOKBACK = 365 * DAY
+
+
+class FakeResult:
+    def __init__(self, rows) -> None:
+        self.rows = rows
+
+    def fetchall(self):
+        return self.rows
+
+
+class FakeConn:
+    def __init__(self, rows) -> None:
+        self.rows = rows
+
+    def execute(self, sql, params=None):
+        return FakeResult(self.rows)
+
+
+def rows(*points) -> list[tuple[str, dt.datetime, int]]:
+    return [
+        (
+            skill,
+            dt.datetime.fromtimestamp(epoch, tz=dt.timezone.utc),
+            xp,
+        )
+        for skill, epoch, xp in points
+    ]
+
+
+def fake_data(username: str = "Fuck Jagex") -> PlayerData:
+    current = {skill: 1000 for skill in SKILLS}
+    past = {skill: {name: 100 for name in SPANS} for skill in SKILLS}
+    best = {
+        skill: {
+            name: Record(
+                gain=500, end_epoch=NOW, username=username,
+                start_epoch=NOW - SPANS[name],
+            )
+            for name in SPANS
+        }
+        for skill in SKILLS
+    }
+    charts = {
+        skill: {
+            name: ChartData(
+                start_epoch=NOW - SPANS[name],
+                end_epoch=NOW,
+                xp=[(NOW - SPANS[name], 400), (NOW, 1000)],
+                gains=[(NOW, 600)],
+            )
+            for name in SPANS
+        }
+        for skill in SKILLS
+    }
+    return PlayerData(
+        username=username,
+        generated="2026-01-01 00:00 UTC",
+        now_epoch=NOW,
+        lookback=LOOKBACK,
+        current=current,
+        past=past,
+        best=best,
+        charts=charts,
+    )
+
+
+class SlugTest(unittest.TestCase):
+    def test_slug_is_filesystem_safe(self) -> None:
+        self.assertEqual(player_slug("Alice"), "Alice")
+        self.assertEqual(player_slug("Fuck Jagex"), "Fuck_Jagex")
+        self.assertEqual(player_slug("a/b?c"), "a_b_c")
+        self.assertEqual(player_slug("..."), "player")
+        self.assertEqual(player_slug(""), "player")
+
+    def test_page_href_uses_the_slug(self) -> None:
+        self.assertEqual(
+            player_page_href("Fuck Jagex"), "players/Fuck_Jagex.html"
+        )
+
+
+class RenderTest(unittest.TestCase):
+    def test_heading_links_to_highscores(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn(
+            f'<h1><a href="{highscores_url("Fuck Jagex")}">Fuck Jagex</a>',
+            page,
+        )
+
+    def test_current_xp_and_level_are_shown(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn("Current xp", page)
+        self.assertIn("<th class=\"num\">Level</th>", page)
+        self.assertIn('<td class="num">9</td>', page)
+        self.assertIn("current xp: 1,000 (level 9)", page)
+
+    def test_past_and_best_are_separate_tables(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertIn('<div class="gain-tables">', page)
+        self.assertIn("<th class=\"num\">Past XP</th>", page)
+        self.assertIn("<th class=\"num\">Best XP</th>", page)
+        self.assertIn("<td class=\"num\">100</td>", page)
+        self.assertIn("<td class=\"num\">500</td>", page)
+
+    def test_one_chart_per_skill_and_span(self) -> None:
+        page = render_player_page(fake_data())
+        self.assertEqual(
+            page.count("<svg"), len(SKILLS) * len(SPANS)
+        )
+        self.assertIn("overall day: total xp and gains", page)
+        self.assertIn('class="area"', page)
+        self.assertIn('class="line"', page)
+
+    def test_username_is_escaped(self) -> None:
+        page = render_player_page(fake_data(username="<bob>"))
+        self.assertIn("&lt;bob&gt;", page)
+        self.assertNotIn("<bob>", page)
+
+    def test_empty_history_renders_no_data(self) -> None:
+        data = fake_data()
+        empty = data._replace(
+            current={},
+            past={skill: {name: None for name in SPANS} for skill in SKILLS},
+            best={skill: {name: None for name in SPANS} for skill in SKILLS},
+            charts={
+                skill: {
+                    name: ChartData(NOW - SPANS[name], NOW, [], [])
+                    for name in SPANS
+                }
+                for skill in SKILLS
+            },
+        )
+        page = render_player_page(empty)
+        self.assertIn("no data", page)
+        self.assertIn("(no data)", page)
+        self.assertEqual(page.count("<svg"), 0)
+
+
+class ThinTest(unittest.TestCase):
+    def test_long_series_keeps_endpoints(self) -> None:
+        from src.player_report import _thin
+
+        points = [(index, index * 10) for index in range(1000)]
+        thinned = _thin(points, 180)
+        self.assertEqual(len(thinned), 180)
+        self.assertEqual(thinned[0], points[0])
+        self.assertEqual(thinned[-1], points[-1])
+        self.assertEqual(thinned, sorted(thinned))
+
+
+class LevelTest(unittest.TestCase):
+    def test_known_thresholds(self) -> None:
+        self.assertEqual(level_for_xp(0), 1)
+        self.assertEqual(level_for_xp(82), 1)
+        self.assertEqual(level_for_xp(83), 2)
+        self.assertEqual(level_for_xp(1154), 10)
+        self.assertEqual(level_for_xp(13_034_430), 98)
+        self.assertEqual(level_for_xp(13_034_431), 99)
+        self.assertEqual(level_for_xp(200_000_000), 99)
+
+    def test_negative_xp_is_level_one(self) -> None:
+        self.assertEqual(level_for_xp(-5), 1)
+
+
+class CollectTest(unittest.TestCase):
+    def collect(self, conn) -> PlayerData:
+        return collect_player_data(
+            conn, "alice", NOW, LOOKBACK, DAY, "2026-01-01 00:00 UTC"
+        )
+
+    def test_current_xp_and_past_gain(self) -> None:
+        conn = FakeConn(rows(
+            ("overall", NOW - 3 * DAY, 1000),
+            ("overall", NOW - 2 * DAY, 2000),
+            ("overall", NOW - DAY, 3000),
+            ("overall", NOW, 4000),
+        ))
+        data = self.collect(conn)
+        self.assertEqual(data.current["overall"], 4000)
+        self.assertEqual(data.past["overall"]["day"], 1000)
+        self.assertIsNone(data.past["overall"]["week"])
+
+    def test_best_window_is_recorded(self) -> None:
+        conn = FakeConn(rows(
+            ("overall", NOW - 3 * DAY, 1000),
+            ("overall", NOW - 2 * DAY, 2000),
+            ("overall", NOW - DAY, 3000),
+            ("overall", NOW, 4000),
+        ))
+        record = self.collect(conn).best["overall"]["day"]
+        self.assertIsNotNone(record)
+        self.assertEqual(record.gain, 1000)
+
+    def test_chart_has_total_xp_and_per_point_gains(self) -> None:
+        conn = FakeConn(rows(
+            ("overall", NOW - 3 * DAY, 1000),
+            ("overall", NOW - 2 * DAY, 2000),
+            ("overall", NOW - DAY, 3000),
+            ("overall", NOW, 4000),
+        ))
+        chart = self.collect(conn).charts["overall"]["day"]
+        self.assertEqual(chart.start_epoch, NOW - DAY)
+        self.assertEqual(chart.end_epoch, NOW)
+        self.assertEqual(chart.xp[0], (NOW - DAY, 3000))
+        self.assertEqual(chart.xp[-1], (NOW, 4000))
+        self.assertEqual(chart.gains, [(NOW, 1000)])
+
+    def test_longer_window_includes_every_stored_point(self) -> None:
+        conn = FakeConn(rows(
+            ("overall", NOW - 3 * DAY, 1000),
+            ("overall", NOW - 2 * DAY, 2000),
+            ("overall", NOW - DAY, 3000),
+            ("overall", NOW, 4000),
+        ))
+        chart = self.collect(conn).charts["overall"]["week"]
+        self.assertEqual([xp for _, xp in chart.xp], [1000, 2000, 3000, 4000])
+        self.assertEqual([gain for _, gain in chart.gains], [1000, 1000, 1000])
+
+    def test_skills_without_snapshots_are_absent(self) -> None:
+        conn = FakeConn([])
+        data = self.collect(conn)
+        self.assertEqual(data.current, {})
+        self.assertIsNone(data.past["overall"]["day"])
+        chart = data.charts["overall"]["day"]
+        self.assertEqual(chart.xp, [])
+        self.assertEqual(chart.gains, [])
+
+
+class WritePagesTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.conn = FakeConn(rows(
+            ("overall", NOW - DAY, 100),
+            ("overall", NOW, 200),
+        ))
+
+    def data(self, generated: str = "first") -> SimpleNamespace:
+        return SimpleNamespace(
+            players=("alice",),
+            now_epoch=NOW,
+            lookback=LOOKBACK,
+            interval=DAY,
+            generated=generated,
+        )
+
+    def test_initial_build_then_skip_when_watermark_is_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_dir = Path(directory)
+            main.write_player_pages(
+                self.conn, report_dir, self.data(), {"alice": 1}, None
+            )
+            page = report_dir / "players" / "alice.html"
+            before = page.read_text(encoding="utf-8")
+            self.assertIn("first", before)
+
+            written = main.write_player_pages(
+                self.conn, report_dir, self.data("second"),
+                {"alice": 1}, {"alice": 1},
+            )
+            self.assertEqual(written, 0)
+            self.assertEqual(page.read_text(encoding="utf-8"), before)
+
+    def test_changed_watermark_rebuilds_one_page(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_dir = Path(directory)
+            main.write_player_pages(
+                self.conn, report_dir, self.data(), {"alice": 1}, None
+            )
+            written = main.write_player_pages(
+                self.conn, report_dir, self.data("second"),
+                {"alice": 2}, {"alice": 1},
+            )
+            self.assertEqual(written, 1)
+            page = report_dir / "players" / "alice.html"
+            self.assertIn("second", page.read_text(encoding="utf-8"))
+
+    def test_removed_player_page_is_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_dir = Path(directory)
+            main.write_player_pages(
+                self.conn, report_dir, self.data(), {"alice": 1}, None
+            )
+            page = report_dir / "players" / "alice.html"
+            self.assertTrue(page.exists())
+            data = self.data()
+            data.players = ()
+            main.write_player_pages(
+                self.conn, report_dir, data, {}, {"alice": 1}
+            )
+            self.assertFalse(page.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

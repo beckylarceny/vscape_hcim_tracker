@@ -11,7 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from . import api, report, storage, web
+from . import api, player_report, report, storage, web
 from .config import (
     DEFAULT_COLLECT_INTERVAL_SECONDS,
     DEFAULT_INTERVAL_SECONDS,
@@ -215,12 +215,84 @@ def _atomic_write(path: Path, text: str) -> None:
 
 def _remove_old_reports(report_dir: Path) -> None:
     """Only latest.txt and latest.html are kept."""
-    for pattern in ("report_*.txt", "report_*.html", ".latest.*.tmp"):
+    for pattern in (
+        "report_*.txt", "report_*.html", ".latest.*.tmp", "players/.*.tmp",
+    ):
         for path in report_dir.glob(pattern):
             try:
                 path.unlink()
             except FileNotFoundError:
                 pass
+
+
+_PLAYER_WATERMARKS: dict[Path, dict[str, tuple[int, object]]] = {}
+
+
+def _player_watermarks(conn) -> dict[str, tuple[int, object]]:
+    """Checkpoint count and newest checkpoint per player.
+
+    Any new checkpoint, including a retry that fills an old gap, changes the
+    count, so the matching page is rebuilt on the next report pass.
+    """
+    rows = conn.execute(
+        """
+        SELECT p.username, count(c.observed_at), max(c.observed_at)
+        FROM players p
+        LEFT JOIN checkpoints c ON c.username = p.username
+        GROUP BY p.username
+        """
+    ).fetchall()
+    return {
+        username: (int(count), newest)
+        for username, count, newest in rows
+    }
+
+
+def write_player_pages(
+    conn, report_dir: Path, data,
+    watermarks: dict[str, tuple[int, object]],
+    previous: dict[str, tuple[int, object]] | None,
+) -> int:
+    """Write one HTML report per player whose checkpoint history changed."""
+    directory = report_dir / "players"
+    directory.mkdir(parents=True, exist_ok=True)
+    expected: set[str] = set()
+    stale: list[str] = []
+    for username in data.players:
+        name = f"{player_report.player_slug(username)}.html"
+        expected.add(name)
+        if (
+            previous is None
+            or previous.get(username) != watermarks.get(username)
+            or not (directory / name).exists()
+        ):
+            stale.append(username)
+
+    written = 0
+    for username in stale:
+        name = f"{player_report.player_slug(username)}.html"
+        try:
+            page_data = player_report.collect_player_data(
+                conn, username, data.now_epoch, data.lookback,
+                data.interval, data.generated,
+            )
+            page = player_report.render_player_page(page_data)
+        except Exception:  # noqa: BLE001 - one page must not break the rest
+            log.exception("could not build the player report for %r", username)
+            continue
+        _atomic_write(directory / name, page)
+        written += 1
+        if written % 50 == 0:
+            log.info(
+                "wrote %d/%d player reports", written, len(stale)
+            )
+    for path in directory.glob("*.html"):
+        if path.name not in expected:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+    return written
 
 
 def write_report(
@@ -249,6 +321,20 @@ def write_report(
         _atomic_write(text_path, text)
         _atomic_write(html_path, page)
         _remove_old_reports(report_dir)
+
+        key = report_dir.resolve()
+        watermarks = _player_watermarks(conn)
+        previous = _PLAYER_WATERMARKS.get(key)
+        if previous != watermarks:
+            count = write_player_pages(
+                conn, report_dir, data, watermarks, previous
+            )
+            _PLAYER_WATERMARKS[key] = watermarks
+            if count:
+                log.info(
+                    "wrote %d player reports to %s", count,
+                    report_dir / "players",
+                )
     log.info("wrote reports to %s and %s", text_path, html_path)
     return html_path
 

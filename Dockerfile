@@ -9,7 +9,7 @@ WORKDIR /app
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# The build context is the parent directory so the shared data.py is included.
+# The build context is the project root so the shared data.py is included.
 COPY data.py ./data.py
 COPY src/ ./src/
 COPY tests/ ./tests/
