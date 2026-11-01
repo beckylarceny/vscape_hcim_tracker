@@ -51,6 +51,8 @@ class ChartData(NamedTuple):
     end_epoch: int
     xp: list[tuple[int, int]]
     gains: list[tuple[int, float]]
+    regular_xp: frozenset[int] = frozenset()
+    regular_gains: frozenset[int] = frozenset()
 
 
 class PlayerData(NamedTuple):
@@ -374,7 +376,14 @@ def _short_number(value: float) -> str:
 
 
 def _chart_svg(
-    chart: ChartData, label: str, width: int = 360, height: int = 118
+    chart: ChartData,
+    label: str,
+    width: int = 360,
+    height: int = 118,
+    *,
+    time_axis: bool = False,
+    ticks: int = 2,
+    segmented_area: bool = False,
 ) -> str:
     if not chart.xp and not chart.gains:
         return '<p class="empty">(no data)</p>'
@@ -418,31 +427,89 @@ def _chart_svg(
             f'x2="{width - right}" y2="{line_y:.1f}"/>'
         )
 
+    if time_axis:
+        count = max(2, ticks)
+        for index in range(count):
+            ratio = index / (count - 1)
+            tick_x = left + plot_width * ratio
+            timestamp = int(chart.start_epoch + window * ratio)
+            parts.append(
+                f'<line class="grid" x1="{tick_x:.1f}" y1="{top:.1f}" '
+                f'x2="{tick_x:.1f}" y2="{baseline:.1f}"/>'
+            )
+            anchor = (
+                "start" if index == 0
+                else "end" if index == count - 1
+                else "middle"
+            )
+            parts.append(
+                f'<text x="{tick_x:.1f}" y="{height - 3}" '
+                f'text-anchor="{anchor}">'
+                f"{as_datetime(timestamp).strftime('%H:%M')}</text>"
+            )
+
     if chart.gains:
-        first_time, first_gain = chart.gains[0]
-        area = [
-            f"{x(first_time):.1f},{baseline:.1f}",
-            f"{x(first_time):.1f},{y_gain(first_gain):.1f}",
-        ]
-        previous_gain = first_gain
-        for timestamp, value in chart.gains[1:]:
-            # Hold the previous gain until this point, then step vertically.
-            area.append(f"{x(timestamp):.1f},{y_gain(previous_gain):.1f}")
-            area.append(f"{x(timestamp):.1f},{y_gain(value):.1f}")
-            previous_gain = value
-        area.append(f"{x(chart.gains[-1][0]):.1f},{baseline:.1f}")
-        parts.append(f'<polygon class="area" points="{" ".join(area)}"/>')
+        if segmented_area:
+            previous_time = chart.start_epoch
+            for timestamp, value in chart.gains:
+                start_x = x(previous_time)
+                end_x = x(timestamp)
+                if end_x > start_x:
+                    top_y = y_gain(value)
+                    css = (
+                        "area regular"
+                        if timestamp in chart.regular_gains
+                        else "area"
+                    )
+                    area = (
+                        f"{start_x:.1f},{baseline:.1f} "
+                        f"{start_x:.1f},{top_y:.1f} "
+                        f"{end_x:.1f},{top_y:.1f} "
+                        f"{end_x:.1f},{baseline:.1f}"
+                    )
+                    parts.append(
+                        f'<polygon class="{css}" points="{area}"/>'
+                    )
+                previous_time = max(previous_time, timestamp)
+        else:
+            first_time, first_gain = chart.gains[0]
+            area = [
+                f"{x(first_time):.1f},{baseline:.1f}",
+                f"{x(first_time):.1f},{y_gain(first_gain):.1f}",
+            ]
+            previous_gain = first_gain
+            for timestamp, value in chart.gains[1:]:
+                # Hold the previous gain until this point, then step.
+                area.append(f"{x(timestamp):.1f},{y_gain(previous_gain):.1f}")
+                area.append(f"{x(timestamp):.1f},{y_gain(value):.1f}")
+                previous_gain = value
+            area.append(f"{x(chart.gains[-1][0]):.1f},{baseline:.1f}")
+            parts.append(f'<polygon class="area" points="{" ".join(area)}"/>')
 
     if len(chart.xp) > 1:
-        points = " ".join(
-            f"{x(timestamp):.1f},{y_xp(value):.1f}"
-            for timestamp, value in chart.xp
-        )
-        parts.append(f'<polyline class="line" points="{points}"/>')
+        if chart.regular_xp:
+            for (t1, v1), (t2, v2) in zip(chart.xp, chart.xp[1:]):
+                css = (
+                    "line regular"
+                    if t1 in chart.regular_xp or t2 in chart.regular_xp
+                    else "line"
+                )
+                parts.append(
+                    f'<line class="{css}" x1="{x(t1):.1f}" '
+                    f'y1="{y_xp(v1):.1f}" x2="{x(t2):.1f}" '
+                    f'y2="{y_xp(v2):.1f}"/>'
+                )
+        else:
+            points = " ".join(
+                f"{x(timestamp):.1f},{y_xp(value):.1f}"
+                for timestamp, value in chart.xp
+            )
+            parts.append(f'<polyline class="line" points="{points}"/>')
     elif chart.xp:
         timestamp, value = chart.xp[0]
+        css = "dot regular" if timestamp in chart.regular_xp else "dot"
         parts.append(
-            f'<circle class="dot" cx="{x(timestamp):.1f}" '
+            f'<circle class="{css}" cx="{x(timestamp):.1f}" '
             f'cy="{y_xp(value):.1f}" r="2"/>'
         )
 
@@ -462,13 +529,15 @@ def _chart_svg(
         f'<text class="gain" x="{width - right + 3}" y="{baseline + 4}">'
         "0</text>"
     )
-    parts.append(
-        f'<text x="{left}" y="{height - 3}">{_date(chart.start_epoch)}</text>'
-    )
-    parts.append(
-        f'<text x="{width - right}" y="{height - 3}" '
-        f'text-anchor="end">{_date(chart.end_epoch)}</text>'
-    )
+    if not time_axis:
+        parts.append(
+            f'<text x="{left}" y="{height - 3}">'
+            f"{_date(chart.start_epoch)}</text>"
+        )
+        parts.append(
+            f'<text x="{width - right}" y="{height - 3}" '
+            f'text-anchor="end">{_date(chart.end_epoch)}</text>'
+        )
     parts.append("</svg>")
     return "".join(parts)
 

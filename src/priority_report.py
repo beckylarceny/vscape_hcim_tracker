@@ -5,6 +5,7 @@ from __future__ import annotations
 import email.utils
 import os
 import urllib.parse
+from bisect import bisect_left, bisect_right
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -19,10 +20,10 @@ from .config import (
 from .player_report import (
     ChartData,
     _PLAYER_CSS,
-    _chart_data,
     _chart_svg,
     _esc,
     _num,
+    _thin,
     highscores_url,
     level_for_xp,
     player_slug,
@@ -66,6 +67,114 @@ def _points_by_skill(
     return points
 
 
+def _regular_points_by_skill(
+    conn: psycopg.Connection, username: str, start_epoch: int, end_epoch: int
+) -> dict[str, list[tuple[int, int]]]:
+    rows = conn.execute(
+        """
+        SELECT skill, observed_at, xp
+        FROM snapshots
+        WHERE username = %s AND observed_at >= %s AND observed_at <= %s
+        ORDER BY skill, observed_at
+        """,
+        (username, as_datetime(start_epoch), as_datetime(end_epoch)),
+    ).fetchall()
+    points: dict[str, list[tuple[int, int]]] = {}
+    for skill, observed_at, xp in rows:
+        points.setdefault(skill, []).append(
+            (int(observed_at.timestamp()), int(xp))
+        )
+    return points
+
+
+def _merged_points(
+    priority: list[tuple[int, int]],
+    regular: list[tuple[int, int]],
+) -> dict[int, tuple[int, bool]]:
+    """Priority samples plus regular samples only in uncovered periods."""
+    chosen: dict[int, tuple[int, bool]] = {
+        timestamp: (xp, False) for timestamp, xp in priority
+    }
+    times = sorted(chosen)
+    for timestamp, xp in regular:
+        if timestamp in chosen:
+            continue
+        if not times:
+            chosen[timestamp] = (xp, True)
+            continue
+        if timestamp <= times[0] or timestamp >= times[-1]:
+            chosen[timestamp] = (xp, True)
+            continue
+        index = bisect_left(times, timestamp)
+        gap = times[index] - times[index - 1]
+        if gap > DEFAULT_PRIORITY_INTERVAL_SECONDS * 1.5:
+            chosen[timestamp] = (xp, True)
+    return chosen
+
+
+def _merged_chart(
+    chosen: dict[int, tuple[int, bool]],
+    start_epoch: int,
+    end_epoch: int,
+) -> ChartData:
+    if not chosen:
+        return ChartData(start_epoch, end_epoch, [], [])
+
+    times = sorted(chosen)
+    index = bisect_right(times, start_epoch) - 1
+    regular_xp: set[int] = set()
+    regular_gains: set[int] = set()
+    if index >= 0:
+        baseline_time = times[index]
+        baseline_xp, baseline_regular = chosen[baseline_time]
+        line = [(start_epoch, baseline_xp)]
+        if baseline_regular:
+            regular_xp.add(start_epoch)
+        rest = times[index + 1:]
+        previous_xp = baseline_xp
+        previous_time = baseline_time
+        previous_regular = baseline_regular
+    else:
+        line = []
+        rest = times
+        previous_xp = None
+        previous_time = None
+        previous_regular = None
+
+    gains: list[tuple[int, float]] = []
+    for timestamp in rest:
+        if timestamp > end_epoch:
+            break
+        xp, is_regular = chosen[timestamp]
+        line.append((timestamp, xp))
+        if is_regular:
+            regular_xp.add(timestamp)
+        if previous_xp is not None and previous_time is not None:
+            elapsed = timestamp - previous_time
+            if elapsed > 0:
+                rate = max(0, xp - previous_xp) * 3600 / elapsed
+                gains.append((timestamp, rate))
+                if is_regular or previous_regular:
+                    regular_gains.add(timestamp)
+        previous_xp = xp
+        previous_time = timestamp
+        previous_regular = is_regular
+
+    if line and line[-1][0] < end_epoch:
+        line.append((end_epoch, line[-1][1]))
+        if previous_regular:
+            regular_xp.add(end_epoch)
+
+    return ChartData(
+        start_epoch,
+        end_epoch,
+        _thin(line, 180),
+        _thin(gains, 180),
+        frozenset(regular_xp),
+        frozenset(regular_gains),
+    )
+
+
 def collect_priority_data(
     conn: psycopg.Connection,
     username: str,
@@ -73,26 +182,23 @@ def collect_priority_data(
     generated: str,
     window: int = WINDOW_SECONDS,
 ) -> PriorityData:
-    points_by_skill = _points_by_skill(
-        conn,
-        username,
-        now_epoch - window - DEFAULT_PRIORITY_INTERVAL_SECONDS,
-        now_epoch,
+    start = now_epoch - window
+    priority = _points_by_skill(
+        conn, username, start - DEFAULT_PRIORITY_INTERVAL_SECONDS, now_epoch
     )
-    current = {
-        skill: points[-1][1]
-        for skill, points in points_by_skill.items()
-        if points
-    }
-    charts = {
-        skill: _chart_data(
-            [epoch for epoch, _ in points_by_skill.get(skill, [])],
-            points_by_skill.get(skill, []),
-            window,
-            now_epoch,
+    regular = _regular_points_by_skill(
+        conn, username, start - 86400, now_epoch
+    )
+    current: dict[str, int] = {}
+    charts: dict[str, ChartData] = {}
+    for skill in SKILLS:
+        chosen = _merged_points(
+            priority.get(skill, []), regular.get(skill, [])
         )
-        for skill in SKILLS
-    }
+        times = sorted(chosen)
+        if times:
+            current[skill] = chosen[times[-1]][0]
+        charts[skill] = _merged_chart(chosen, start, now_epoch)
     return PriorityData(
         username=username,
         generated=generated,
@@ -197,6 +303,10 @@ def render_feed(
 _PRIORITY_CSS = """
 figure.big{margin:.5rem 0 1.75rem;padding:.6rem .7rem .4rem}
 figure.big figcaption{text-align:center}
+svg .line.regular{stroke:#f59e0b;stroke-dasharray:4 3}
+svg .area.regular{fill:#f59e0b33;stroke:#f59e0b33}
+svg .dot.regular{fill:#f59e0b}
+.key.regular-key::before{background:#f59e0b}
 """
 
 
@@ -241,6 +351,11 @@ def render_priority_page(data: PriorityData) -> str:
 
     for skill in SKILLS:
         value = data.current.get(skill)
+        chart = data.charts[skill]
+        regular_key = (
+            '<span class="key regular-key">regular data</span>'
+            if chart.regular_xp or chart.regular_gains else ""
+        )
         parts.append(f'<section id="skill-{_esc(skill)}">')
         parts.append(f"<h2>{_esc(skill)}</h2>")
         parts.append(
@@ -248,11 +363,16 @@ def render_priority_page(data: PriorityData) -> str:
             f"{_current_line(skill, value, data.current)}</p>"
         )
         label = f"{skill} last 24 hours: total xp and xp/h"
+        chart_svg = _chart_svg(
+            chart, label, width=720, height=200,
+            time_axis=True, ticks=7, segmented_area=True,
+        )
         parts.append(
             '<figure class="big"><figcaption><b>last 24 hours</b>'
             '<span class="key line-key">total xp</span>'
-            '<span class="key area-key">xp/h</span></figcaption>'
-            f"{_chart_svg(data.charts[skill], label, width=720, height=200)}"
+            '<span class="key area-key">xp/h</span>'
+            f"{regular_key}</figcaption>"
+            f"{chart_svg}"
             "</figure>"
         )
         parts.append("</section>")

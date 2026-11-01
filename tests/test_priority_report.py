@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -34,14 +35,17 @@ class FakeResult:
 
 
 class FakeConn:
-    def __init__(self, rows, canonical=None) -> None:
+    def __init__(self, rows, canonical=None, regular=()) -> None:
         self.rows = rows
         self.canonical = canonical
+        self.regular = regular
 
     def execute(self, sql, params=None):
         if "FROM players" in sql:
             rows = [(self.canonical,)] if self.canonical else []
             return FakeResult(rows)
+        if "FROM snapshots" in sql:
+            return FakeResult(self.regular)
         return FakeResult(self.rows)
 
 
@@ -76,6 +80,41 @@ class DataTest(unittest.TestCase):
         data = collect_priority_data(conn, "alice", NOW, "generated")
         self.assertEqual(data.charts["attack"].xp, [])
         self.assertEqual(data.charts["attack"].gains, [])
+
+    def test_regular_snapshots_fill_priority_gaps(self) -> None:
+        priority = rows(
+            ("overall", NOW - 3600, 1000),
+            ("overall", NOW, 1100),
+        )
+        regular = rows(
+            ("overall", NOW - 7200, 500),
+            ("overall", NOW - 1800, 1050),
+            ("overall", NOW - 600, 1080),
+        )
+        conn = FakeConn(priority, regular=regular)
+        data = collect_priority_data(conn, "alice", NOW, "generated")
+        chart = data.charts["overall"]
+        self.assertEqual(data.current["overall"], 1100)
+        self.assertIn(NOW - 7200, chart.regular_xp)
+        self.assertIn(NOW - 1800, chart.regular_xp)
+        self.assertIn(NOW - 600, chart.regular_xp)
+        self.assertNotIn(NOW - 3600, chart.regular_xp)
+        self.assertNotIn(NOW, chart.regular_xp)
+        self.assertIn(NOW - 1800, chart.regular_gains)
+        self.assertIn(NOW, chart.regular_gains)
+
+    def test_regular_point_inside_priority_interval_is_ignored(self) -> None:
+        priority = rows(
+            ("overall", NOW - 1800, 1000),
+            ("overall", NOW, 1100),
+        )
+        regular = rows(("overall", NOW - 900, 1050))
+        conn = FakeConn(priority, regular=regular)
+        chart = collect_priority_data(conn, "alice", NOW, "generated").charts[
+            "overall"
+        ]
+        self.assertNotIn(NOW - 900, chart.regular_xp)
+        self.assertNotIn(NOW - 900, [stamp for stamp, _ in chart.xp])
 
 
 class EventTest(unittest.TestCase):
@@ -158,6 +197,33 @@ class PageTest(unittest.TestCase):
         self.assertEqual(page.count('class="subheading"'), 2)
         self.assertIn('href="../players/alice.html"', page)
         self.assertIn('type="application/rss+xml"', page)
+
+    def test_time_axis_uses_hh_mm_ticks(self) -> None:
+        page = render_priority_page(self.make_data())
+        labels = re.findall(
+            r'<text x="[^"]+" y="\d+" text-anchor="[^"]+">'
+            r"(\d\d:\d\d)</text>",
+            page,
+        )
+        self.assertEqual(len(labels), len(SKILLS) * 7)
+        self.assertNotIn("2027-01-15<", page)
+
+    def test_regular_data_is_marked_and_coloured(self) -> None:
+        data = self.make_data()
+        chart = ChartData(
+            NOW - 86400,
+            NOW,
+            [(NOW - 86400, 400), (NOW - 3600, 800), (NOW, 1000)],
+            [(NOW - 3600, 400), (NOW, 200)],
+            frozenset({NOW - 3600}),
+            frozenset({NOW - 3600}),
+        )
+        page = render_priority_page(
+            data._replace(charts={skill: chart for skill in SKILLS})
+        )
+        self.assertIn("regular data", page)
+        self.assertIn('class="line regular"', page)
+        self.assertIn('class="area regular"', page)
 
     def test_no_data_charts(self) -> None:
         data = self.make_data()

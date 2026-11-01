@@ -137,7 +137,9 @@ Priority reports live under `reports/priority/` and are served at
 - `index.html`: list of the configured priority players, linked to their pages
   and feeds. The general report links here.
 - `<name>.html`: current xp and one large chart per skill for the last 24 hours,
-  with the total xp line and the xp/hour area.
+  with the total xp line and the xp/hour area. Time ticks use `hh:mm`. Missing
+  30-minute samples are filled from the normal snapshot history and drawn in
+  orange.
 - `<name>.xml`: RSS 2.0 feed with one item per 30-minute fetch where at least one
   xp value changed. The feed covers the retained day.
 
