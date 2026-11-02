@@ -34,7 +34,7 @@ _REPORT_LOCK = threading.Lock()
 
 
 def _remove_old_reports(report_dir: Path) -> None:
-    """Only latest.txt and general.html are kept."""
+    """Remove old timestamped reports and temporary files."""
     for pattern in (
         "report_*.txt", "report_*.html", ".general.*.tmp", "players/.*.tmp",
     ):

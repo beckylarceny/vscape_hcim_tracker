@@ -95,7 +95,7 @@ def _merged_points(
     priority: list[tuple[int, int]],
     regular: list[tuple[int, int]],
 ) -> dict[int, tuple[int, bool]]:
-    """Priority samples plus regular samples only in uncovered periods."""
+    """Priority snapshots plus regular snapshots only in uncovered periods."""
     chosen: dict[int, tuple[int, bool]] = {
         timestamp: (xp, False) for timestamp, xp in priority
     }
