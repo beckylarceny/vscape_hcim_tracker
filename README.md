@@ -60,7 +60,8 @@ Each container runs only its own service code:
 - `src/collector/` - highscores fetching, priority collection and the
   collection loop. Container command: `python -m src.collector`.
 - `src/web/` - report generation, static HTTP server and the report timer.
-  Container command: `python -m src.web`.
+  Container command: `python -m src.web`. Shared rendering primitives live in
+  `html.py`, `chart.py` and `format.py`.
 - `src/db/` - PostgreSQL schema and `python -m src.db` for one-shot schema
   creation.
 - `src/common/` - configuration, database queries and other code shared by the

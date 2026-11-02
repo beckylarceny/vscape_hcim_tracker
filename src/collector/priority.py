@@ -17,7 +17,7 @@ from ..common.utility import (
 from . import api
 from .collection import add_stats, zero_stats
 from .rate import RateLimiter
-from .schedule import next_slot
+from ..common.utility import next_slot
 
 log = logging.getLogger("vscape_hcim_tracker.collector.priority")
 
@@ -111,7 +111,6 @@ def collect_priority_once(
 
     conn = storage.connect(dsn)
     try:
-        storage.ensure_schema(conn)
         storage.prune_priority_data(
             conn, now - DEFAULT_PRIORITY_RETENTION_SECONDS
         )

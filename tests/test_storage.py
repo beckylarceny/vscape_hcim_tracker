@@ -163,6 +163,18 @@ class SnapshotTest(DatabaseTest):
         self.assertEqual(buckets[0], (T1, 2))
         self.assertEqual(buckets[1][1], 1)
 
+        by_skill = storage.xp_by_skill_at_or_before(self.conn, T2)
+        self.assertEqual(by_skill["overall"], {"alice": 200, "bob": 50})
+        self.assertEqual(by_skill["attack"], {"alice": 50})
+        self.assertEqual(
+            storage.latest_xp_by_skill_many(self.conn, ["alice", "bob"]),
+            {
+                "alice": {"overall": 200, "attack": 50},
+                "bob": {"overall": 50},
+            },
+        )
+        self.assertEqual(storage.latest_xp_by_skill_many(self.conn, []), {})
+
 
 class PriorityStorageTest(DatabaseTest):
     def test_priority_insert_latest_prune(self) -> None:
@@ -227,7 +239,10 @@ class ReportTest(DatabaseTest):
             names = sorted(p.name for p in Path(directory).iterdir())
             self.assertEqual(
                 names,
-                ["general.html", "latest.txt", "players", "priority"],
+                [
+                    "general.html", "latest.txt", "players", "priority",
+                    "status.html", "status.txt",
+                ],
             )
             page = Path(directory, "general.html").read_text(encoding="utf-8")
             self.assertIn("alice", page)

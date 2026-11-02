@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import MagicMock, patch
 
 from src.common.utility import SKILLS, SPANS, parse_duration
+from src.web import reporting
+from src.web.format import hours as _hours
+from src.web.format import years_months as _years_months
 from src.web.report import (
     Record,
     ReportData,
-    _hours,
     _scan_player_points,
-    _years_months,
     render_html,
     render_text,
 )
@@ -230,6 +232,48 @@ class HtmlReportTest(unittest.TestCase):
             page,
         )
         self.assertNotIn('<a href="#skill-overall">', page)
+
+
+class ReportCacheTest(unittest.TestCase):
+    def setUp(self) -> None:
+        reporting._REPORT_CACHE.clear()
+        self.addCleanup(reporting._REPORT_CACHE.clear)
+
+    def test_ranking_data_is_reused_until_table_counts_change(self) -> None:
+        conn = MagicMock()
+        conn.execute.return_value.fetchone.side_effect = [
+            (371, 400, 600),
+            (371, 400, 600),
+            (371, 401, 600),
+        ]
+        data = ReportData(
+            generated="2026-01-01 00:00 UTC",
+            now_epoch=NOW,
+            interval=86400,
+            collect_interval=21600,
+            lookback=LOOKBACK,
+            player_count=371,
+            coverage_total=371,
+            gains={},
+            records={},
+            coverage=[],
+        )
+        with patch.object(
+            reporting.report, "build_report_data", return_value=data
+        ) as build:
+            first = reporting.report_data(
+                conn, NOW, 86400, LOOKBACK, 5, 371, 21600, 371
+            )
+            second = reporting.report_data(
+                conn, NOW + 60, 86400, LOOKBACK, 5, 371, 21600, 371
+            )
+            third = reporting.report_data(
+                conn, NOW + 120, 86400, LOOKBACK, 5, 371, 21600, 371
+            )
+
+        self.assertEqual(build.call_count, 2)
+        self.assertEqual(first.now_epoch, NOW)
+        self.assertEqual(second.now_epoch, NOW + 60)
 
 
 class DurationTest(unittest.TestCase):

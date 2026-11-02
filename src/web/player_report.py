@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import bisect
 import heapq
-import html
-import os
 import re
 import urllib.parse
-from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple, TypeVar
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     import psycopg
@@ -21,13 +18,28 @@ from ..common.utility import (
     SPANS,
 )
 from ..common.storage import as_datetime
-from . import styles
+from .chart import (
+    CHART_POINTS,
+    MISSING_AFTER_SECONDS,
+    WIDE_CHART_POINTS,
+    ChartData,
+    chart_svg,
+    thin,
+)
+from .format import frequency_name, years_months
+from .html import (
+    SKILL_TAB_SCRIPT,
+    date,
+    esc,
+    num,
+    skill_panel_open,
+    skill_tabs_html,
+    style_tag,
+)
 
 PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/highscores?player={username}"
 
 _UNSAFE_SLUG = re.compile(r"[^A-Za-z0-9._-]+")
-
-_Number = TypeVar("_Number", int, float)
 
 # Total xp needed for levels 1-99, from the OSRS experience table:
 # https://oldschool.runescape.wiki/w/Experience#Levels_1%E2%80%9399
@@ -52,16 +64,6 @@ class Record(NamedTuple):
     end_epoch: int
     username: str
     start_epoch: int
-
-
-class ChartData(NamedTuple):
-    start_epoch: int
-    end_epoch: int
-    xp: list[tuple[int, int]]
-    gains: list[tuple[int, float]]
-    regular_xp: frozenset[int] = frozenset()
-    regular_gains: frozenset[int] = frozenset()
-    missing: tuple[tuple[int, int], ...] = ()
 
 
 class Frequency(NamedTuple):
@@ -115,28 +117,7 @@ def total_level(current: dict[str, int]) -> int | None:
     return sum(levels) if levels else None
 
 
-def _years_months(seconds: int) -> str:
-    days = seconds // 86400
-    years, remainder = divmod(days, 365)
-    months = remainder // 30
-    years += months // 12
-    months %= 12
-    parts: list[str] = []
-    if years:
-        parts.append(f"{years} {'year' if years == 1 else 'years'}")
-    if months:
-        parts.append(f"{months} {'month' if months == 1 else 'months'}")
-    if not parts:
-        return f"{days} {'day' if days == 1 else 'days'}"
-    return " ".join(parts)
-
-
-def _bucket_count(lookback: int) -> int:
-    """One coverage bucket per day, clamped to a readable bar."""
-    return max(30, min(300, (lookback + 86399) // 86400))
-
-
-def _current_line(
+def current_line(
     skill: str, value: int | None, current: dict[str, int]
 ) -> str:
     if value is None:
@@ -144,9 +125,9 @@ def _current_line(
     if skill == "overall":
         total = total_level(current)
         if total is None:
-            return _num(value)
-        return f"{_num(value)} (total level {total})"
-    return f"{_num(value)} (level {level_for_xp(value)})"
+            return num(value)
+        return f"{num(value)} (total level {total})"
+    return f"{num(value)} (level {level_for_xp(value)})"
 
 
 def scan_player_points(
@@ -168,6 +149,7 @@ def scan_player_points(
     if not points:
         return
     oldest_start = now_epoch - lookback - slack
+    count = len(points)
     pointers = {name: 0 for name, _ in spans}
     best: dict[str, Record | None] = {name: None for name, _ in spans}
     for end_epoch, end_xp in points:
@@ -179,7 +161,7 @@ def scan_player_points(
                 continue
             pointer = pointers[name]
             while (
-                pointer + 1 < len(points)
+                pointer + 1 < count
                 and points[pointer + 1][0] <= start_epoch
             ):
                 pointer += 1
@@ -212,17 +194,7 @@ def scan_player_points(
             heapq.heapreplace(heap, record)
 
 
-def _date(epoch: int) -> str:
-    return as_datetime(epoch).strftime("%Y-%m-%d")
-
-
-def _atomic_write(path: Path, text: str) -> None:
-    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temp.write_text(text, encoding="utf-8")
-    os.replace(temp, path)
-
-
-def _group_points(rows) -> dict[str, list[tuple[int, int]]]:
+def group_points(rows) -> dict[str, list[tuple[int, int]]]:
     points: dict[str, list[tuple[int, int]]] = {}
     for skill, observed_at, xp in rows:
         points.setdefault(skill, []).append(
@@ -243,7 +215,7 @@ def _points_by_skill(
         """,
         (username, as_datetime(earliest)),
     ).fetchall()
-    return _group_points(rows)
+    return group_points(rows)
 
 
 def _xp_at(
@@ -263,27 +235,6 @@ def _past_gain(
     if latest is None or earlier is None:
         return None
     return max(0, latest - earlier)
-
-
-def _thin(
-    points: list[tuple[int, _Number]], limit: int
-) -> list[tuple[int, _Number]]:
-    """Evenly reduce a series while keeping its endpoints."""
-    if len(points) <= limit:
-        return points
-    step = len(points) / (limit - 1)
-    thinned = [points[0]]
-    for index in range(1, limit - 1):
-        thinned.append(points[int(round(index * step))])
-    thinned.append(points[-1])
-    return thinned
-
-
-CHART_POINTS = 90
-# Checkpoints are fetched at least once a day, so a longer break between them
-# means that stretch of the window was never collected.
-MISSING_AFTER_SECONDS = 36 * 3600
-WIDE_CHART_POINTS = 160
 
 
 def _chart_data(
@@ -329,7 +280,7 @@ def _chart_data(
         line.append((now_epoch, line[-1][1]))
 
     return ChartData(
-        start, now_epoch, _thin(line, max_points), _thin(gains, max_points)
+        start, now_epoch, thin(line, max_points), thin(gains, max_points)
     )
 
 
@@ -367,11 +318,6 @@ def _checkpoint_times(
     return [int(row[0].timestamp()) for row in rows]
 
 
-def _frequency_name(seconds: int) -> str:
-    if seconds < 3600:
-        return f"{seconds // 60} minute"
-    return f"{seconds // 3600:g} hour"
-
 
 def _frequency_info(
     times: list[int],
@@ -388,11 +334,11 @@ def _frequency_info(
 
     entries = (
         (
-            f"{_frequency_name(DEFAULT_PRIORITY_INTERVAL_SECONDS)} priority",
+            f"{frequency_name(DEFAULT_PRIORITY_INTERVAL_SECONDS)} priority",
             priority_times,
         ),
-        (_frequency_name(live_interval), live),
-        (_frequency_name(backfill_interval), backfill),
+        (frequency_name(live_interval), live),
+        (frequency_name(backfill_interval), backfill),
     )
     return tuple(
         Frequency(
@@ -515,208 +461,12 @@ def collect_player_data(
     )
 
 
-def _esc(value: object) -> str:
-    return html.escape(str(value), quote=True)
-
-
-def _num(value: int) -> str:
-    return f"{value:,}"
-
-
-def _short_number(value: float) -> str:
-    value = max(0.0, float(value))
-    for size, suffix in ((1_000_000_000, "B"), (1_000_000, "M"),
-                         (1_000, "k")):
-        if value >= size:
-            text = f"{value / size:.1f}".removesuffix(".0")
-            return f"{text}{suffix}"
-    if value >= 100:
-        return f"{value:,.0f}"
-    return f"{value:,.1f}".removesuffix(".0")
-
-
-def _chart_svg(
-    chart: ChartData,
-    label: str,
-    width: int = 360,
-    height: int = 118,
-    *,
-    time_axis: bool = False,
-    ticks: int = 2,
-    segmented_area: bool = False,
-) -> str:
-    if not chart.xp and not chart.gains:
-        return '<p class="empty">(no data)</p>'
-
-    left, right, top, bottom = 46, 46, 10, 18
-    plot_width = width - left - right
-    plot_height = height - top - bottom
-    window = max(1, chart.end_epoch - chart.start_epoch)
-
-    def x(timestamp: int) -> float:
-        ratio = (timestamp - chart.start_epoch) / window
-        return left + plot_width * min(1.0, max(0.0, ratio))
-
-    xp_values = [value for _, value in chart.xp]
-    gain_values = [value for _, value in chart.gains]
-    xp_min = min(xp_values) if xp_values else 0
-    xp_max = max(xp_values) if xp_values else 0
-    gain_max = max(gain_values) if gain_values else 0
-    xp_span = xp_max - xp_min
-    gain_span = gain_max or 1
-
-    def y_xp(value: int) -> float:
-        if not xp_span:
-            return top + plot_height / 2
-        ratio = (value - xp_min) / xp_span
-        return top + plot_height * (1 - ratio)
-
-    def y_gain(value: float) -> float:
-        return top + plot_height * (1 - value / gain_span)
-
-    baseline = top + plot_height
-    parts = [
-        f'<svg viewBox="0 0 {width} {height}" role="img" '
-        f'aria-label="{_esc(label)}">',
-        f"<title>{_esc(label)}</title>",
-    ]
-    for gap_start, gap_end in chart.missing:
-        gap_left = x(gap_start)
-        gap_right = x(gap_end)
-        if gap_right > gap_left:
-            parts.append(
-                f'<rect class="gap" x="{gap_left:.1f}" y="{top:.1f}" '
-                f'width="{gap_right - gap_left:.1f}" '
-                f'height="{plot_height:.1f}"/>'
-            )
-    for step in range(3):
-        line_y = top + plot_height * step / 2
-        parts.append(
-            f'<line class="grid" x1="{left}" y1="{line_y:.1f}" '
-            f'x2="{width - right}" y2="{line_y:.1f}"/>'
-        )
-
-    if time_axis:
-        count = max(2, ticks)
-        for index in range(count):
-            ratio = index / (count - 1)
-            tick_x = left + plot_width * ratio
-            timestamp = int(chart.start_epoch + window * ratio)
-            parts.append(
-                f'<line class="grid" x1="{tick_x:.1f}" y1="{top:.1f}" '
-                f'x2="{tick_x:.1f}" y2="{baseline:.1f}"/>'
-            )
-            anchor = (
-                "start" if index == 0
-                else "end" if index == count - 1
-                else "middle"
-            )
-            parts.append(
-                f'<text x="{tick_x:.1f}" y="{height - 3}" '
-                f'text-anchor="{anchor}">'
-                f"{as_datetime(timestamp).strftime('%H:%M')}</text>"
-            )
-
-    if chart.gains:
-        if segmented_area:
-            previous_time = chart.start_epoch
-            for timestamp, value in chart.gains:
-                start_x = x(previous_time)
-                end_x = x(timestamp)
-                if end_x > start_x:
-                    top_y = y_gain(value)
-                    css = (
-                        "area regular"
-                        if timestamp in chart.regular_gains
-                        else "area"
-                    )
-                    area = (
-                        f"{start_x:.1f},{baseline:.1f} "
-                        f"{start_x:.1f},{top_y:.1f} "
-                        f"{end_x:.1f},{top_y:.1f} "
-                        f"{end_x:.1f},{baseline:.1f}"
-                    )
-                    parts.append(
-                        f'<polygon class="{css}" points="{area}"/>'
-                    )
-                previous_time = max(previous_time, timestamp)
-        else:
-            first_time, first_gain = chart.gains[0]
-            area = [
-                f"{x(first_time):.1f},{baseline:.1f}",
-                f"{x(first_time):.1f},{y_gain(first_gain):.1f}",
-            ]
-            previous_gain = first_gain
-            for timestamp, value in chart.gains[1:]:
-                # Hold the previous gain until this point, then step.
-                area.append(f"{x(timestamp):.1f},{y_gain(previous_gain):.1f}")
-                area.append(f"{x(timestamp):.1f},{y_gain(value):.1f}")
-                previous_gain = value
-            area.append(f"{x(chart.gains[-1][0]):.1f},{baseline:.1f}")
-            parts.append(f'<polygon class="area" points="{" ".join(area)}"/>')
-
-    if len(chart.xp) > 1:
-        if chart.regular_xp:
-            for (t1, v1), (t2, v2) in zip(chart.xp, chart.xp[1:]):
-                css = (
-                    "line regular"
-                    if t1 in chart.regular_xp or t2 in chart.regular_xp
-                    else "line"
-                )
-                parts.append(
-                    f'<line class="{css}" x1="{x(t1):.1f}" '
-                    f'y1="{y_xp(v1):.1f}" x2="{x(t2):.1f}" '
-                    f'y2="{y_xp(v2):.1f}"/>'
-                )
-        else:
-            points = " ".join(
-                f"{x(timestamp):.1f},{y_xp(value):.1f}"
-                for timestamp, value in chart.xp
-            )
-            parts.append(f'<polyline class="line" points="{points}"/>')
-    elif chart.xp:
-        timestamp, value = chart.xp[0]
-        css = "dot regular" if timestamp in chart.regular_xp else "dot"
-        parts.append(
-            f'<circle class="{css}" cx="{x(timestamp):.1f}" '
-            f'cy="{y_xp(value):.1f}" r="2"/>'
-        )
-
-    parts.append(
-        f'<text class="xp" x="{left - 3}" y="{top + 4}" '
-        f'text-anchor="end">{_esc(_short_number(xp_max))}</text>'
-    )
-    parts.append(
-        f'<text class="xp" x="{left - 3}" y="{baseline + 4}" '
-        f'text-anchor="end">{_esc(_short_number(xp_min))}</text>'
-    )
-    parts.append(
-        f'<text class="gain" x="{width - right + 3}" y="{top + 4}">'
-        f"{_esc(_short_number(gain_max))}</text>"
-    )
-    parts.append(
-        f'<text class="gain" x="{width - right + 3}" y="{baseline + 4}">'
-        "0</text>"
-    )
-    if not time_axis:
-        parts.append(
-            f'<text x="{left}" y="{height - 3}">'
-            f"{_date(chart.start_epoch)}</text>"
-        )
-        parts.append(
-            f'<text x="{width - right}" y="{height - 3}" '
-            f'text-anchor="end">{_date(chart.end_epoch)}</text>'
-        )
-    parts.append("</svg>")
-    return "".join(parts)
-
-
 def _current_table(data: PlayerData) -> str:
     rows: list[str] = []
     overall_level = total_level(data.current)
     for skill in SKILLS:
         value = data.current.get(skill)
-        shown = _num(value) if value is not None else "-"
+        shown = num(value) if value is not None else "-"
         if skill == "overall":
             level = str(overall_level) if overall_level is not None else "-"
         elif value is None:
@@ -724,7 +474,7 @@ def _current_table(data: PlayerData) -> str:
         else:
             level = str(level_for_xp(value))
         rows.append(
-            f"<tr><td>{_esc(skill)}</td>"
+            f"<tr><td>{esc(skill)}</td>"
             f'<td class="num">{level}</td>'
             f'<td class="num">{shown}</td></tr>'
         )
@@ -739,9 +489,9 @@ def _past_table(data: PlayerData, skill: str) -> str:
     rows: list[str] = []
     for name in SPANS:
         past = data.past[skill][name]
-        shown = _num(past) if past is not None else "-"
+        shown = num(past) if past is not None else "-"
         rows.append(
-            f'<tr><td>{_esc(name.capitalize())}</td>'
+            f'<tr><td>{esc(name.capitalize())}</td>'
             f'<td class="num">{shown}</td></tr>'
         )
     return (
@@ -763,12 +513,12 @@ def _best_table(data: PlayerData, skill: str) -> str:
             )
         else:
             cells = (
-                f'<td class="num">{_num(record.gain)}</td>'
-                f'<td class="date">{_date(record.start_epoch)}</td>'
-                f'<td class="date">{_date(record.end_epoch)}</td>'
+                f'<td class="num">{num(record.gain)}</td>'
+                f'<td class="date">{date(record.start_epoch)}</td>'
+                f'<td class="date">{date(record.end_epoch)}</td>'
             )
         rows.append(
-            f"<tr><td>{_esc(name.capitalize())}</td>{cells}</tr>"
+            f"<tr><td>{esc(name.capitalize())}</td>{cells}</tr>"
         )
     return (
         '<table class="best"><thead><tr><th>Span</th>'
@@ -779,64 +529,19 @@ def _best_table(data: PlayerData, skill: str) -> str:
     )
 
 
-SKILL_TAB_SCRIPT = (
-    "<script>"
-    "const TABS=document.querySelectorAll('[role=tab]');"
-    "const PANELS=document.querySelectorAll('.tab-panel');"
-    "function showSkill(name){"
-    "TABS.forEach(function(tab){"
-    "tab.setAttribute('aria-selected',"
-    "tab.dataset.skill===name?'true':'false');});"
-    "PANELS.forEach(function(panel){"
-    "panel.hidden=panel.id!=='skill-'+name;});"
-    "if(location.hash!=='#skill-'+name){"
-    "history.replaceState(null,'','#skill-'+name);}}"
-    "TABS.forEach(function(tab){"
-    "tab.addEventListener('click',function(){"
-    "showSkill(tab.dataset.skill);"
-    "const bar=document.getElementById('skill-tabs');"
-    "if(bar.getBoundingClientRect().top<0){bar.scrollIntoView();}"
-    "});});"
-    "var initial=(location.hash||'').replace('#skill-','');"
-    "if(document.getElementById('skill-'+initial)){showSkill(initial);}"
-    "</script>"
-)
-
-
-def skill_tabs_html(flat: frozenset[str] | set[str] = frozenset()) -> str:
-    buttons = "".join(
-        f'<button class="tab{" flat" if skill in flat else ""}" '
-        f'type="button" role="tab" '
-        f'id="tab-{_esc(skill)}" data-skill="{_esc(skill)}" '
-        f'aria-controls="skill-{_esc(skill)}" '
-        f'aria-selected="{"true" if index == 0 else "false"}">'
-        f"{_esc(skill)}</button>"
-        for index, skill in enumerate(SKILLS)
-    )
-    return f'<div class="tabs" id="skill-tabs" role="tablist">{buttons}</div>'
-
-
-def skill_panel_open(index: int, skill: str) -> str:
-    hidden = "" if index == 0 else " hidden"
-    return (
-        f'<section id="skill-{_esc(skill)}" class="tab-panel" '
-        f'role="tabpanel" aria-labelledby="tab-{_esc(skill)}"{hidden}>'
-    )
-
-
 def _frequency_meta(data: PlayerData) -> str:
     lines: list[str] = []
     for info in data.frequencies:
         if info.first_epoch is None:
             lines.append(
-                f'<p class="meta">{_esc(info.name)} snapshots: 0</p>'
+                f'<p class="meta">{esc(info.name)} snapshots: 0</p>'
             )
             continue
-        first = _date(info.first_epoch)
-        last = _date(info.last_epoch)
+        first = date(info.first_epoch)
+        last = date(info.last_epoch)
         when = first if first == last else f"{first} to {last}"
         lines.append(
-            f'<p class="meta">{_esc(info.name)} snapshots: '
+            f'<p class="meta">{esc(info.name)} snapshots: '
             f"{info.snapshots}, {when}</p>"
         )
     return "".join(lines)
@@ -851,15 +556,15 @@ def render_player_page(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{_esc(data.username.lower())} - xp tracker</title>",
-        f"{styles.style_tag()}</head>",
+        f"<title>{esc(data.username.lower())} - xp tracker</title>",
+        f"{style_tag()}</head>",
         '<body id="top" class="player">',
         '<div class="backlinks">'
         '<p class="sub"><a href="../general.html">general tracking</a> · '
         '<a href="../status.html">status</a></p>'
         "</div>",
-        f"<h1>{_esc(data.username)}</h1>",
-        f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
+        f"<h1>{esc(data.username)}</h1>",
+        f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}">'
         "Vidyascape highscores</a></h2>",
         *(
             [
@@ -869,7 +574,7 @@ def render_player_page(
             ]
             if is_priority else []
         ),
-        f'<p class="meta">generated at: {_esc(data.generated)}</p>',
+        f'<p class="meta">generated at: {esc(data.generated)}</p>',
         _frequency_meta(data),
         '<div class="stats">',
         "<h2>Current xp</h2>",
@@ -879,11 +584,11 @@ def render_player_page(
 
     for index, skill in enumerate(SKILLS):
         parts.append(skill_panel_open(index, skill))
-        parts.append(f"<h2>{_esc(skill)}</h2>")
+        parts.append(f"<h2>{esc(skill)}</h2>")
         value = data.current.get(skill)
         parts.append(
             '<p class="meta">current xp: '
-            f"{_current_line(skill, value, data.current)}</p>"
+            f"{current_line(skill, value, data.current)}</p>"
         )
         parts.append("<h3>Gains</h3>")
         parts.append('<div class="gain-tables">')
@@ -899,12 +604,12 @@ def render_player_page(
         for name in SPANS:
             label = f"{skill} {name}: total xp and xp/h"
             parts.append(
-                f"<figure><figcaption><b>{_esc(name)}</b>"
+                f"<figure><figcaption><b>{esc(name)}</b>"
                 '<span class="key line-key">total xp</span>'
                 '<span class="key area-key">xp/h</span>'
                 '<span class="key gap-key">missing data</span>'
                 "</figcaption>"
-                f"{_chart_svg(data.charts[skill][name], label)}"
+                f"{chart_svg(data.charts[skill][name], label)}"
                 "</figure>"
             )
         parts.append(
@@ -913,7 +618,7 @@ def render_player_page(
             '<span class="key area-key">xp/h</span>'
             '<span class="key gap-key">missing data</span>'
             "</figcaption>"
-            f"{_chart_svg(data.charts[skill]['all'], f'{skill} all time: total xp and xp/h')}"
+            f"{chart_svg(data.charts[skill]['all'], f'{skill} all time: total xp and xp/h')}"
             "</figure>"
         )
         parts.append("</div>")
@@ -925,6 +630,6 @@ def render_player_page(
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"
     )
-    parts.append(f'<footer class="version">{_esc(version)}</footer>')
+    parts.append(f'<footer class="version">{esc(version)}</footer>')
     parts.append("</body></html>")
     return "\n".join(parts) + "\n"

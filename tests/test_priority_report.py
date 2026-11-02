@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from src.common.utility import SKILLS
-from src.web.player_report import ChartData
+from src.web.chart import ChartData
 from src.web.priority_report import (
     Event,
     PriorityData,

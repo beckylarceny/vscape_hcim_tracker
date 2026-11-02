@@ -119,6 +119,27 @@ def latest_priority_xp_by_skill(
     return _latest_xp(conn, "priority_snapshots", username)
 
 
+def latest_xp_by_skill_many(
+    conn: psycopg.Connection, usernames: Sequence[str]
+) -> dict[str, dict[str, int]]:
+    """Most recent stored xp per skill for several players in one query."""
+    if not usernames:
+        return {}
+    rows = conn.execute(
+        """
+        SELECT DISTINCT ON (skill, username) skill, username, xp
+        FROM snapshots
+        WHERE username = ANY(%s)
+        ORDER BY skill, username, observed_at DESC
+        """,
+        (list(usernames),),
+    ).fetchall()
+    result: dict[str, dict[str, int]] = {name: {} for name in usernames}
+    for skill, username, xp in rows:
+        result[username][skill] = int(xp)
+    return result
+
+
 def top_players_by_xp(
     conn: psycopg.Connection, skill: str, limit: int
 ) -> list[str]:
@@ -258,16 +279,30 @@ def xp_at_or_before(
     conn: psycopg.Connection, skill: str, cutoff_epoch: int
 ) -> dict[str, int]:
     """Latest xp per player at or before `cutoff_epoch`."""
+    return xp_by_skill_at_or_before(conn, cutoff_epoch).get(skill, {})
+
+
+def xp_by_skill_at_or_before(
+    conn: psycopg.Connection, cutoff_epoch: int
+) -> dict[str, dict[str, int]]:
+    """Latest xp for every skill and player at or before `cutoff_epoch`.
+
+    One index-ordered scan replaces the per-skill queries a report used to
+    issue for each span.
+    """
     rows = conn.execute(
         """
-        SELECT DISTINCT ON (username) username, xp
+        SELECT DISTINCT ON (skill, username) skill, username, xp
         FROM snapshots
-        WHERE skill = %s AND observed_at <= %s
-        ORDER BY username, observed_at DESC
+        WHERE observed_at <= %s
+        ORDER BY skill, username, observed_at DESC
         """,
-        (skill, as_datetime(cutoff_epoch)),
+        (as_datetime(cutoff_epoch),),
     ).fetchall()
-    return {username: xp for username, xp in rows}
+    result: dict[str, dict[str, int]] = {}
+    for skill, username, xp in rows:
+        result.setdefault(skill, {})[username] = int(xp)
+    return result
 
 
 def coverage_buckets(

@@ -11,13 +11,13 @@ from types import SimpleNamespace
 
 from src.common.utility import DATA_START_EPOCH, SKILLS, SPANS
 from src.web import reporting
+from src.web.chart import ChartData
+from src.web.chart import chart_svg as _chart_svg
+from src.web.chart import thin as _thin
 from src.web.player_report import (
-    ChartData,
     PlayerData,
     Record,
-    _chart_svg,
     _frequency_info,
-    _thin,
     collect_player_data,
     highscores_url,
     level_for_xp,

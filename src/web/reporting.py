@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import threading
 import time
@@ -19,7 +20,7 @@ from ..common.utility import (
     effective_lookback,
 )
 from . import player_report, priority_report, report, status_report
-from .player_report import _atomic_write
+from .html import atomic_write
 
 log = logging.getLogger("vscape_hcim_tracker.web.reporting")
 
@@ -37,6 +38,65 @@ def _remove_old_reports(report_dir: Path) -> None:
 
 _PLAYER_WATERMARKS: dict[Path, dict[str, tuple[int, object]]] = {}
 _PLAYER_PRIORITY_STATE: dict[Path, frozenset[str]] = {}
+
+# Ranking data changes only when rows are written. Recomputing it every minute
+# scans the whole snapshot history, so reuse the previous result until the
+# table counts move. Window-boundary drift within an hour is immaterial.
+_CACHE_TOLERANCE_SECONDS = 3600
+_REPORT_CACHE: dict[
+    tuple, tuple[tuple[int, int, int], int, report.ReportData]
+] = {}
+_REPORT_CACHE_SIZE = 4
+
+
+def _timestamp() -> str:
+    return dt.datetime.now(tz=dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _data_version(conn) -> tuple[int, int, int]:
+    row = conn.execute(
+        """
+        SELECT (SELECT count(*) FROM players),
+               (SELECT count(*) FROM snapshots),
+               (SELECT count(*) FROM checkpoints)
+        """
+    ).fetchone()
+    return (int(row[0]), int(row[1]), int(row[2]))
+
+
+def report_data(
+    conn,
+    now_epoch: int,
+    interval: int,
+    lookback: int,
+    top_n: int,
+    player_count: int,
+    collect_interval: int,
+    coverage_total: int | None = None,
+) -> report.ReportData:
+    """Ranking data, recomputed only when the stored rows or parameters change."""
+    key = (
+        interval, lookback, top_n, player_count, collect_interval, coverage_total,
+    )
+    version = _data_version(conn)
+    cached = _REPORT_CACHE.get(key)
+    if (
+        cached is not None
+        and cached[0] == version
+        and 0 <= now_epoch - cached[1] <= _CACHE_TOLERANCE_SECONDS
+    ):
+        return cached[2]._replace(
+            now_epoch=now_epoch, generated=_timestamp()
+        )
+
+    data = report.build_report_data(
+        conn, now_epoch, interval, lookback, top_n, player_count,
+        collect_interval, coverage_total,
+    )
+    if len(_REPORT_CACHE) >= _REPORT_CACHE_SIZE:
+        _REPORT_CACHE.pop(next(iter(_REPORT_CACHE)))
+    _REPORT_CACHE[key] = (version, now_epoch, data)
+    return data
 
 
 def _player_watermarks(conn) -> dict[str, tuple[int, object]]:
@@ -100,7 +160,7 @@ def write_player_pages(
         except Exception:  # noqa: BLE001 - one page must not break the rest
             log.exception("could not build the player report for %r", username)
             continue
-        _atomic_write(directory / name, page)
+        atomic_write(directory / name, page)
         written += 1
         if written % 50 == 0:
             log.info(
@@ -129,7 +189,7 @@ def write_report(
 ) -> Path:
     """Write the text and HTML reports from one shared computation."""
     with _REPORT_LOCK:
-        data = report.build_report_data(
+        data = report_data(
             conn, now_epoch, interval, lookback, top_n, player_count,
             collect_interval, coverage_total,
         )
@@ -140,8 +200,8 @@ def write_report(
         report_dir.mkdir(parents=True, exist_ok=True)
         text_path = report_dir / "latest.txt"
         html_path = report_dir / "general.html"
-        _atomic_write(text_path, text)
-        _atomic_write(html_path, page)
+        atomic_write(text_path, text)
+        atomic_write(html_path, page)
         _remove_old_reports(report_dir)
 
         key = report_dir.resolve()
@@ -203,7 +263,6 @@ def write_current_report(args, dsn: str) -> None:
     """Render the page from existing data, e.g. before the first run."""
     conn = storage.connect(dsn)
     try:
-        storage.ensure_schema(conn)
         row = conn.execute("SELECT count(*) FROM players").fetchone()
         verified = int(row[0])
         row = conn.execute(

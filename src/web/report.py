@@ -10,20 +10,25 @@ if TYPE_CHECKING:
     import psycopg
 
 from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
-from .player_report import (
-    Record,
+from .format import bucket_count, hours, players_line, years_months
+from .html import (
     SKILL_TAB_SCRIPT,
-    _bucket_count,
-    _date,
-    _esc,
-    _years_months,
-    player_page_href,
-    scan_player_points as _scan_player_points,
+    date,
+    esc,
     skill_panel_open,
     skill_tabs_html,
+    style_tag,
 )
-from ..common.storage import as_datetime, coverage_buckets, xp_at_or_before
-from . import styles
+from .player_report import (
+    Record,
+    player_page_href,
+    scan_player_points as _scan_player_points,
+)
+from ..common.storage import (
+    as_datetime,
+    coverage_buckets,
+    xp_by_skill_at_or_before,
+)
 
 
 class ReportData(NamedTuple):
@@ -55,20 +60,12 @@ def read_version(report_dir) -> str:
     return f"software version {parts[0]}, updated {parts[1]}"
 
 
-def _hours(seconds: int) -> str:
-    hours = seconds / 3600
-    return f"{hours:g} {'hour' if hours == 1 else 'hours'}"
-
-
 def _top_gains_for_skill(
-    conn: psycopg.Connection,
+    latest: dict[str, int],
+    earlier: dict[str, int],
     skill: str,
-    now_epoch: int,
-    span: int,
     top_n: int,
 ) -> list[tuple[str, int]]:
-    latest = xp_at_or_before(conn, skill, now_epoch)
-    earlier = xp_at_or_before(conn, skill, now_epoch - span)
     gains: list[tuple[str, int]] = []
     for username, xp in latest.items():
         before = earlier.get(username)
@@ -78,58 +75,72 @@ def _top_gains_for_skill(
     return gains[:top_n]
 
 
-def _scan_records_for_skill(
+def _scan_records(
     conn: psycopg.Connection,
-    skill: str,
     now_epoch: int,
     lookback: int,
     slack: int,
     top_n: int,
-) -> dict[str, list[Record]]:
-    """Best window of each span, sliding across the whole lookback period.
+) -> dict[str, dict[str, list[Record]]]:
+    """Best window of each span across every skill in one ordered scan.
 
     Stored points are sparse: a skill's xp is treated as constant between two
     stored points. A window therefore needs only one stored point at or before
     its start, and one at its end.
     """
     spans = list(SPANS.items())
-    heaps: dict[str, list[Record]] = {name: [] for name, _ in spans}
     margin = max(span for _, span in spans)
+    earliest = now_epoch - lookback - margin
+    heaps: dict[str, dict[str, list[Record]]] = {
+        skill: {name: [] for name, _ in spans} for skill in SKILLS
+    }
 
     sql = """
-        SELECT username, observed_at, xp
+        SELECT skill, username,
+               extract(epoch FROM observed_at)::bigint AS observed_epoch,
+               xp
         FROM snapshots
-        WHERE skill = %s AND observed_at >= %s
-        ORDER BY username, observed_at
+        WHERE observed_at >= %s
+        ORDER BY skill, username, observed_at DESC
     """
-    earliest = now_epoch - lookback - margin
 
-    with conn.cursor(name=f"records_{skill}") as cursor:
+    current_skill: str | None = None
+    current_user: str | None = None
+    points: list[tuple[int, int]] = []
+
+    def flush() -> None:
+        if current_user is None or current_skill is None:
+            return
+        points.reverse()
+        _scan_player_points(
+            current_user, points, spans, now_epoch, lookback,
+            slack, top_n, heaps[current_skill],
+        )
+        points.clear()
+
+    with conn.cursor(name="records") as cursor:
         cursor.itersize = 20000
-        cursor.execute(sql, (skill, as_datetime(earliest)))
-
-        current_user: str | None = None
-        points: list[tuple[int, int]] = []
-        for username, observed_at, xp in cursor:
+        cursor.execute(sql, (as_datetime(earliest),))
+        for skill, username, observed_at, xp in cursor:
+            if skill != current_skill:
+                flush()
+                current_skill = skill
+                current_user = None
+            if skill not in heaps:
+                continue
             if username != current_user:
-                if current_user is not None:
-                    _scan_player_points(
-                        current_user, points, spans, now_epoch, lookback,
-                        slack, top_n, heaps,
-                    )
+                flush()
                 current_user = username
-                points = []
-            points.append((int(observed_at.timestamp()), xp))
-        if current_user is not None:
-            _scan_player_points(
-                current_user, points, spans, now_epoch, lookback,
-                slack, top_n, heaps,
-            )
+            points.append((int(observed_at), int(xp)))
+        flush()
 
-    result: dict[str, list[Record]] = {}
-    for name, _ in spans:
-        result[name] = sorted(heaps[name], reverse=True)[:top_n]
-    return result
+    return {
+        name: {
+            skill: sorted(heaps[skill][name], reverse=True)[:top_n]
+            for skill in SKILLS
+        }
+        for name, _ in spans
+    }
 
 
 def build_report_data(
@@ -150,24 +161,20 @@ def build_report_data(
     )
 
     gains: dict[str, dict[str, list[tuple[str, int]]]] = {}
+    latest = xp_by_skill_at_or_before(conn, now_epoch)
     for name, span in SPANS.items():
+        earlier = xp_by_skill_at_or_before(conn, now_epoch - span)
         gains[name] = {
-            skill: _top_gains_for_skill(conn, skill, now_epoch, span, top_n)
+            skill: _top_gains_for_skill(
+                latest.get(skill, {}), earlier.get(skill, {}), skill, top_n
+            )
             for skill in SKILLS
         }
 
-    records: dict[str, dict[str, list[Record]]] = {
-        name: {} for name in SPANS
-    }
-    for skill in SKILLS:
-        per_span = _scan_records_for_skill(
-            conn, skill, now_epoch, lookback, interval, top_n
-        )
-        for name in SPANS:
-            records[name][skill] = per_span[name]
+    records = _scan_records(conn, now_epoch, lookback, interval, top_n)
 
     # One bar segment per day of the lookback window.
-    buckets = _bucket_count(lookback)
+    buckets = bucket_count(lookback)
     coverage = coverage_buckets(
         conn, now_epoch - lookback, now_epoch, buckets
     )
@@ -212,12 +219,12 @@ def render_text(data: ReportData) -> str:
     lines = ["XP TRACKER REPORT"]
     for name, value in (
         ("generated at", data.generated),
-        ("grid end", _date(data.now_epoch)),
-        ("backfill interval", _hours(data.interval)),
-        ("live interval", _hours(data.collect_interval)),
+        ("grid end", date(data.now_epoch)),
+        ("backfill interval", hours(data.interval)),
+        ("live interval", hours(data.collect_interval)),
         ("priority interval", f"{DEFAULT_PRIORITY_INTERVAL_SECONDS // 60} minutes"),
-        ("lookback interval", _years_months(data.lookback)),
-        ("players logged", _players_line(data)),
+        ("lookback interval", years_months(data.lookback)),
+        ("players logged", players_line(data.player_count, data.coverage_total)),
     ):
         lines.append(f"{name + ':':<20}{value}")
     lines.append("")
@@ -243,7 +250,7 @@ def render_text(data: ReportData) -> str:
             lambda span: [
                 f"      {rank:>2}. {record.username:<24} "
                 f"{record.gain:>15,}  "
-                f"{_date(record.start_epoch)}..{_date(record.end_epoch)}"
+                f"{date(record.start_epoch)}..{date(record.end_epoch)}"
                 for rank, record in enumerate(
                     data.records[span].get(skill, []), start=1
                 )
@@ -254,7 +261,7 @@ def render_text(data: ReportData) -> str:
 
 
 def _player_link(username: str) -> str:
-    return f'<a href="{_esc(player_page_href(username))}">{_esc(username)}</a>'
+    return f'<a href="{esc(player_page_href(username))}">{esc(username)}</a>'
 
 
 def _table(css: str, header: str, rows: list[str], colspan: int) -> str:
@@ -267,12 +274,6 @@ def _table(css: str, header: str, rows: list[str], colspan: int) -> str:
         + "".join(rows)
         + "</tbody></table>"
     )
-
-
-def _players_line(data: ReportData) -> str:
-    if data.coverage_total > data.player_count:
-        return f"{data.player_count} / {data.coverage_total}"
-    return str(data.player_count)
 
 
 def _gains_table(gains: list[tuple[str, int]]) -> str:
@@ -290,11 +291,11 @@ def _records_table(records: list[Record], span_name: str) -> str:
     rows = []
     for rank, record in enumerate(records, start=1):
         if single_date:
-            dates = f"<td class=date>{_date(record.end_epoch)}</td>"
+            dates = f"<td class=date>{date(record.end_epoch)}</td>"
         else:
             dates = (
-                f"<td class=date>{_date(record.start_epoch)}</td>"
-                f"<td class=date>{_date(record.end_epoch)}</td>"
+                f"<td class=date>{date(record.start_epoch)}</td>"
+                f"<td class=date>{date(record.end_epoch)}</td>"
             )
         rows.append(
             f"<tr><td class=rank>{rank}</td><td>{_player_link(record.username)}</td>"
@@ -333,7 +334,7 @@ def _js_literal(value: object) -> str:
 def _player_finder(data: ReportData) -> str:
     ordered = sorted(data.players, key=str.casefold)
     options = "".join(
-        f'<option value="{_esc(name)}"></option>' for name in ordered
+        f'<option value="{esc(name)}"></option>' for name in ordered
     )
     lookup = {name.casefold(): player_page_href(name) for name in ordered}
     return (
@@ -355,7 +356,7 @@ def render_html(data: ReportData) -> str:
     metas = "\n".join(
         f'<p class="meta">{name}: {value}</p>'
         for name, value in (
-            ("generated at", _esc(data.generated)),
+            ("generated at", esc(data.generated)),
         )
     )
     parts: list[str] = [
@@ -363,7 +364,7 @@ def render_html(data: ReportData) -> str:
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>general tracking - xp tracker</title>",
-        f"{styles.style_tag()}</head>",
+        f"{style_tag()}</head>",
         '<body id="top" class="rankings wide">',
         '<div class="backlinks"><p class="sub">'
         '<a href="priority/index.html">priority tracking</a> · '
@@ -378,7 +379,7 @@ def render_html(data: ReportData) -> str:
 
     for index, skill in enumerate(SKILLS):
         parts.append(skill_panel_open(index, skill))
-        parts.append(f"<h2>{_esc(skill)}</h2>")
+        parts.append(f"<h2>{esc(skill)}</h2>")
         parts.append("<h3>Past</h3>")
         parts.append('<div class="tables">')
         for span_name in SPANS:
@@ -403,7 +404,7 @@ def render_html(data: ReportData) -> str:
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"
     )
-    parts.append(f'<footer class="version">{_esc(data.version)}</footer>')
+    parts.append(f'<footer class="version">{esc(data.version)}</footer>')
     parts.append("</body></html>")
     return "\n".join(parts) + "\n"
 

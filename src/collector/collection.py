@@ -53,7 +53,6 @@ def collect_all(
     totals = zero_stats()
     conn = storage.connect(dsn)
     try:
-        storage.ensure_schema(conn)
         current: dict[str, dict[str, int]] = {}
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             futures = {
@@ -90,20 +89,18 @@ def collect_all(
             return totals
 
         done = storage.checkpoint_times_by_player(conn)
-        last_xp = {
-            name: storage.latest_xp_by_skill(conn, name) for name in current
-        }
+        last_xp = storage.latest_xp_by_skill_many(conn, list(current))
 
-        for index, timestamp in enumerate(grid_times, start=1):
-            todo = [
-                name for name in current
-                if timestamp not in done.get(name, ())
-            ]
-            if not todo:
-                continue
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            for index, timestamp in enumerate(grid_times, start=1):
+                todo = [
+                    name for name in current
+                    if timestamp not in done.get(name, ())
+                ]
+                if not todo:
+                    continue
 
-            gained_by_player: dict[str, dict[str, int]] = {}
-            with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+                gained_by_player: dict[str, dict[str, int]] = {}
                 futures = {
                     pool.submit(_fetch_gains, name, timestamp, limiter): name
                     for name in todo
@@ -125,34 +122,34 @@ def collect_all(
                         continue
                     gained_by_player[name] = gained
 
-            if not gained_by_player:
-                continue
+                if not gained_by_player:
+                    continue
 
-            observed = storage.as_datetime(timestamp)
-            rows: list[tuple] = []
-            pairs: list[tuple[str, int]] = []
-            for name, gained in gained_by_player.items():
-                xp_now = current[name]
-                previous = last_xp[name]
-                for skill in SKILLS:
-                    xp = max(0, xp_now[skill] - gained[skill])
-                    if previous.get(skill) == xp:
-                        # No change since the newer stored point.
-                        continue
-                    previous[skill] = xp
-                    rows.append((name, skill, observed, xp))
-                pairs.append((name, timestamp))
+                observed = storage.as_datetime(timestamp)
+                rows: list[tuple] = []
+                pairs: list[tuple[str, int]] = []
+                for name, gained in gained_by_player.items():
+                    xp_now = current[name]
+                    previous = last_xp.setdefault(name, {})
+                    for skill in SKILLS:
+                        xp = max(0, xp_now[skill] - gained[skill])
+                        if previous.get(skill) == xp:
+                            # No change since the newer stored point.
+                            continue
+                        previous[skill] = xp
+                        rows.append((name, skill, observed, xp))
+                    pairs.append((name, timestamp))
 
-            if rows:
-                storage.insert_snapshots(conn, rows)
-            storage.insert_checkpoint_pairs(conn, pairs)
-            totals["rows"] += len(rows)
-            log.info(
-                "backfill %d/%d: %s, %d players, %d rows",
-                index, len(grid_times),
-                observed.strftime("%Y-%m-%d %H:%M"),
-                len(pairs), len(rows),
-            )
+                if rows:
+                    storage.insert_snapshots(conn, rows)
+                storage.insert_checkpoint_pairs(conn, pairs)
+                totals["rows"] += len(rows)
+                log.info(
+                    "backfill %d/%d: %s, %d players, %d rows",
+                    index, len(grid_times),
+                    observed.strftime("%Y-%m-%d %H:%M"),
+                    len(pairs), len(rows),
+                )
         return totals
     finally:
         conn.close()

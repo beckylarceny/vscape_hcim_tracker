@@ -25,8 +25,6 @@ def run_once(
     limiter = limiter or RateLimiter(args.rate)
     conn = storage.connect(dsn)
     try:
-        storage.ensure_schema(conn)
-
         grid_times = build_grid(
             now, interval, collect_interval, lookback,
             getattr(args, "retry_window", DEFAULT_RETRY_WINDOW_SECONDS),
