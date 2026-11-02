@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from src.status_report import (
+from src.web.status_report import (
     _elapsed,
     _interval_label,
     _server_version,

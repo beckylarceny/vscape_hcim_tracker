@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from .utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
+from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
 from .player_report import (
     Record,
     SKILL_TAB_SCRIPT,
@@ -22,7 +22,7 @@ from .player_report import (
     skill_panel_open,
     skill_tabs_html,
 )
-from .storage import as_datetime, coverage_buckets, xp_at_or_before
+from ..common.storage import as_datetime, coverage_buckets, xp_at_or_before
 from . import styles
 
 

@@ -7,8 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src import main, report, storage
-from src.utility import SKILLS, build_dsn
+from src.common import storage
+from src.common.utility import SKILLS, build_dsn
+from src.web import report, reporting
 
 DSN = os.environ.get("VSCAPE_HCIM_TRACKER_TEST_DSN") or build_dsn(
     "xp_tracker_test"
@@ -219,7 +220,7 @@ class ReportTest(DatabaseTest):
             for path in (old, old_html, stale):
                 path.write_text("old", encoding="utf-8")
 
-            main.write_report(
+            reporting.write_report(
                 self.conn, Path(directory), now, 86400, 31_536_000, 5, 2,
                 21600,
             )

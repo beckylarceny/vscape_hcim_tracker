@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from .utility import (
+from ..common.utility import (
     DEFAULT_PRIORITY_INTERVAL_SECONDS,
     DEFAULT_PRIORITY_RETENTION_SECONDS,
     SKILLS,
@@ -30,7 +30,7 @@ from .player_report import (
     skill_panel_open,
     skill_tabs_html,
 )
-from .storage import as_datetime, canonical_username
+from ..common.storage import as_datetime, canonical_username
 from . import styles
 
 WINDOW_SECONDS = DEFAULT_PRIORITY_RETENTION_SECONDS

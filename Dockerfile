@@ -22,4 +22,4 @@ RUN chmod 755 /usr/local/bin/docker-entrypoint.sh \
     && chown -R tracker:tracker /app
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["python", "-m", "src", "--loop", "--report-dir", "/app/reports"]
+CMD ["python", "-m", "src.collector", "--loop"]

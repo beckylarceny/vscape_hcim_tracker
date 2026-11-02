@@ -51,9 +51,8 @@ services:
     command:
       - python
       - -m
-      - src
+      - src.collector
       - --loop
-      - --collect-only
       - --workers
       - "2"
       - --rate
@@ -69,8 +68,7 @@ services:
     command:
       - python
       - -m
-      - src
-      - --serve-only
+      - src.web
       - --serve-port
       - "8000"
       - --serve-host
