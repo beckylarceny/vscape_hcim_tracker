@@ -59,10 +59,12 @@ URLs:
 ./scripts/start.sh
 ./scripts/stop.sh
 ./scripts/restart.sh
-docker compose -f docker/compose.yaml logs -f collector
-docker compose -f docker/compose.yaml logs -f web
+./scripts/logs.sh
+./scripts/logs.sh web
 docker compose -f docker/compose.yaml ps
 ```
+
+`logs.sh` follows one service and defaults to `collector`.
 
 With `COMPOSE_FILE` exported, drop the `-f` argument.
 

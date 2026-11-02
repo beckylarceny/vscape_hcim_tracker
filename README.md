@@ -28,7 +28,8 @@ checkpoint and retry recent gaps.
 ./scripts/stop.sh
 ./scripts/restart.sh
 ./scripts/update.sh
-docker compose -f docker/compose.yaml logs -f collector
+./scripts/logs.sh
+./scripts/logs.sh web
 ```
 
 The compose file is in `docker/`. Pass `-f docker/compose.yaml` to manual compose
