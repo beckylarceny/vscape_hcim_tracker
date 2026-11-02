@@ -422,6 +422,17 @@ class PageTest(unittest.TestCase):
             page,
         )
 
+    def test_containers_table_uses_containers_class(self) -> None:
+        page = render_status_page(collect())
+        self.assertIn('<table class="grid containers">', page)
+        self.assertIn(
+            ".status table.containers th:nth-child(3),\n"
+            ".status table.containers td:nth-child(3)"
+            "{width:7rem;white-space:nowrap}",
+            page,
+        )
+        self.assertIn("<td>running</td>", page)
+
     def test_every_table_shares_the_facts_styling(self) -> None:
         page = render_status_page(collect())
         self.assertIn('<th scope="row">6 hour</th>', page)
@@ -441,6 +452,7 @@ class PageTest(unittest.TestCase):
     def test_page_lists_compose_containers(self) -> None:
         page = render_status_page(collect())
         self.assertIn("<h3>containers</h3>", page)
+        self.assertIn('<table class="grid containers">', page)
         self.assertLess(
             page.index("<h2>service</h2>"),
             page.index("<h3>containers</h3>"),

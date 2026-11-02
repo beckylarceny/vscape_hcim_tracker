@@ -140,6 +140,8 @@ body.wide{max-width:72rem}
 .status table thead th:first-child{font-weight:600}
 .status table.runs th:first-child,
 .status table.runs td:first-child{width:6rem;white-space:nowrap}
+.status table.containers th:nth-child(3),
+.status table.containers td:nth-child(3){width:7rem;white-space:nowrap}
 p.note{color:#888;font-size:.85rem;margin:.2rem 0 .6rem}
 .status .coverage{height:18px}
 

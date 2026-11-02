@@ -685,7 +685,7 @@ def _container_table(containers: DockerStatus) -> str:
             f'<tr><td class=empty colspan="5">{_esc(message)}</td></tr>'
         )
     return (
-        '<table class="grid"><thead><tr><th>service</th>'
+        '<table class="grid containers"><thead><tr><th>service</th>'
         "<th>container</th><th>state</th><th>status</th>"
         "<th>image</th></tr></thead><tbody>"
         + rows
