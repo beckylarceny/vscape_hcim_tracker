@@ -121,7 +121,7 @@ class SlugTest(unittest.TestCase):
 
 
 class RenderTest(unittest.TestCase):
-    def test_header_escape_priority_and_metadata(self) -> None:
+    def test_header_current_xp_and_text(self) -> None:
         page = render_player_page(fake_data())
         self.assertIn(
             "<title>fuck jagex - vidyascape hcim xp tracker</title>", page
@@ -168,7 +168,6 @@ class RenderTest(unittest.TestCase):
         self.assertIn(f'<footer class="version">{version}</footer>', tagged)
         self.assertLess(tagged.index('class="to-top"'), tagged.index(version))
 
-    def test_current_xp_levels_and_tables(self) -> None:
         page = render_player_page(fake_data())
         self.assertIn("Current xp", page)
         self.assertIn("<th class=\"num\">Level</th>", page)
@@ -182,6 +181,7 @@ class RenderTest(unittest.TestCase):
         self.assertIn('<div class="gain-tables">', page)
         self.assertIn("<td class=\"num\">100</td>", page)
         self.assertIn("<td class=\"num\">500</td>", page)
+
 
     def test_one_chart_per_skill_and_span(self) -> None:
         page = render_player_page(fake_data())
@@ -218,7 +218,7 @@ class RenderTest(unittest.TestCase):
 
 
 class ChartTest(unittest.TestCase):
-    def test_gap_rectangles_mark_missing_sections(self) -> None:
+    def test_chart_gaps_and_gain_shape(self) -> None:
         from src.web.player_report import _missing_ranges
 
         self.assertEqual(_missing_ranges([], 0, 100, 10), ((0, 100),))
@@ -238,7 +238,6 @@ class ChartTest(unittest.TestCase):
         svg = _chart_svg(chart, "gaps")
         self.assertIn('class="gap"', svg)
 
-    def test_skipped_fetch_shades_the_gap(self) -> None:
         from src.web.player_report import _missing_ranges
 
         six_hourly = [0, 21600, 43200, 64800, 86400]
@@ -253,7 +252,6 @@ class ChartTest(unittest.TestCase):
         daily = [index * DAY for index in range(5)]
         self.assertEqual(_missing_ranges(daily, 0, 4 * DAY, 2 * DAY), ())
 
-    def test_gains_area_is_a_step_shape(self) -> None:
         chart = ChartData(
             start_epoch=NOW - 1000,
             end_epoch=NOW,
@@ -306,7 +304,7 @@ class CollectTest(unittest.TestCase):
             conn, "alice", NOW, LOOKBACK, DAY, "2026-01-01 00:00 UTC"
         )
 
-    def test_current_xp_and_best_window(self) -> None:
+    def test_collected_values_and_charts(self) -> None:
         conn = FakeConn(rows(
             ("overall", NOW - 3 * DAY, 1000),
             ("overall", NOW - 2 * DAY, 2000),
@@ -342,7 +340,6 @@ class CollectTest(unittest.TestCase):
             [("10 minute priority", 1), ("6 hour", 2), ("24 hour", 1)],
         )
 
-    def test_chart_points_and_rates(self) -> None:
         conn = FakeConn(rows(
             ("overall", NOW - 3 * DAY, 1000),
             ("overall", NOW - 2 * DAY, 2000),
@@ -389,7 +386,8 @@ class CollectTest(unittest.TestCase):
         chart = self.collect(conn).charts["overall"]["day"]
         self.assertEqual(chart.xp, [(NOW - DAY, 500), (NOW, 500)])
 
-    def test_missing_shading_follows_fetched_checkpoints(self) -> None:
+
+    def test_missing_data_and_empty_skills(self) -> None:
         # xp only changes twice, but the last 10 days and 30-40 days ago were
         # fetched daily; the 20 days in between were never fetched.
         checkpoints = sorted(
@@ -433,7 +431,6 @@ class CollectTest(unittest.TestCase):
             empty.charts["overall"]["day"].missing, ((NOW - DAY, NOW),)
         )
 
-    def test_absent_skills_are_empty(self) -> None:
         data = self.collect(FakeConn([]))
         self.assertEqual(data.current, {})
         self.assertIsNone(data.past["overall"]["day"])

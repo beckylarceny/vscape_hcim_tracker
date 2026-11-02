@@ -61,7 +61,7 @@ def rows(*points) -> list[tuple[str, dt.datetime, int]]:
 
 
 class DataTest(unittest.TestCase):
-    def test_current_xp_and_charts(self) -> None:
+    def test_current_xp_charts_and_regular_fill(self) -> None:
         conn = FakeConn(rows(
             ("overall", NOW - 1800, 1000),
             ("overall", NOW, 2000),
@@ -82,7 +82,6 @@ class DataTest(unittest.TestCase):
         self.assertEqual(missing.xp, [])
         self.assertEqual(missing.gains, [])
 
-    def test_regular_snapshots_fill_priority_gaps(self) -> None:
         priority = rows(
             ("overall", NOW - 3600, 1000),
             ("overall", NOW, 1100),
@@ -204,7 +203,7 @@ class PageTest(unittest.TestCase):
             charts=charts,
         )
 
-    def test_priority_page_charts_and_axis(self) -> None:
+    def test_page_charts_axis_and_empty_data(self) -> None:
         page = render_priority_page(self.make_data())
         self.assertEqual(page.count("<svg"), len(SKILLS))
         self.assertIn('viewBox="0 0 720 200"', page)
@@ -248,7 +247,6 @@ class PageTest(unittest.TestCase):
         self.assertIn('class="line regular"', page)
         self.assertIn('class="area regular"', page)
 
-    def test_no_data_charts(self) -> None:
         data = self.make_data()
         empty = data._replace(
             current={},

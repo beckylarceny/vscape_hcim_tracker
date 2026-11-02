@@ -100,7 +100,7 @@ class PlayerTest(DatabaseTest):
 
 
 class SnapshotTest(DatabaseTest):
-    def test_snapshot_and_checkpoint_writes(self) -> None:
+    def test_snapshot_checkpoint_and_lookups(self) -> None:
         self.add_player()
         rows = [
             ("alice", skill, storage.as_datetime(T1), 100)
@@ -130,7 +130,6 @@ class SnapshotTest(DatabaseTest):
             {T1, T2},
         )
 
-    def test_lookup_helpers(self) -> None:
         self.add_player("alice")
         self.add_player("bob")
         self.add_snapshot("alice", "overall", T1, 100)
@@ -206,7 +205,7 @@ class PriorityStorageTest(DatabaseTest):
 
 
 class ReportTest(DatabaseTest):
-    def test_player_watermark_follows_xp_not_checkpoints(self) -> None:
+    def test_watermarks_and_report_output(self) -> None:
         self.add_player("alice")
         self.add_snapshot("alice", "overall", T1, 100)
         storage.insert_checkpoints(self.conn, "alice", [T1])
@@ -227,7 +226,6 @@ class ReportTest(DatabaseTest):
         self.assertNotEqual(priority, after)
         self.assertEqual(priority["alice"][2], 1)
 
-    def test_write_report_ranks_and_prunes(self) -> None:
         now = 1_800_000_000
         self.add_player("alice")
         self.add_player("bob")

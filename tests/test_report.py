@@ -39,7 +39,7 @@ def build_points(burst_after_seconds: int = 100 * 86400) -> list[tuple[int, int]
 
 
 class RecordScanTest(unittest.TestCase):
-    def test_window_lengths_and_unaligned_now(self) -> None:
+    def test_window_scan_and_player_best(self) -> None:
         heaps = {name: [] for name in SPANS}
         _scan_player_points(
             "tester", build_points(), list(SPANS.items()),
@@ -63,7 +63,6 @@ class RecordScanTest(unittest.TestCase):
         )
         self.assertTrue(heaps["year"])
 
-    def test_player_appears_once_with_their_best_gain(self) -> None:
         points: list[tuple[int, int]] = []
         xp = 0
         for step in range(400):
@@ -122,14 +121,13 @@ class HtmlReportTest(unittest.TestCase):
             ],
         )
 
-    def test_escapes_player_names_and_formats_gains(self) -> None:
+    def test_page_content_and_text_report(self) -> None:
         page = render_html(self.make_data())
         self.assertIn("alice", page)
         self.assertIn("1,234", page)
         self.assertIn("&lt;bob&gt;", page)
         self.assertNotIn("<bob>", page)
 
-    def test_text_report_groups_by_skill_then_past_best(self) -> None:
         text = render_text(self.make_data())
         self.assertTrue(text.startswith("VIDYASCAPE HCIM XP TRACKER REPORT\n"))
         self.assertIn("overall", text)
@@ -143,7 +141,6 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn("10 minutes", text)
         self.assertIn("1. alice", text)
 
-    def test_player_names_link_to_player_pages_and_finder(self) -> None:
         data = self.make_data()
         gains = {span: dict(skills) for span, skills in data.gains.items()}
         gains["day"]["overall"] = [("Fuck Jagex", 100)]
@@ -156,7 +153,6 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn('"fuck jagex": "players/Fuck_Jagex"', page)
         self.assertIn("window.open(url,'_blank','noopener')", page)
 
-    def test_rankings_page_has_only_generated_metadata(self) -> None:
         data = self.make_data()._replace(coverage_total=4)
         page = render_html(data)
         self.assertIn(
@@ -170,7 +166,8 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn('href="status"', page)
         self.assertIn('class="rankings wide"', page)
 
-    def test_backlinks_sit_above_the_title(self) -> None:
+
+    def test_page_structure_and_version(self) -> None:
         page = render_html(self.make_data())
         backlinks = (
             '<div class="backlinks"><p class="sub">'
@@ -200,7 +197,6 @@ class HtmlReportTest(unittest.TestCase):
             page,
         )
 
-    def test_version_footer_and_text_line(self) -> None:
         import tempfile
         from pathlib import Path
 
@@ -224,7 +220,8 @@ class HtmlReportTest(unittest.TestCase):
             )
             self.assertEqual(read_version(report_dir), version)
 
-    def test_index_links_every_section(self) -> None:
+
+    def test_index_and_tabs(self) -> None:
         page = render_index(
             "2026-01-01 00:00 UTC", 371, 5, "software version abc"
         )
@@ -237,7 +234,6 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn("players tracked: 371", page)
         self.assertIn("software version abc", page)
 
-    def test_skills_are_tabs(self) -> None:
         page = render_html(self.make_data())
         self.assertIn(
             '<div class="tabs" id="skill-tabs" role="tablist">', page

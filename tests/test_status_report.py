@@ -161,7 +161,7 @@ def collect(conn: FakeConn | None = None, **overrides):
 
 
 class DockerTest(unittest.TestCase):
-    def testcontainer_rows_filter_map_and_sort(self) -> None:
+    def test_container_rows_project_and_errors(self) -> None:
         payload = [
             {
                 "Id": "bbb",
@@ -212,7 +212,6 @@ class DockerTest(unittest.TestCase):
         )
         self.assertEqual(container_rows("not a list", "vscape_hcim_tracker"), ())
 
-    def testself_project_matches_hostname(self) -> None:
         payload = [
             {
                 "Id": "abc123ffff",
@@ -233,7 +232,6 @@ class DockerTest(unittest.TestCase):
             self.assertIsNone(self_project(payload))
         self.assertIsNone(self_project("not a list"))
 
-    def test_container_status_reports_errors(self) -> None:
         with mock.patch(
             "src.web.status_docker._docker_get",
             side_effect=OSError("no socket"),
@@ -292,7 +290,7 @@ class CoverageTest(unittest.TestCase):
 
 
 class FormatTest(unittest.TestCase):
-    def testelapseduntil_andsize(self) -> None:
+    def test_format_helpers(self) -> None:
         self.assertEqual(elapsed(2 * DAY + 4 * 3600), "2 days 4 hours")
         self.assertEqual(elapsed(3 * 3600 + 12 * 60), "3 hours 12 minutes")
         self.assertEqual(elapsed(30), "less than a minute")
@@ -302,14 +300,12 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(size(1500), "1.5 KB")
         self.assertEqual(size(None), "unknown")
 
-    def testinterval_label_pluralizes(self) -> None:
         self.assertEqual(interval_label(60), "1 minute")
         self.assertEqual(interval_label(3600), "1 hour")
         self.assertEqual(interval_label(600), "10 minutes")
         self.assertEqual(interval_label(21600), "6 hours")
         self.assertEqual(interval_label(86400), "24 hours")
 
-    def testserver_version_formats_integers(self) -> None:
         self.assertEqual(server_version(170011), "17.0.11")
         self.assertEqual(server_version(160004), "16.0.4")
         self.assertEqual(server_version("170011"), "17.0.11")
@@ -318,7 +314,7 @@ class FormatTest(unittest.TestCase):
 
 
 class PageTest(unittest.TestCase):
-    def test_every_section_and_moved_metadata(self) -> None:
+    def test_sections_rows_and_backlinks(self) -> None:
         page = render_status_page(collect())
         for heading in (
             "data coverage", "service", "database", "backfill", "live",
@@ -358,7 +354,6 @@ class PageTest(unittest.TestCase):
         self.assertIn("python ", page)
         self.assertIn("class=\"status\"", page)
 
-    def test_rows_sit_under_their_own_headings(self) -> None:
         page = render_status_page(collect())
         backfill = page.index("<h2>backfill</h2>")
         live = page.index("<h2>live</h2>")
@@ -371,7 +366,6 @@ class PageTest(unittest.TestCase):
         self.assertLess(priority, page.index("next priority fetch"))
         self.assertLess(page.index("next priority fetch"), players)
 
-    def test_backlinks_sit_above_the_title(self) -> None:
         page = render_status_page(collect())
         backlinks = (
             '<div class="backlinks"><p class="sub">'
@@ -399,11 +393,11 @@ class PageTest(unittest.TestCase):
             page,
         )
 
-    def test_players_line_shows_partial_total(self) -> None:
+
+    def test_players_and_timers(self) -> None:
         page = render_status_page(collect(coverage_total=4))
         self.assertIn("2 / 4", page)
 
-    def test_report_interval_zero_is_not_on_a_timer(self) -> None:
         page = render_status_page(collect(report_interval=0))
         self.assertIn("<td>not on a timer</td>", page)
         self.assertNotIn("every 1 minute", page)
@@ -414,7 +408,6 @@ class PageTest(unittest.TestCase):
         timed = render_status_page(collect(report_interval=3600))
         self.assertIn("<td>every 1 hour</td>", timed)
 
-    def test_next_slot_arithmetic(self) -> None:
         data = collect()
         self.assertEqual(
             data.next_live_epoch,
@@ -425,7 +418,8 @@ class PageTest(unittest.TestCase):
             (NOW // PRIORITY + 1) * PRIORITY + 5,
         )
 
-    def test_database_text_is_escaped(self) -> None:
+
+    def test_database_text_and_degrade(self) -> None:
         conn = FakeConn(
             database="<script>alert(1)</script>",
             host="<host>",
@@ -436,12 +430,12 @@ class PageTest(unittest.TestCase):
         self.assertNotIn("<script>alert(1)</script>", page)
         self.assertIn("&lt;host&gt;:5432", page)
 
-    def test_unreachable_database_degrades(self) -> None:
         page = render_status_page(collect(FakeConn(fail=True)))
         self.assertIn("unreachable: connection refused", page)
         self.assertIn("unknown", page)
 
-    def test_last_run_ended(self) -> None:
+
+    def test_last_run_and_runs_table(self) -> None:
         finished = FakeConn(runs=[
             (5, stamp(NOW - 1500), stamp(NOW - 21 * 60), "ok", 120, 1, 99),
         ])
@@ -457,7 +451,6 @@ class PageTest(unittest.TestCase):
         page = render_status_page(collect(FakeConn(runs=[])))
         self.assertIn("last run ended</th><td>unknown</td>", page)
 
-    def test_recent_runs_table_uses_runs_class(self) -> None:
         page = render_status_page(collect())
         self.assertIn('<table class="grid runs">', page)
         self.assertIn(
@@ -469,7 +462,8 @@ class PageTest(unittest.TestCase):
         self.assertNotIn("width:6rem", page)
         self.assertNotIn(".status table.runs", page)
 
-    def test_containers_table_uses_containers_class(self) -> None:
+
+    def test_containers_tables_and_text(self) -> None:
         page = render_status_page(collect())
         self.assertIn('<table class="grid containers">', page)
         self.assertIn(
@@ -480,7 +474,6 @@ class PageTest(unittest.TestCase):
         )
         self.assertIn("<td>running</td>", page)
 
-    def test_every_table_shares_the_facts_styling(self) -> None:
         page = render_status_page(collect())
         self.assertIn('<th scope="row">6 hour</th>', page)
         self.assertIn('<th scope="row" class=rank>', page)
@@ -496,7 +489,6 @@ class PageTest(unittest.TestCase):
         self.assertNotIn("table.facts{", page)
         self.assertNotIn("table.grid{", page)
 
-    def test_page_lists_compose_containers(self) -> None:
         page = render_status_page(collect())
         self.assertIn("<h3>containers</h3>", page)
         self.assertIn('<table class="grid containers">', page)
@@ -521,7 +513,6 @@ class PageTest(unittest.TestCase):
             page,
         )
 
-    def test_unavailable_docker_degrades(self) -> None:
         data = collect()._replace(
             containers=DockerStatus((), "permission denied")
         )
@@ -537,7 +528,6 @@ class PageTest(unittest.TestCase):
         )
         self.assertIn("no containers found", empty)
 
-    def test_container_values_are_escaped(self) -> None:
         data = collect()._replace(containers=DockerStatus((
             ContainerInfo("a<b", "c<d", "e<f", "g<h", "i<j"),
         )))
@@ -545,14 +535,14 @@ class PageTest(unittest.TestCase):
         self.assertIn("a&lt;b", page)
         self.assertNotIn("a<b", page)
 
-    def test_status_text_has_a_containers_section(self) -> None:
         text = render_status_text(collect())
         self.assertIn("CONTAINERS", text)
         self.assertLess(text.index("SERVICE"), text.index("CONTAINERS"))
         self.assertLess(text.index("CONTAINERS"), text.index("DATABASE"))
         self.assertIn("vscape_hcim_tracker-collector-1", text)
 
-    def test_status_tables_are_centered(self) -> None:
+
+    def test_table_alignment_and_header(self) -> None:
         page = render_status_page(collect())
         self.assertIn(
             ".status table{width:100%;max-width:52rem;"
@@ -560,7 +550,6 @@ class PageTest(unittest.TestCase):
             page,
         )
 
-    def test_header_first_cell_is_bold_but_row_labels_are_not(self) -> None:
         page = render_status_page(collect())
         self.assertIn("<th>interval</th>", page)
         bold = ".status table thead th:first-child{font-weight:600}"
@@ -574,7 +563,8 @@ class PageTest(unittest.TestCase):
             page.index(bold),
         )
 
-    def test_status_text_mirrors_the_page(self) -> None:
+
+    def test_text_counts_and_ranges(self) -> None:
         data = collect()
         text = render_status_text(data)
         for heading in (
@@ -603,7 +593,6 @@ class PageTest(unittest.TestCase):
         self.assertIn("2/2 players (100%)", text)
         self.assertTrue(text.endswith("\n\n" + data.version + "\n"))
 
-    def test_frequency_counts_and_ranges(self) -> None:
         data = collect()
         self.assertEqual(
             [entry.name for entry in data.snapshots],
@@ -619,7 +608,6 @@ class PageTest(unittest.TestCase):
         self.assertIn("10 minute priority", page)
         self.assertIn("24 hour", page)
 
-    def test_small_tables_are_counted_exactly(self) -> None:
         data = collect()
         rows = {table.name: table.rows for table in data.tables}
         self.assertEqual(rows["players"], 101)
@@ -631,6 +619,7 @@ class PageTest(unittest.TestCase):
         page = render_status_page(data)
         self.assertIn('<th scope="row">runs</th><td class="num">7</td>', page)
         self.assertIn('<th scope="row">players</th><td class="num">101</td>', page)
+
 
     def test_write_status_page(self) -> None:
         with tempfile.TemporaryDirectory() as directory, mock.patch(
