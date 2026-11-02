@@ -663,7 +663,7 @@ def _frequency_table(
     entries: tuple[FrequencyStatus, ...], heading: str
 ) -> str:
     rows = "".join(
-        f"<tr><td>{_esc(name)}</td>"
+        f'<tr><th scope="row">{_esc(name)}</th>'
         f'<td class="num">{count:,}</td>'
         f'<td class="date">{_date_or_dash(first)}</td>'
         f'<td class="date">{_date_or_dash(last)}</td></tr>'
@@ -714,12 +714,12 @@ def _last_run_ended(
 
 def render_status_page(data: StatusData) -> str:
     tables = "".join(
-        f"<tr><td>{_esc(name)}</td>"
+        f'<tr><th scope="row">{_esc(name)}</th>'
         f'<td class="num">{_num_or_dash(rows)}</td></tr>'
         for name, rows in _table_rows(data)
     )
     runs = "".join(
-        f"<tr><td class=rank>{run.id}</td>"
+        f'<tr><th scope="row" class=rank>{run.id}</th>'
         f"<td>{_esc(_stamp(run.started_epoch))}</td>"
         f"<td>{_esc(run.status)}</td>"
         f'<td class="num">{_num_or_dash(run.requests)}</td>'

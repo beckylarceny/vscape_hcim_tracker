@@ -309,11 +309,26 @@ class PageTest(unittest.TestCase):
         page = render_status_page(collect())
         self.assertIn('<table class="grid runs">', page)
         self.assertIn(
-            ".status table.runs th:first-child,"
+            ".status table.runs th:first-child,\n"
             ".status table.runs td:first-child"
             "{width:6rem;white-space:nowrap}",
             page,
         )
+
+    def test_every_table_shares_the_facts_styling(self) -> None:
+        page = render_status_page(collect())
+        self.assertIn('<th scope="row">6 hour</th>', page)
+        self.assertIn('<th scope="row" class=rank>', page)
+        self.assertIn(
+            ".status table{width:100%;max-width:52rem;margin:.25rem 0 1.1rem}",
+            page,
+        )
+        self.assertIn(
+            ".status table th:first-child,.status table td:first-child{color:#888",
+            page,
+        )
+        self.assertNotIn("table.facts{", page)
+        self.assertNotIn("table.grid{", page)
 
     def test_status_text_mirrors_the_page(self) -> None:
         data = collect()
@@ -367,8 +382,8 @@ class PageTest(unittest.TestCase):
         self.assertEqual(rows["priority_snapshots"], 3000)
         self.assertEqual(rows["priority_checkpoints"], 4000)
         page = render_status_page(data)
-        self.assertIn('<td>runs</td><td class="num">7</td>', page)
-        self.assertIn('<td>players</td><td class="num">101</td>', page)
+        self.assertIn('<th scope="row">runs</th><td class="num">7</td>', page)
+        self.assertIn('<th scope="row">players</th><td class="num">101</td>', page)
 
     def test_write_status_page(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

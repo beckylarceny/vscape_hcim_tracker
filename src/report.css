@@ -126,13 +126,11 @@ body.wide{max-width:72rem}
         line-height:1.5}
 
 .status h2{text-align:left}
-table.facts{width:100%;max-width:52rem;margin:.25rem 0 1.1rem;
-            table-layout:fixed}
-table.facts th,table.facts td{white-space:normal}
-table.facts th{color:#888;font-weight:400;width:16rem}
-table.facts td{overflow-wrap:anywhere}
-table.grid{width:100%;margin:.25rem 0 .9rem}
-.status table.runs th:first-child,.status table.runs td:first-child{width:6rem;white-space:nowrap}
+.status table{width:100%;max-width:52rem;margin:.25rem 0 1.1rem}
+.status table th:first-child,.status table td:first-child{color:#888;
+    font-weight:400;width:16rem}
+.status table.runs th:first-child,
+.status table.runs td:first-child{width:6rem;white-space:nowrap}
 p.note{color:#888;font-size:.85rem;margin:.2rem 0 .6rem}
 .status .coverage{height:18px}
 
