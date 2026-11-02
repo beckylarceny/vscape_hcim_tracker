@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import platform
 import time
 from pathlib import Path
@@ -30,7 +29,6 @@ class DatabaseStatus(NamedTuple):
     latency_ms: float | None
     server_version: str | None
     database: str | None
-    user: str | None
     host: str | None
     port: int | None
     size_bytes: int | None
@@ -144,7 +142,7 @@ def _database_status(conn) -> DatabaseStatus:
         latency_ms = (time.perf_counter() - started) * 1000
     except Exception as error:  # noqa: BLE001
         return DatabaseStatus(
-            False, None, None, None, None, None, None, None, None, str(error)
+            False, None, None, None, None, None, None, None, str(error)
         )
 
     info = getattr(conn, "info", None)
@@ -164,7 +162,6 @@ def _database_status(conn) -> DatabaseStatus:
         latency_ms,
         _server_version(getattr(info, "server_version", None)),
         _text(getattr(info, "dbname", None)),
-        _text(getattr(info, "user", None)),
         _text(getattr(info, "host", None)),
         int(port) if port is not None else None,
         size_bytes,
@@ -429,9 +426,12 @@ def coverage_runs(
     return runs
 
 
-def coverage_bar(data: StatusData) -> str:
+def _coverage_segments(
+    data: StatusData,
+) -> list[tuple[int, int, str]]:
+    """(length, player count, label) for each coverage run."""
     total = max(1, data.coverage_total)
-    segments: list[str] = []
+    segments: list[tuple[int, int, str]] = []
     for index, length, present in coverage_runs(data.coverage):
         start_epoch = data.coverage[index][0]
         next_index = index + length
@@ -447,6 +447,15 @@ def coverage_bar(data: StatusData) -> str:
         ratio = min(1.0, present / total)
         pct = round(ratio * 100)
         label = f"{when} ({duration}): {present}/{total} players ({pct}%)"
+        segments.append((length, present, label))
+    return segments
+
+
+def coverage_bar(data: StatusData) -> str:
+    total = max(1, data.coverage_total)
+    segments: list[str] = []
+    for length, present, label in _coverage_segments(data):
+        ratio = min(1.0, present / total)
         if present:
             style = (
                 f' style="flex:{length};'
@@ -539,7 +548,7 @@ def _fact_rows(rows: list[tuple[str, str]]) -> str:
     return (
         '<table class="facts"><tbody>'
         + "".join(
-            f"<tr><th>{label}</th><td>{value}</td></tr>"
+            f"<tr><th>{label}</th><td>{_esc(value)}</td></tr>"
             for label, value in rows
         )
         + "</tbody></table>"
@@ -556,27 +565,116 @@ def _date_or_dash(epoch: int | None) -> str:
     return _date(epoch) if epoch is not None else "-"
 
 
-def _frequency_table(entries: tuple[FrequencyStatus, ...]) -> str:
-    rows = "".join(
-        f"<tr><td>{_esc(entry.name)}</td>"
-        f'<td class="num">{entry.count:,}</td>'
-        f'<td class="date">{_date_or_dash(entry.first_epoch)}</td>'
-        f'<td class="date">{_date_or_dash(entry.last_epoch)}</td></tr>'
+def _service_rows(data: StatusData) -> list[tuple[str, str]]:
+    uptime = data.now_epoch - data.started_epoch
+    rebuild = (
+        "not on a timer"
+        if data.report_interval <= 0
+        else f"every {_interval_label(data.report_interval)}"
+    )
+    return [
+        ("uptime", _elapsed(uptime)),
+        ("started at", _stamp(data.started_epoch)),
+        (
+            "process",
+            f"python {platform.python_version()}, {platform.platform()}",
+        ),
+        ("report rebuild", rebuild),
+    ]
+
+
+def _database_rows(data: StatusData) -> list[tuple[str, str]]:
+    database = data.database
+    server_started = database.server_started_epoch
+    database_up = (
+        "unknown"
+        if server_started is None
+        else f"{_stamp(server_started)} "
+        f"({_elapsed(data.now_epoch - server_started)})"
+    )
+    return [
+        ("connection", _connection_line(database)),
+        ("server version", database.server_version or "unknown"),
+        ("database up since", database_up),
+        ("database", database.database or "unknown"),
+        ("host", _endpoint(database)),
+        ("size on disk", _size(database.size_bytes)),
+    ]
+
+
+def _collection_rows(data: StatusData) -> list[tuple[str, str]]:
+    newest = data.newest_checkpoint_epoch
+    checkpoint_age = (
+        f"{_elapsed(data.now_epoch - newest)} ago"
+        if newest is not None else "unknown"
+    )
+    newest_priority = data.newest_priority_epoch
+    priority_age = (
+        f"{_elapsed(data.now_epoch - newest_priority)} ago"
+        if newest_priority is not None else "unknown"
+    )
+    return [
+        (
+            "backfill interval",
+            _interval_label(data.backfill_interval),
+        ),
+        ("live interval", _interval_label(data.collect_interval)),
+        ("priority interval", _interval_label(data.priority_interval)),
+        ("retry window", _years_months(data.retry_window)),
+        ("lookback interval", _years_months(data.lookback)),
+        ("last run", _run_line(data.runs)),
+        ("last run ended", _last_run_ended(data.runs, data.now_epoch)),
+        (
+            "next live fetch",
+            f"at {_clock(data.next_live_epoch)}, "
+            f"{_until(data.next_live_epoch - data.now_epoch)}",
+        ),
+        (
+            "next priority fetch",
+            f"at {_clock(data.next_priority_epoch)}, "
+            f"{_until(data.next_priority_epoch - data.now_epoch)}",
+        ),
+        ("newest checkpoint", checkpoint_age),
+        ("newest priority checkpoint", priority_age),
+    ]
+
+
+def _players_rows(data: StatusData) -> list[tuple[str, str]]:
+    return [
+        ("players logged", report._players_line(data)),
+        ("priority players tracked", str(data.priority_players)),
+    ]
+
+
+def _table_rows(data: StatusData) -> list[tuple[str, int | None]]:
+    return [(table.name, table.rows) for table in data.tables]
+
+
+def _frequency_rows(
+    entries: tuple[FrequencyStatus, ...],
+) -> list[tuple[str, int, int | None, int | None]]:
+    return [
+        (entry.name, entry.count, entry.first_epoch, entry.last_epoch)
         for entry in entries
+    ]
+
+
+def _frequency_table(
+    entries: tuple[FrequencyStatus, ...], heading: str
+) -> str:
+    rows = "".join(
+        f"<tr><td>{_esc(name)}</td>"
+        f'<td class="num">{count:,}</td>'
+        f'<td class="date">{_date_or_dash(first)}</td>'
+        f'<td class="date">{_date_or_dash(last)}</td></tr>'
+        for name, count, first, last in _frequency_rows(entries)
     )
     return (
         '<table class="grid"><thead><tr><th>interval</th>'
-        '<th class="num">snapshots</th><th class="date">first</th>'
+        f'<th class="num">{heading}</th><th class="date">first</th>'
         '<th class="date">last</th></tr></thead><tbody>'
         + rows
         + "</tbody></table>"
-    )
-
-
-def _fetch_table(entries: tuple[FrequencyStatus, ...]) -> str:
-    return _frequency_table(entries).replace(
-        '<th class="num">snapshots</th>',
-        '<th class="num">checkpoints</th>',
     )
 
 
@@ -603,14 +701,22 @@ def _run_line(runs: tuple[RunInfo, ...]) -> str:
     )
 
 
+def _last_run_ended(
+    runs: tuple[RunInfo, ...], now_epoch: int
+) -> str:
+    if not runs:
+        return "unknown"
+    finished = runs[0].finished_epoch
+    if finished is None:
+        return "running now"
+    return f"{_elapsed(now_epoch - finished)} ago"
+
+
 def render_status_page(data: StatusData) -> str:
-    database = data.database
-    uptime = data.now_epoch - data.started_epoch
     tables = "".join(
-        f"<tr><td>{_esc(table.name)}</td>"
-        f'<td class="num">'
-        f"{_num_or_dash(table.rows)}</td></tr>"
-        for table in data.tables
+        f"<tr><td>{_esc(name)}</td>"
+        f'<td class="num">{_num_or_dash(rows)}</td></tr>'
+        for name, rows in _table_rows(data)
     )
     runs = "".join(
         f"<tr><td class=rank>{run.id}</td>"
@@ -624,23 +730,6 @@ def render_status_page(data: StatusData) -> str:
     if not runs:
         runs = '<tr><td class=empty colspan="6">(no runs yet)</td></tr>'
 
-    newest = data.newest_checkpoint_epoch
-    checkpoint_age = (
-        f"{_elapsed(data.now_epoch - newest)} ago"
-        if newest is not None else "unknown"
-    )
-    newest_priority = data.newest_priority_epoch
-    priority_age = (
-        f"{_elapsed(data.now_epoch - newest_priority)} ago"
-        if newest_priority is not None else "unknown"
-    )
-    server_started = database.server_started_epoch
-    database_up = (
-        "unknown"
-        if server_started is None
-        else f"{_stamp(server_started)} "
-        f"({_elapsed(data.now_epoch - server_started)})"
-    )
     parts: list[str] = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
@@ -649,40 +738,14 @@ def render_status_page(data: StatusData) -> str:
         styles.style_tag() + "</head>",
         '<body id="top" class="status">',
         "<h1>xp tracker status</h1>",
-        '<p class="sub"><a href="latest.html">rankings</a> · '
-        '<a href="latest.txt">text report</a> · '
+        '<p class="sub"><a href="latest.html">general tracking</a> · '
         '<a href="priority/index.html">priority tracking</a></p>',
+        '<p class="sub"><a href="status.txt">text version</a></p>',
         f'<p class="meta">generated at: {_esc(data.generated)}</p>',
         "<h2>service</h2>",
-        _fact_rows([
-            ("uptime", _esc(_elapsed(uptime))),
-            ("started at", _esc(_stamp(data.started_epoch))),
-            (
-                "process",
-                _esc(
-                    f"pid {os.getpid()}, python {platform.python_version()}, "
-                    f"{platform.platform()}"
-                ),
-            ),
-            (
-                "report rebuild",
-                _esc(
-                    "not on a timer"
-                    if data.report_interval <= 0
-                    else f"every {_interval_label(data.report_interval)}"
-                ),
-            ),
-        ]),
+        _fact_rows(_service_rows(data)),
         "<h2>database</h2>",
-        _fact_rows([
-            ("connection", _esc(_connection_line(database))),
-            ("server version", _esc(database.server_version or "unknown")),
-            ("database up since", _esc(database_up)),
-            ("database", _esc(database.database or "unknown")),
-            ("host", _esc(_endpoint(database))),
-            ("user", _esc(database.user or "unknown")),
-            ("size on disk", _esc(_size(database.size_bytes))),
-        ]),
+        _fact_rows(_database_rows(data)),
         "<h3>tables</h3>",
         '<table class="grid"><thead><tr><th>table</th>'
         '<th class="num">rows</th></tr></thead><tbody>'
@@ -691,47 +754,12 @@ def render_status_page(data: StatusData) -> str:
         '<p class="note">players and runs are counted exactly; snapshot '
         "and checkpoint tables use the planner estimate.</p>",
         "<h2>collection</h2>",
-        _fact_rows([
-            (
-                "backfill interval",
-                _esc(_interval_label(data.backfill_interval)),
-            ),
-            (
-                "live interval",
-                _esc(_interval_label(data.collect_interval)),
-            ),
-            (
-                "priority interval",
-                _esc(_interval_label(data.priority_interval)),
-            ),
-            ("retry window", _esc(_years_months(data.retry_window))),
-            ("lookback interval", _esc(_years_months(data.lookback))),
-            ("last run", _esc(_run_line(data.runs))),
-            (
-                "next live fetch",
-                _esc(
-                    f"at {_clock(data.next_live_epoch)}, "
-                    f"{_until(data.next_live_epoch - data.now_epoch)}"
-                ),
-            ),
-            (
-                "next priority fetch",
-                _esc(
-                    f"at {_clock(data.next_priority_epoch)}, "
-                    f"{_until(data.next_priority_epoch - data.now_epoch)}"
-                ),
-            ),
-            ("newest checkpoint", _esc(checkpoint_age)),
-            ("newest priority checkpoint", _esc(priority_age)),
-        ]),
+        _fact_rows(_collection_rows(data)),
         "<h2>players</h2>",
-        _fact_rows([
-            ("players logged", _esc(report._players_line(data))),
-            ("priority players tracked", str(data.priority_players)),
-        ]),
+        _fact_rows(_players_rows(data)),
         "<h2>snapshots</h2>",
-        _frequency_table(data.snapshots),
-        _fetch_table(data.fetches),
+        _frequency_table(data.snapshots, "snapshots"),
+        _frequency_table(data.fetches, "checkpoints"),
         '<p class="note">snapshots store only changed xp; checkpoints record '
         "every fetch.</p>",
         "<h2>data coverage</h2>",
@@ -741,7 +769,8 @@ def render_status_page(data: StatusData) -> str:
         coverage_bar(data),
         coverage_tip_html(),
         "<h2>recent runs</h2>",
-        '<table class="grid"><thead><tr><th>#</th><th>started (UTC)</th>'
+        '<table class="grid runs"><thead><tr><th>#</th>'
+        '<th>started (UTC)</th>'
         '<th>status</th><th class="num">requests</th>'
         '<th class="num">failures</th><th class="num">players</th>'
         "</tr></thead><tbody>" + runs + "</tbody></table>",
@@ -753,10 +782,127 @@ def render_status_page(data: StatusData) -> str:
     return "\n".join(parts) + "\n"
 
 
+LABEL_WIDTH = 28
+TABLE_INDENT = 28
+
+
+def _text_facts(rows: list[tuple[str, str]]) -> list[str]:
+    return [
+        f"{label + ':':<{LABEL_WIDTH}}{value}" for label, value in rows
+    ]
+
+
+def _text_table(
+    headings: tuple[str, ...],
+    rows: list[tuple[str, ...]],
+    numeric: tuple[int, ...] = (),
+) -> list[str]:
+    widths = [
+        max([len(heading)] + [len(row[index]) for row in rows])
+        for index, heading in enumerate(headings)
+    ]
+    widths[0] = max(TABLE_INDENT, widths[0])
+
+    def line(values: tuple[str, ...]) -> str:
+        cells: list[str] = []
+        for index, (value, width) in enumerate(zip(values, widths)):
+            if index in numeric:
+                cells.append(f"{value:>{width}}")
+            else:
+                cells.append(f"{value:<{width}}")
+        return "   ".join(cells).rstrip()
+
+    return [line(headings)] + [line(row) for row in rows]
+
+
+def _text_tables(data: StatusData) -> list[str]:
+    return _text_table(
+        ("table", "rows"),
+        [
+            (name, _num_or_dash(rows))
+            for name, rows in _table_rows(data)
+        ],
+        (1,),
+    )
+
+
+def _text_frequency(
+    entries: tuple[FrequencyStatus, ...],
+) -> list[str]:
+    rows = [
+        (
+            name,
+            f"{count:,}",
+            _date_or_dash(first),
+            _date_or_dash(last),
+        )
+        for name, count, first, last in _frequency_rows(entries)
+    ]
+    return _text_table(("", "count", "first", "last"), rows, (1,))
+
+
+def _text_runs(runs: tuple[RunInfo, ...]) -> list[str]:
+    rows = [
+        (
+            str(run.id),
+            _stamp(run.started_epoch),
+            run.status,
+            _num_or_dash(run.requests),
+            f"{run.failures:,}",
+            _num_or_dash(run.players),
+        )
+        for run in runs
+    ]
+    lines = _text_table(
+        (
+            "#",
+            "started (UTC)",
+            "status",
+            "requests",
+            "failures",
+            "players",
+        ),
+        rows,
+        (0, 3, 4, 5),
+    )
+    if not runs:
+        lines.append("(no runs yet)")
+    return lines
+
+
+def _coverage_labels(data: StatusData) -> list[str]:
+    return [label for _, _, label in _coverage_segments(data)]
+
+
+def render_status_text(data: StatusData) -> str:
+    lines = ["XP TRACKER STATUS"]
+    lines.extend(_text_facts([("generated at", data.generated)]))
+    lines.append("")
+    sections = (
+        ("SERVICE", _text_facts(_service_rows(data))),
+        ("DATABASE", _text_facts(_database_rows(data))),
+        ("TABLES", _text_tables(data)),
+        ("COLLECTION", _text_facts(_collection_rows(data))),
+        ("PLAYERS", _text_facts(_players_rows(data))),
+        ("SNAPSHOTS", _text_frequency(data.snapshots)),
+        ("CHECKPOINTS", _text_frequency(data.fetches)),
+        ("DATA COVERAGE", _coverage_labels(data)),
+        ("RECENT RUNS", _text_runs(data.runs)),
+    )
+    for heading, rows in sections:
+        lines.append(heading)
+        lines.extend(rows)
+        lines.append("")
+    return "\n".join(lines) + "\n\n" + data.version + "\n"
+
+
 def write_status_page(conn, report_dir, **kwargs) -> Path:
-    """Collect and write status.html; return its path."""
+    """Collect and write status.html and status.txt; return html's path."""
     data = collect_status(conn, **kwargs)
     page = render_status_page(data)
-    path = Path(report_dir) / "status.html"
+    text = render_status_text(data)
+    directory = Path(report_dir)
+    path = directory / "status.html"
     _atomic_write(path, page)
+    _atomic_write(directory / "status.txt", text)
     return path

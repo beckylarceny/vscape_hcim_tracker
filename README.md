@@ -106,11 +106,14 @@ services running. Restoring drops everything written after the dump.
   (day/week/month/year), best windows, and player search. The HTML page carries
   only the `generated at` metadata line; the coverage bar and the interval and
   player-count lines moved to `status.html`.
-- `status.html`: database connection, latency, version, size and estimated row
-  counts; process uptime; the backfill, live and priority schedules with the
-  next fetch slots; snapshot and checkpoint counts per cadence; the data
-  coverage bar; and the five most recent runs. It is rebuilt on the same timer
-  as the other reports.
+- `status.html` / `status.txt`: database connection, latency, version, size
+  and estimated row counts; process uptime; the backfill, live and priority
+  schedules with the next fetch slots and the last run ended; snapshot and
+  checkpoint counts per cadence; the data coverage bar; and the five most
+  recent runs. `status.txt` is the plain text version of the page. Links are
+  `general tracking` (`latest.html`), `priority tracking`
+  (`priority/index.html`) and `text version` (`status.txt`). Both are rebuilt
+  on the same timer as the other reports.
 - `players/<name>.html`: current xp and level, past/best tables, and five charts
   per skill (four spans plus a wide all-time chart). Stretches with fewer
   checkpoints than the nearby cadence are shaded as missing data; idle time that

@@ -18,6 +18,7 @@ from src.status_report import (
     coverage_bar,
     coverage_runs,
     render_status_page,
+    render_status_text,
     write_status_page,
 )
 
@@ -50,14 +51,14 @@ class FakeConn:
         fail: bool = False,
         database: str = "xp tracker",
         host: str = "db",
-        user: str = "xp_tracker",
         server_version: str | int = 170011,
+        runs: list[tuple] | None = None,
     ) -> None:
         self.fail = fail
+        self.runs = runs
         self.info = SimpleNamespace(
             server_version=server_version,
             dbname=database,
-            user=user,
             host=host,
             port=5432,
         )
@@ -87,6 +88,8 @@ class FakeConn:
         if "max(observed_at) FROM checkpoints" in sql:
             return FakeResult([(stamp(NOW - 3600),)])
         if "FROM runs" in sql:
+            if self.runs is not None:
+                return FakeResult(self.runs)
             return FakeResult([
                 (5, stamp(NOW - 7200), stamp(NOW - 3600), "ok", 120, 1, 99),
                 (4, stamp(NOW - DAY), None, "running", None, 0, None),
@@ -211,10 +214,20 @@ class PageTest(unittest.TestCase):
         )
         self.assertIn("<td>17.0.11</td>", page)
         self.assertIn("snapshots store only changed xp", page)
-        self.assertIn('href="latest.html"', page)
-        self.assertIn('href="latest.txt"', page)
-        self.assertIn('href="priority/index.html"', page)
-        self.assertIn('class="status"', page)
+        self.assertIn(
+            '<p class="sub"><a href="latest.html">general tracking</a> · '
+            '<a href="priority/index.html">priority tracking</a></p>',
+            page,
+        )
+        self.assertIn(
+            '<p class="sub"><a href="status.txt">text version</a></p>',
+            page,
+        )
+        self.assertNotIn('href="latest.txt"', page)
+        self.assertNotIn("pid ", page)
+        self.assertNotIn("<th>user</th>", page)
+        self.assertIn("python ", page)
+        self.assertIn("class=\"status\"", page)
 
     def test_players_line_shows_partial_total(self) -> None:
         page = render_status_page(collect(coverage_total=4))
@@ -246,19 +259,69 @@ class PageTest(unittest.TestCase):
         conn = FakeConn(
             database="<script>alert(1)</script>",
             host="<host>",
-            user="<user>",
             server_version="<ver>",
         )
         page = render_status_page(collect(conn))
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", page)
         self.assertNotIn("<script>alert(1)</script>", page)
         self.assertIn("&lt;host&gt;:5432", page)
-        self.assertIn("&lt;user&gt;", page)
 
     def test_unreachable_database_degrades(self) -> None:
         page = render_status_page(collect(FakeConn(fail=True)))
         self.assertIn("unreachable: connection refused", page)
         self.assertIn("unknown", page)
+
+    def test_last_run_ended(self) -> None:
+        finished = FakeConn(runs=[
+            (5, stamp(NOW - 1500), stamp(NOW - 21 * 60), "ok", 120, 1, 99),
+        ])
+        page = render_status_page(collect(finished))
+        self.assertIn("last run ended</th><td>21 minutes ago</td>", page)
+
+        running = FakeConn(runs=[
+            (4, stamp(NOW - DAY), None, "running", None, 0, None),
+        ])
+        page = render_status_page(collect(running))
+        self.assertIn("last run ended</th><td>running now</td>", page)
+
+        page = render_status_page(collect(FakeConn(runs=[])))
+        self.assertIn("last run ended</th><td>unknown</td>", page)
+
+    def test_recent_runs_table_uses_runs_class(self) -> None:
+        page = render_status_page(collect())
+        self.assertIn('<table class="grid runs">', page)
+        self.assertIn(
+            ".status table.runs th:first-child,"
+            ".status table.runs td:first-child"
+            "{width:6rem;white-space:nowrap}",
+            page,
+        )
+
+    def test_status_text_mirrors_the_page(self) -> None:
+        data = collect()
+        text = render_status_text(data)
+        for heading in (
+            "SERVICE", "DATABASE", "TABLES", "COLLECTION", "PLAYERS",
+            "SNAPSHOTS", "CHECKPOINTS", "DATA COVERAGE", "RECENT RUNS",
+        ):
+            self.assertIn(heading, text)
+        self.assertNotIn("<", text)
+        line = next(
+            line for line in text.splitlines()
+            if line.startswith("backfill interval:")
+        )
+        self.assertEqual(line[:18], "backfill interval:")
+        self.assertEqual(line[28:], "24 hours")
+        line = next(
+            line for line in text.splitlines()
+            if line.startswith("last run ended:")
+        )
+        self.assertEqual(line[28:], "1 hour ago")
+        self.assertIn(
+            f"{'newest priority checkpoint:':<28}10 minutes ago", text
+        )
+        self.assertIn("2/2 players (100%)", text)
+        self.assertTrue(text.endswith("\n\n" + data.version + "\n"))
 
     def test_frequency_counts_and_ranges(self) -> None:
         data = collect()
@@ -310,6 +373,12 @@ class PageTest(unittest.TestCase):
             self.assertIn(
                 "xp tracker status", path.read_text(encoding="utf-8")
             )
+            text_path = Path(directory) / "status.txt"
+            self.assertTrue(text_path.exists())
+            text = text_path.read_text(encoding="utf-8")
+            self.assertIn("XP TRACKER STATUS", text)
+            self.assertIn("RECENT RUNS", text)
+            self.assertTrue(text.endswith("software version abc1234\n"))
 
 
 if __name__ == "__main__":
