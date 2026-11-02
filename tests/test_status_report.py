@@ -330,6 +330,20 @@ class PageTest(unittest.TestCase):
         self.assertNotIn("table.facts{", page)
         self.assertNotIn("table.grid{", page)
 
+    def test_header_first_cell_is_bold_but_row_labels_are_not(self) -> None:
+        page = render_status_page(collect())
+        self.assertIn("<th>interval</th>", page)
+        bold = ".status table thead th:first-child{font-weight:600}"
+        self.assertIn(bold, page)
+        self.assertIn('<th scope="row">6 hour</th>', page)
+        self.assertLess(
+            page.index(
+                ".status table th:first-child,.status table td:first-child"
+                "{color:#888;"
+            ),
+            page.index(bold),
+        )
+
     def test_status_text_mirrors_the_page(self) -> None:
         data = collect()
         text = render_status_text(data)
