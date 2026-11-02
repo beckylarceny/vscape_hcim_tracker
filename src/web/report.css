@@ -134,7 +134,7 @@ body.wide{max-width:72rem}
         line-height:1.5}
 
 .status h2{text-align:left}
-.status table{width:100%;max-width:52rem;margin:.25rem 0 1.1rem}
+.status table{width:100%;max-width:52rem;margin:.25rem auto 1.1rem}
 .status table th:first-child,.status table td:first-child{color:#888;
     font-weight:400;width:16rem}
 .status table thead th:first-child{font-weight:600}

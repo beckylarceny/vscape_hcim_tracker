@@ -15,6 +15,7 @@ x-app: &app
     VSCAPE_HCIM_TRACKER_LOG_LEVEL: ${VSCAPE_HCIM_TRACKER_LOG_LEVEL:-INFO}
     VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS: ${VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS:-}
     VSCAPE_HCIM_TRACKER_BASE_URL: ${VSCAPE_HCIM_TRACKER_BASE_URL:-http://localhost:8000}
+    VSCAPE_HCIM_TRACKER_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-vscape_hcim_tracker}
   depends_on:
     db:
       condition: service_healthy
@@ -82,6 +83,7 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./reports:/app/reports
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "8000:8000"
 

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import http.client
+import json
+import os
 import platform
+import socket
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -22,6 +26,13 @@ from ..common.storage import as_datetime
 from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS
 
 PROCESS_STARTED_EPOCH = int(time.time())
+
+DOCKER_SOCKET = os.environ.get(
+    "VSCAPE_HCIM_TRACKER_DOCKER_SOCKET", "/var/run/docker.sock"
+)
+COMPOSE_PROJECT = os.environ.get(
+    "VSCAPE_HCIM_TRACKER_COMPOSE_PROJECT", "vscape_hcim_tracker"
+)
 
 
 class DatabaseStatus(NamedTuple):
@@ -58,11 +69,25 @@ class FrequencyStatus(NamedTuple):
     last_epoch: int | None
 
 
+class ContainerInfo(NamedTuple):
+    service: str
+    name: str
+    state: str
+    status: str
+    image: str
+
+
+class DockerStatus(NamedTuple):
+    containers: tuple[ContainerInfo, ...]
+    error: str | None = None
+
+
 class StatusData(NamedTuple):
     generated: str
     now_epoch: int
     version: str
     started_epoch: int
+    containers: DockerStatus
     database: DatabaseStatus
     tables: tuple[TableInfo, ...]
     runs: tuple[RunInfo, ...]
@@ -133,6 +158,91 @@ def _row(conn, sql: str, params=None) -> tuple | None:
         return conn.execute(sql, params).fetchone()
     except Exception:  # noqa: BLE001
         return None
+
+
+class _UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, socket_path: str, timeout: float = 3.0) -> None:
+        super().__init__("localhost", timeout=timeout)
+        self.socket_path = socket_path
+
+    def connect(self) -> None:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            sock.settimeout(self.timeout)
+            sock.connect(self.socket_path)
+        except Exception:
+            sock.close()
+            raise
+        self.sock = sock
+
+
+def _docker_get(socket_path: str, path: str):
+    connection = _UnixHTTPConnection(socket_path)
+    try:
+        connection.request("GET", path)
+        response = connection.getresponse()
+        body = response.read()
+        if response.status != 200:
+            raise OSError(f"docker api returned {response.status}")
+        return json.loads(body)
+    finally:
+        connection.close()
+
+
+def _container_list(payload) -> list[dict]:
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+
+
+def _self_project(payload) -> str | None:
+    hostname = socket.gethostname()
+    for container in _container_list(payload):
+        if str(container.get("Id", "")).startswith(hostname):
+            labels = container.get("Labels") or {}
+            project = labels.get("com.docker.compose.project")
+            if project:
+                return str(project)
+    return None
+
+
+def _container_rows(
+    payload, project: str
+) -> tuple[ContainerInfo, ...]:
+    rows: list[ContainerInfo] = []
+    for container in _container_list(payload):
+        labels = container.get("Labels") or {}
+        if labels.get("com.docker.compose.project") != project:
+            continue
+        names = container.get("Names") or []
+        if names:
+            name = str(names[0])
+            if name.startswith("/"):
+                name = name[1:]
+        else:
+            name = str(container.get("Id", ""))[:12]
+        rows.append(
+            ContainerInfo(
+                str(labels.get("com.docker.compose.service", "")),
+                name,
+                str(container.get("State", "")),
+                str(container.get("Status", "")),
+                str(container.get("Image", "")),
+            )
+        )
+    rows.sort(key=lambda row: (row.service, row.name))
+    return tuple(rows)
+
+
+def container_status(
+    socket_path: str = DOCKER_SOCKET,
+) -> DockerStatus:
+    try:
+        payload = _docker_get(socket_path, "/containers/json?all=1")
+        project = _self_project(payload) or COMPOSE_PROJECT
+        return DockerStatus(_container_rows(payload, project))
+    except Exception as error:  # noqa: BLE001 - docker must not break the page
+        return DockerStatus((), str(error))
 
 
 def _database_status(conn) -> DatabaseStatus:
@@ -339,6 +449,7 @@ def collect_status(
         now_epoch=now_epoch,
         version=version,
         started_epoch=PROCESS_STARTED_EPOCH,
+        containers=container_status(),
         database=_database_status(conn),
         tables=_table_info(conn),
         runs=_runs(conn),
@@ -555,6 +666,33 @@ def _fact_rows(rows: list[tuple[str, str]]) -> str:
     )
 
 
+def _container_table(containers: DockerStatus) -> str:
+    rows = "".join(
+        f'<tr><th scope="row">{_esc(container.service)}</th>'
+        f"<td>{_esc(container.name)}</td>"
+        f"<td>{_esc(container.state)}</td>"
+        f"<td>{_esc(container.status)}</td>"
+        f"<td>{_esc(container.image)}</td></tr>"
+        for container in containers.containers
+    )
+    if not rows:
+        message = (
+            f"docker api unavailable: {containers.error}"
+            if containers.error
+            else "no containers found"
+        )
+        rows = (
+            f'<tr><td class=empty colspan="5">{_esc(message)}</td></tr>'
+        )
+    return (
+        '<table class="grid"><thead><tr><th>service</th>'
+        "<th>container</th><th>state</th><th>status</th>"
+        "<th>image</th></tr></thead><tbody>"
+        + rows
+        + "</tbody></table>"
+    )
+
+
 def _interval_label(seconds: int) -> str:
     if seconds < 3600:
         return _plural(max(1, seconds // 60), "minute")
@@ -745,6 +883,8 @@ def render_status_page(data: StatusData) -> str:
         f'<p class="meta">generated at: {_esc(data.generated)}</p>',
         "<h2>service</h2>",
         _fact_rows(_service_rows(data)),
+        "<h3>containers</h3>",
+        _container_table(data.containers),
         "<h2>database</h2>",
         _fact_rows(_database_rows(data)),
         "<h3>tables</h3>",
@@ -816,6 +956,29 @@ def _text_table(
     return [line(headings)] + [line(row) for row in rows]
 
 
+def _text_containers(containers: DockerStatus) -> list[str]:
+    rows = [
+        (
+            container.service,
+            container.name,
+            container.state,
+            container.status,
+            container.image,
+        )
+        for container in containers.containers
+    ]
+    if not rows:
+        message = (
+            f"docker api unavailable: {containers.error}"
+            if containers.error
+            else "no containers found"
+        )
+        return [message]
+    return _text_table(
+        ("service", "container", "state", "status", "image"), rows
+    )
+
+
 def _text_tables(data: StatusData) -> list[str]:
     return _text_table(
         ("table", "rows"),
@@ -881,6 +1044,7 @@ def render_status_text(data: StatusData) -> str:
     lines.append("")
     sections = (
         ("SERVICE", _text_facts(_service_rows(data))),
+        ("CONTAINERS", _text_containers(data.containers)),
         ("DATABASE", _text_facts(_database_rows(data))),
         ("TABLES", _text_tables(data)),
         ("COLLECTION", _text_facts(_collection_rows(data))),

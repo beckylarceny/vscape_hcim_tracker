@@ -7,14 +7,20 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from src.web.status_report import (
+    ContainerInfo,
+    DockerStatus,
+    _container_rows,
     _elapsed,
     _interval_label,
+    _self_project,
     _server_version,
     _size,
     _until,
     collect_status,
+    container_status,
     coverage_bar,
     coverage_runs,
     render_status_page,
@@ -27,6 +33,21 @@ DAY = 86400
 COLLECT = 6 * 3600
 LOOKBACK = 365 * DAY
 PRIORITY = 600
+
+DOCKER = DockerStatus((
+    ContainerInfo(
+        "collector", "vscape_hcim_tracker-collector-1",
+        "running", "Up 40 minutes", "vscape_hcim_tracker-app:latest",
+    ),
+    ContainerInfo(
+        "db", "vscape_hcim_tracker-db-1",
+        "running", "Up 41 minutes", "postgres:17-alpine",
+    ),
+    ContainerInfo(
+        "web", "vscape_hcim_tracker-web-1",
+        "running", "Up 39 minutes", "vscape_hcim_tracker-app:latest",
+    ),
+))
 
 
 def stamp(epoch: int) -> dt.datetime:
@@ -127,7 +148,93 @@ def collect(conn: FakeConn | None = None, **overrides):
         priority_players=3,
     )
     kwargs.update(overrides)
-    return collect_status(conn or FakeConn(), **kwargs)
+    with mock.patch(
+        "src.web.status_report.container_status", return_value=DOCKER
+    ):
+        return collect_status(conn or FakeConn(), **kwargs)
+
+
+class DockerTest(unittest.TestCase):
+    def test_container_rows_filter_map_and_sort(self) -> None:
+        payload = [
+            {
+                "Id": "bbb",
+                "Names": ["/vscape_hcim_tracker-web-1"],
+                "State": "running",
+                "Status": "Up 39 minutes",
+                "Image": "app:latest",
+                "Labels": {
+                    "com.docker.compose.project": "vscape_hcim_tracker",
+                    "com.docker.compose.service": "web",
+                },
+            },
+            {
+                "Id": "aaa",
+                "Names": None,
+                "State": "running",
+                "Status": "Up 40 minutes",
+                "Image": "app:latest",
+                "Labels": {
+                    "com.docker.compose.project": "vscape_hcim_tracker",
+                    "com.docker.compose.service": "collector",
+                },
+            },
+            {
+                "Id": "ccc",
+                "Names": ["/other-1"],
+                "State": "running",
+                "Status": "Up 1 hour",
+                "Image": "other",
+                "Labels": {
+                    "com.docker.compose.project": "other",
+                    "com.docker.compose.service": "other",
+                },
+            },
+        ]
+        self.assertEqual(
+            _container_rows(payload, "vscape_hcim_tracker"),
+            (
+                ContainerInfo(
+                    "collector", "aaa", "running", "Up 40 minutes",
+                    "app:latest",
+                ),
+                ContainerInfo(
+                    "web", "vscape_hcim_tracker-web-1", "running",
+                    "Up 39 minutes", "app:latest",
+                ),
+            ),
+        )
+        self.assertEqual(_container_rows("not a list", "vscape_hcim_tracker"), ())
+
+    def test_self_project_matches_hostname(self) -> None:
+        payload = [
+            {
+                "Id": "abc123ffff",
+                "Labels": {"com.docker.compose.project": "mine"},
+            },
+            {
+                "Id": "def456ffff",
+                "Labels": {"com.docker.compose.project": "other"},
+            },
+        ]
+        with mock.patch(
+            "src.web.status_report.socket.gethostname", return_value="abc123"
+        ):
+            self.assertEqual(_self_project(payload), "mine")
+        with mock.patch(
+            "src.web.status_report.socket.gethostname", return_value="zzz"
+        ):
+            self.assertIsNone(_self_project(payload))
+        self.assertIsNone(_self_project("not a list"))
+
+    def test_container_status_reports_errors(self) -> None:
+        with mock.patch(
+            "src.web.status_report._docker_get",
+            side_effect=OSError("no socket"),
+        ):
+            self.assertEqual(
+                container_status(), DockerStatus((), "no socket")
+            )
 
 
 class CoverageTest(unittest.TestCase):
@@ -320,7 +427,8 @@ class PageTest(unittest.TestCase):
         self.assertIn('<th scope="row">6 hour</th>', page)
         self.assertIn('<th scope="row" class=rank>', page)
         self.assertIn(
-            ".status table{width:100%;max-width:52rem;margin:.25rem 0 1.1rem}",
+            ".status table{width:100%;max-width:52rem;"
+            "margin:.25rem auto 1.1rem}",
             page,
         )
         self.assertIn(
@@ -329,6 +437,69 @@ class PageTest(unittest.TestCase):
         )
         self.assertNotIn("table.facts{", page)
         self.assertNotIn("table.grid{", page)
+
+    def test_page_lists_compose_containers(self) -> None:
+        page = render_status_page(collect())
+        self.assertIn("<h3>containers</h3>", page)
+        self.assertLess(
+            page.index("<h2>service</h2>"),
+            page.index("<h3>containers</h3>"),
+        )
+        self.assertLess(
+            page.index("<h3>containers</h3>"),
+            page.index("<h2>database</h2>"),
+        )
+        for row in DOCKER.containers:
+            self.assertIn(
+                f'<tr><th scope="row">{row.service}</th>'
+                f"<td>{row.name}</td><td>{row.state}</td>"
+                f"<td>{row.status}</td><td>{row.image}</td></tr>",
+                page,
+            )
+        self.assertIn(
+            '<th>service</th><th>container</th><th>state</th>'
+            "<th>status</th><th>image</th>",
+            page,
+        )
+
+    def test_unavailable_docker_degrades(self) -> None:
+        data = collect()._replace(
+            containers=DockerStatus((), "permission denied")
+        )
+        page = render_status_page(data)
+        self.assertIn(
+            "docker api unavailable: permission denied", page
+        )
+        self.assertIn('<td class=empty colspan="5">', page)
+        self.assertNotIn("vscape_hcim_tracker-collector-1", page)
+
+        empty = render_status_page(
+            collect()._replace(containers=DockerStatus(()))
+        )
+        self.assertIn("no containers found", empty)
+
+    def test_container_values_are_escaped(self) -> None:
+        data = collect()._replace(containers=DockerStatus((
+            ContainerInfo("a<b", "c<d", "e<f", "g<h", "i<j"),
+        )))
+        page = render_status_page(data)
+        self.assertIn("a&lt;b", page)
+        self.assertNotIn("a<b", page)
+
+    def test_status_text_has_a_containers_section(self) -> None:
+        text = render_status_text(collect())
+        self.assertIn("CONTAINERS", text)
+        self.assertLess(text.index("SERVICE"), text.index("CONTAINERS"))
+        self.assertLess(text.index("CONTAINERS"), text.index("DATABASE"))
+        self.assertIn("vscape_hcim_tracker-collector-1", text)
+
+    def test_status_tables_are_centered(self) -> None:
+        page = render_status_page(collect())
+        self.assertIn(
+            ".status table{width:100%;max-width:52rem;"
+            "margin:.25rem auto 1.1rem}",
+            page,
+        )
 
     def test_header_first_cell_is_bold_but_row_labels_are_not(self) -> None:
         page = render_status_page(collect())
@@ -400,7 +571,9 @@ class PageTest(unittest.TestCase):
         self.assertIn('<th scope="row">players</th><td class="num">101</td>', page)
 
     def test_write_status_page(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, mock.patch(
+            "src.web.status_report.container_status", return_value=DOCKER
+        ):
             path = write_status_page(
                 FakeConn(), Path(directory),
                 generated="2026-01-01 00:00 UTC",

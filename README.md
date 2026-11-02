@@ -128,8 +128,10 @@ services running. Restoring drops everything written after the dump.
   checkpoint counts per cadence; the data coverage bar; and the five most
   recent runs. `status.txt` is the plain text version of the page. Links are
   `general tracking` (`general.html`), `priority tracking`
-  (`priority/index.html`) and `text version` (`status.txt`). Both are rebuilt
-  on the same timer as the other reports.
+  (`priority/index.html`) and `text version` (`status.txt`). The `service`
+  section also lists the compose containers (service, container, state, status
+  and image) read from the mounted Docker socket. Both are rebuilt on the same
+  timer as the other reports.
 - `players/<name>.html`: current xp and level, past/best tables, and five charts
   per skill (four spans plus a wide all-time chart). Stretches with fewer
   checkpoints than the nearby cadence are shaded as missing data; idle time that
@@ -141,6 +143,10 @@ services running. Restoring drops everything written after the dump.
   pruned after 24 hours.
 
 RSS links use `base_url` or `VSCAPE_HCIM_TRACKER_BASE_URL`.
+
+`web` mounts `/var/run/docker.sock` read-only to read the container list.
+Docker API access is equivalent to host root, so this is only for trusted
+hosts.
 
 ## API limits
 
