@@ -355,8 +355,8 @@ def _missing_ranges(
     """Stretches of the window with fewer checkpoints than expected.
 
     The window edges use `limit`. Interior gaps are compared with the smallest
-    nearby gap, so a skipped fetch inside a 6 hour cadence is flagged while a
-    normal 24 hour backfill day is not.
+    nearby gap, so a missed live fetch is flagged while a normal 24 hour
+    backfill day is not.
     """
     if end_epoch <= start_epoch:
         return ()
@@ -383,7 +383,7 @@ def collect_player_data(
     lookback: int,
     slack: int,
     generated: str,
-    live_interval: int = 6 * 3600,
+    live_interval: int = 3600,
 ) -> PlayerData:
     """Load one player's stored history and derive every displayed value."""
     points_by_skill = _points_by_skill(conn, username, 0)

@@ -73,7 +73,7 @@ while keeping their endpoints.
 
 Missing-data shading marks stretches with fewer checkpoints than expected.
 Edges use 36 hours or twice the live interval, whichever is larger. Interior
-gaps are compared with the smallest nearby gap, so a missed 6-hour fetch is
+gaps are compared with the smallest nearby gap, so a missed live fetch is
 flagged while a normal 24-hour backfill gap is not. Stretches that were fetched
 and had no xp change stay unshaded.
 

@@ -75,7 +75,7 @@ times   = current, current - collect_interval, ... for count entries
 Defaults:
 
 - `interval`: 24 hours, the coarse backfill step.
-- `collect_interval`: 6 hours, the live step.
+- `collect_interval`: 1 hour, the live step.
 - `retry_window`: 7 days, always rechecked.
 - `lookback`: everything since 2025-01-26, clamped by `data_start_epoch`.
 

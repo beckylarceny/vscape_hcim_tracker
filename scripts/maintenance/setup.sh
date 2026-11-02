@@ -57,7 +57,7 @@ escape_sed() {
 
 echo "collector" >&2
 interval=$(to_seconds "$(ask 'backfill interval (24h)' 24h)")
-collect=$(to_seconds "$(ask 'live interval (6h)' 6h)")
+collect=$(to_seconds "$(ask 'live interval (1h)' 1h)")
 retry=$(to_seconds "$(ask 'retry window (7d)' 7d)")
 start=$(to_epoch "$(ask 'data start date (YYYY-MM-DD)' 2025-01-26)")
 workers=$(ask 'worker threads' 2)
