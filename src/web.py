@@ -12,11 +12,11 @@ log = logging.getLogger("vscape_hcim_tracker.web")
 
 
 class ReportRequestHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve the report directory, mapping / to the latest HTML page."""
+    """Serve the report directory, mapping / to the general HTML page."""
 
     def _redirect_root(self) -> None:
-        if self.path in ("", "/", "/latest", "/latest/"):
-            self.path = "/latest.html"
+        if self.path in ("", "/", "/general", "/general/"):
+            self.path = "/general.html"
 
     def do_GET(self) -> None:  # noqa: N802 - http.server API
         self._redirect_root()

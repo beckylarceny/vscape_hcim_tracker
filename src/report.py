@@ -362,13 +362,13 @@ def render_html(data: ReportData) -> str:
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>xp tracker - {_esc(_date(data.now_epoch))}</title>",
+        "<title>general tracking - xp tracker</title>",
         f"{styles.style_tag()}</head>",
         '<body id="top" class="rankings wide">',
         '<div class="backlinks"><p class="sub">'
         '<a href="priority/index.html">priority tracking</a> · '
         '<a href="status.html">status</a></p></div>',
-        "<h1>XP Tracker</h1>",
+        "<h1>General Tracking</h1>",
         '<p class="sub"><a href="latest.txt">text version</a></p>',
         metas,
         _player_finder(data),

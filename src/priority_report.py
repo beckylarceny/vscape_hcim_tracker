@@ -372,7 +372,7 @@ def render_priority_page(
         f"{styles.style_tag()}</head>",
         '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
-        '<a href="../latest.html">all rankings</a> · '
+        '<a href="../general.html">general tracking</a> · '
         '<a href="index.html">priority tracking</a> · '
         f'<a href="{_esc(player_href)}">player page</a> · '
         '<a href="../status.html">status</a></p></div>',
@@ -444,7 +444,7 @@ def render_priority_index(
         f"{styles.style_tag()}</head>",
         '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
-        '<a href="../latest.html">all rankings</a> · '
+        '<a href="../general.html">general tracking</a> · '
         '<a href="../status.html">status</a></p></div>',
         "<h1>priority tracking</h1>",
         '<p class="blurb">the top 5 players by overall xp, and any players '

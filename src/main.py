@@ -419,9 +419,9 @@ def _next_slot(now: float, interval: int, grace: int) -> float:
 
 
 def _remove_old_reports(report_dir: Path) -> None:
-    """Only latest.txt and latest.html are kept."""
+    """Only latest.txt and general.html are kept."""
     for pattern in (
-        "report_*.txt", "report_*.html", ".latest.*.tmp", "players/.*.tmp",
+        "report_*.txt", "report_*.html", ".general.*.tmp", "players/.*.tmp",
     ):
         for path in report_dir.glob(pattern):
             path.unlink(missing_ok=True)
@@ -558,7 +558,7 @@ def write_report(
 
         report_dir.mkdir(parents=True, exist_ok=True)
         text_path = report_dir / "latest.txt"
-        html_path = report_dir / "latest.html"
+        html_path = report_dir / "general.html"
         _atomic_write(text_path, text)
         _atomic_write(html_path, page)
         _remove_old_reports(report_dir)

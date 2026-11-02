@@ -102,7 +102,7 @@ services running. Restoring drops everything written after the dump.
 
 ## Reports
 
-- `latest.txt` / `latest.html`: top 5 gains per skill and span
+- `latest.txt` / `general.html`: top 5 gains per skill and span
   (day/week/month/year), best windows, and player search. The HTML page carries
   only the `generated at` metadata line; the coverage bar and the interval and
   player-count lines moved to `status.html`.
@@ -111,7 +111,7 @@ services running. Restoring drops everything written after the dump.
   schedules with the next fetch slots and the last run ended; snapshot and
   checkpoint counts per cadence; the data coverage bar; and the five most
   recent runs. `status.txt` is the plain text version of the page. Links are
-  `general tracking` (`latest.html`), `priority tracking`
+  `general tracking` (`general.html`), `priority tracking`
   (`priority/index.html`) and `text version` (`status.txt`). Both are rebuilt
   on the same timer as the other reports.
 - `players/<name>.html`: current xp and level, past/best tables, and five charts

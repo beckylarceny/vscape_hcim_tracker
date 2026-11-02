@@ -215,7 +215,7 @@ class ReportTest(DatabaseTest):
         with tempfile.TemporaryDirectory() as directory:
             old = Path(directory, "report_20000101T000000Z.txt")
             old_html = Path(directory, "report_20000101T000000Z.html")
-            stale = Path(directory, ".latest.html.123.tmp")
+            stale = Path(directory, ".general.html.123.tmp")
             for path in (old, old_html, stale):
                 path.write_text("old", encoding="utf-8")
 
@@ -226,9 +226,9 @@ class ReportTest(DatabaseTest):
             names = sorted(p.name for p in Path(directory).iterdir())
             self.assertEqual(
                 names,
-                ["latest.html", "latest.txt", "players", "priority"],
+                ["general.html", "latest.txt", "players", "priority"],
             )
-            page = Path(directory, "latest.html").read_text(encoding="utf-8")
+            page = Path(directory, "general.html").read_text(encoding="utf-8")
             self.assertIn("alice", page)
             player_page = Path(directory, "players", "alice.html")
             player_html = player_page.read_text(encoding="utf-8")

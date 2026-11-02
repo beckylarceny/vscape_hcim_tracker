@@ -855,7 +855,7 @@ def render_player_page(
         f"{styles.style_tag()}</head>",
         '<body id="top" class="player">',
         '<div class="backlinks">'
-        '<p class="sub"><a href="../latest.html">all rankings</a> · '
+        '<p class="sub"><a href="../general.html">general tracking</a> · '
         '<a href="../status.html">status</a></p>'
         "</div>",
         f"<h1>{_esc(data.username)}</h1>",

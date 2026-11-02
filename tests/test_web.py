@@ -11,9 +11,9 @@ from src import web
 
 
 class ServerTest(unittest.TestCase):
-    def test_root_serves_latest_html(self) -> None:
+    def test_root_serves_general_html(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            Path(directory, "latest.html").write_text(
+            Path(directory, "general.html").write_text(
                 "<h1>hello</h1>", encoding="utf-8"
             )
             server = web.start_server(Path(directory), 0)
