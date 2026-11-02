@@ -103,14 +103,14 @@ The status page has these sections:
 
 | Section | Contents |
 | --- | --- |
-| `service` | Process uptime, start time, Python and platform, report rebuild timer. |
-| `containers` | Compose service, container name, state, status and image. |
-| `database` | Connection, latency, server version, database uptime, name, host and size. |
-| `tables` | Row counts for players, snapshots, checkpoints, priority tables and runs. |
-| `collection` | Intervals, retry window, lookback, last run, next fetch times and newest checkpoints. |
+| `data coverage` | One bar segment per equal slice of the lookback window. |
+| `service` | Process uptime, start time, Python and platform, report rebuild timer. Includes the `containers` table. |
+| `database` | Connection, latency, server version, database uptime, name, host and size. Includes the `tables` row counts. |
+| `backfill` | Backfill interval, retry window, lookback, last run and last run end. |
+| `live` | Live interval, next live fetch and newest checkpoint. |
+| `priority` | Priority interval, next priority fetch and newest priority checkpoint. |
 | `players` | Verified player count and tracked priority players. |
 | `snapshots` | Snapshot and checkpoint counts by fetch frequency, with first and last dates. |
-| `data coverage` | One bar segment per equal slice of the lookback window. |
 | `recent runs` | The last five runs with status, requests, failures and players. |
 
 `players` and `runs` are counted exactly. Snapshot and checkpoint counts use the
