@@ -14,6 +14,31 @@ log = logging.getLogger("vscape_hcim_tracker.web.server")
 class ReportRequestHandler(http.server.SimpleHTTPRequestHandler):
     """Serve report pages with or without the .html suffix."""
 
+    def _redirect_page_alias(self) -> bool:
+        """Send /page/ to /page so relative report links stay correct."""
+        base, _, query = self.path.partition("?")
+        if base in ("", "/") or not base.endswith("/"):
+            return False
+        stem = base.rstrip("/")
+        page = super().translate_path(stem + ".html")
+        if not Path(page).is_file():
+            return False
+        location = stem + (f"?{query}" if query else "")
+        self.send_response(301)
+        self.send_header("Location", location)
+        self.end_headers()
+        return True
+
+    def do_GET(self) -> None:  # noqa: N802 - http.server API
+        if self._redirect_page_alias():
+            return
+        super().do_GET()
+
+    def do_HEAD(self) -> None:  # noqa: N802 - http.server API
+        if self._redirect_page_alias():
+            return
+        super().do_HEAD()
+
     def translate_path(self, path: str) -> str:
         """Map clean URLs to generated HTML files."""
         base, _, _ = path.partition("?")
