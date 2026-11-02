@@ -10,24 +10,25 @@ from types import SimpleNamespace
 from unittest import mock
 
 from src.common.storage import CoverageSlice
-from src.web.status_report import (
+from src.web.status_docker import (
     ContainerInfo,
     DockerStatus,
-    _container_rows,
-    _elapsed,
-    _interval_label,
-    _self_project,
-    _server_version,
-    _size,
-    _until,
-    collect_status,
+    container_rows,
     container_status,
-    coverage_bar,
-    coverage_runs,
-    render_status_page,
-    render_status_text,
-    write_status_page,
+    self_project,
 )
+from src.web.status_html import coverage_bar, render_status_page
+from src.web.status_queries import (
+    collect_status,
+    coverage_runs,
+    elapsed,
+    interval_label,
+    server_version,
+    size,
+    until,
+)
+from src.web.status_report import write_status_page
+from src.web.status_text import render_status_text
 
 NOW = 1_800_000_000
 DAY = 86400
@@ -88,7 +89,7 @@ class FakeConn:
     def execute(self, sql, params=None):
         if self.fail and sql.strip() == "SELECT 1":
             raise RuntimeError("connection refused")
-        if "pg_database_size" in sql:
+        if "pg_databasesize" in sql:
             return FakeResult([(1_500_000_000,)])
         if "pg_postmaster_start_time" in sql:
             return FakeResult([(stamp(NOW - 10 * DAY),)])
@@ -154,13 +155,13 @@ def collect(conn: FakeConn | None = None, **overrides):
     )
     kwargs.update(overrides)
     with mock.patch(
-        "src.web.status_report.container_status", return_value=DOCKER
+        "src.web.status_queries.container_status", return_value=DOCKER
     ):
         return collect_status(conn or FakeConn(), **kwargs)
 
 
 class DockerTest(unittest.TestCase):
-    def test_container_rows_filter_map_and_sort(self) -> None:
+    def testcontainer_rows_filter_map_and_sort(self) -> None:
         payload = [
             {
                 "Id": "bbb",
@@ -197,7 +198,7 @@ class DockerTest(unittest.TestCase):
             },
         ]
         self.assertEqual(
-            _container_rows(payload, "vscape_hcim_tracker"),
+            container_rows(payload, "vscape_hcim_tracker"),
             (
                 ContainerInfo(
                     "collector", "aaa", "running", "Up 40 minutes",
@@ -209,9 +210,9 @@ class DockerTest(unittest.TestCase):
                 ),
             ),
         )
-        self.assertEqual(_container_rows("not a list", "vscape_hcim_tracker"), ())
+        self.assertEqual(container_rows("not a list", "vscape_hcim_tracker"), ())
 
-    def test_self_project_matches_hostname(self) -> None:
+    def testself_project_matches_hostname(self) -> None:
         payload = [
             {
                 "Id": "abc123ffff",
@@ -223,18 +224,18 @@ class DockerTest(unittest.TestCase):
             },
         ]
         with mock.patch(
-            "src.web.status_report.socket.gethostname", return_value="abc123"
+            "src.web.status_docker.socket.gethostname", return_value="abc123"
         ):
-            self.assertEqual(_self_project(payload), "mine")
+            self.assertEqual(self_project(payload), "mine")
         with mock.patch(
-            "src.web.status_report.socket.gethostname", return_value="zzz"
+            "src.web.status_docker.socket.gethostname", return_value="zzz"
         ):
-            self.assertIsNone(_self_project(payload))
-        self.assertIsNone(_self_project("not a list"))
+            self.assertIsNone(self_project(payload))
+        self.assertIsNone(self_project("not a list"))
 
     def test_container_status_reports_errors(self) -> None:
         with mock.patch(
-            "src.web.status_report._docker_get",
+            "src.web.status_docker._docker_get",
             side_effect=OSError("no socket"),
         ):
             self.assertEqual(
@@ -291,29 +292,29 @@ class CoverageTest(unittest.TestCase):
 
 
 class FormatTest(unittest.TestCase):
-    def test_elapsed_until_and_size(self) -> None:
-        self.assertEqual(_elapsed(2 * DAY + 4 * 3600), "2 days 4 hours")
-        self.assertEqual(_elapsed(3 * 3600 + 12 * 60), "3 hours 12 minutes")
-        self.assertEqual(_elapsed(30), "less than a minute")
-        self.assertEqual(_until(12 * 60), "in 12 minutes")
-        self.assertEqual(_until(10), "less than a minute")
-        self.assertEqual(_size(2 * 1024 ** 3), "2.0 GB")
-        self.assertEqual(_size(1500), "1.5 KB")
-        self.assertEqual(_size(None), "unknown")
+    def testelapseduntil_andsize(self) -> None:
+        self.assertEqual(elapsed(2 * DAY + 4 * 3600), "2 days 4 hours")
+        self.assertEqual(elapsed(3 * 3600 + 12 * 60), "3 hours 12 minutes")
+        self.assertEqual(elapsed(30), "less than a minute")
+        self.assertEqual(until(12 * 60), "in 12 minutes")
+        self.assertEqual(until(10), "less than a minute")
+        self.assertEqual(size(2 * 1024 ** 3), "2.0 GB")
+        self.assertEqual(size(1500), "1.5 KB")
+        self.assertEqual(size(None), "unknown")
 
-    def test_interval_label_pluralizes(self) -> None:
-        self.assertEqual(_interval_label(60), "1 minute")
-        self.assertEqual(_interval_label(3600), "1 hour")
-        self.assertEqual(_interval_label(600), "10 minutes")
-        self.assertEqual(_interval_label(21600), "6 hours")
-        self.assertEqual(_interval_label(86400), "24 hours")
+    def testinterval_label_pluralizes(self) -> None:
+        self.assertEqual(interval_label(60), "1 minute")
+        self.assertEqual(interval_label(3600), "1 hour")
+        self.assertEqual(interval_label(600), "10 minutes")
+        self.assertEqual(interval_label(21600), "6 hours")
+        self.assertEqual(interval_label(86400), "24 hours")
 
-    def test_server_version_formats_integers(self) -> None:
-        self.assertEqual(_server_version(170011), "17.0.11")
-        self.assertEqual(_server_version(160004), "16.0.4")
-        self.assertEqual(_server_version("170011"), "17.0.11")
-        self.assertEqual(_server_version("17.11"), "17.11")
-        self.assertIsNone(_server_version(None))
+    def testserver_version_formats_integers(self) -> None:
+        self.assertEqual(server_version(170011), "17.0.11")
+        self.assertEqual(server_version(160004), "16.0.4")
+        self.assertEqual(server_version("170011"), "17.0.11")
+        self.assertEqual(server_version("17.11"), "17.11")
+        self.assertIsNone(server_version(None))
 
 
 class PageTest(unittest.TestCase):
@@ -633,7 +634,7 @@ class PageTest(unittest.TestCase):
 
     def test_write_status_page(self) -> None:
         with tempfile.TemporaryDirectory() as directory, mock.patch(
-            "src.web.status_report.container_status", return_value=DOCKER
+            "src.web.status_queries.container_status", return_value=DOCKER
         ):
             path = write_status_page(
                 FakeConn(), Path(directory),

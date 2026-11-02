@@ -105,8 +105,12 @@ Shared code used by every service.
 | `src/web/index_report.py` | Home page linking the report sections. |
 | `src/web/report.py` | General rankings, text report and HTML report. |
 | `src/web/reporting.py` | Report orchestration, caching and incremental writes. |
-| `src/web/server.py` | Static HTTP server. |
-| `src/web/status_report.py` | Status page, text version and Docker access. |
+| `src/web/server.py` | Static HTTP server with clean page URLs. |
+| `src/web/status_docker.py` | Docker API access and container rows. |
+| `src/web/status_html.py` | Status HTML page and coverage bar. |
+| `src/web/status_queries.py` | Status queries, display facts and coverage slices. |
+| `src/web/status_report.py` | Status report writer. |
+| `src/web/status_text.py` | Plain-text status report. |
 
 ## Data flow
 
