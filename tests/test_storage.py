@@ -206,6 +206,27 @@ class PriorityStorageTest(DatabaseTest):
 
 
 class ReportTest(DatabaseTest):
+    def test_player_watermark_follows_xp_not_checkpoints(self) -> None:
+        self.add_player("alice")
+        self.add_snapshot("alice", "overall", T1, 100)
+        storage.insert_checkpoints(self.conn, "alice", [T1])
+        before = reporting._player_watermarks(self.conn)
+
+        storage.insert_checkpoints(self.conn, "alice", [T2])
+        self.assertEqual(reporting._player_watermarks(self.conn), before)
+
+        self.add_snapshot("alice", "overall", T2, 200)
+        after = reporting._player_watermarks(self.conn)
+        self.assertNotEqual(after, before)
+        self.assertEqual(after["alice"][0], 2)
+
+        storage.insert_priority_snapshots(
+            self.conn, [("alice", "overall", storage.as_datetime(T1), 300)]
+        )
+        priority = reporting._player_watermarks(self.conn)
+        self.assertNotEqual(priority, after)
+        self.assertEqual(priority["alice"][2], 1)
+
     def test_write_report_ranks_and_prunes(self) -> None:
         now = 1_800_000_000
         self.add_player("alice")

@@ -36,7 +36,8 @@ def _remove_old_reports(report_dir: Path) -> None:
             path.unlink(missing_ok=True)
 
 
-_PLAYER_WATERMARKS: dict[Path, dict[str, tuple[int, object]]] = {}
+_PlayerMark = tuple[int, object, int, object]
+_PLAYER_WATERMARKS: dict[Path, dict[str, _PlayerMark]] = {}
 _PLAYER_PRIORITY_STATE: dict[Path, frozenset[str]] = {}
 
 # Ranking data changes only when rows are written. Recomputing it every minute
@@ -99,35 +100,54 @@ def report_data(
     return data
 
 
-def _player_watermarks(conn) -> dict[str, tuple[int, object]]:
-    """Checkpoint count and newest checkpoint per player.
+def _player_watermarks(conn) -> dict[str, _PlayerMark]:
+    """Snapshot count and newest snapshot per player, regular and priority.
 
-    Any new checkpoint, including a retry that fills an old gap, changes the
-    count, so the matching page is rebuilt on the next report pass.
+    Only stored xp changes matter. Checkpoints record fetches, so rebuilding
+    on them would rewrite every inactive player's page on every collection
+    run. A retry that fills an old gap without new xp leaves the coverage
+    shading until that player's next gain.
     """
     rows = conn.execute(
         """
-        SELECT p.username, count(c.observed_at), max(c.observed_at)
+        WITH regular AS (
+            SELECT username, count(*) AS rows, max(observed_at) AS newest
+            FROM snapshots
+            GROUP BY username
+        ), priority AS (
+            SELECT username, count(*) AS rows, max(observed_at) AS newest
+            FROM priority_snapshots
+            GROUP BY username
+        )
+        SELECT p.username,
+               coalesce(r.rows, 0), r.newest,
+               coalesce(q.rows, 0), q.newest
         FROM players p
-        LEFT JOIN checkpoints c ON c.username = p.username
-        GROUP BY p.username
+        LEFT JOIN regular r ON r.username = p.username
+        LEFT JOIN priority q ON q.username = p.username
         """
     ).fetchall()
     return {
-        username: (int(count), newest)
-        for username, count, newest in rows
+        username: (
+            int(regular_rows), regular_newest,
+            int(priority_rows), priority_newest,
+        )
+        for (
+            username, regular_rows, regular_newest,
+            priority_rows, priority_newest,
+        ) in rows
     }
 
 
 def write_player_pages(
     conn, report_dir: Path, data,
-    watermarks: dict[str, tuple[int, object]],
-    previous: dict[str, tuple[int, object]] | None,
+    watermarks: dict[str, _PlayerMark],
+    previous: dict[str, _PlayerMark] | None,
     priority_names: tuple[str, ...] = (),
     force: bool = False,
     version: str = "software version unknown",
 ) -> int:
-    """Write one HTML report per player whose checkpoint history changed."""
+    """Write one HTML report per player whose stored xp changed."""
     directory = report_dir / "players"
     directory.mkdir(parents=True, exist_ok=True)
     priority = set(priority_names)
