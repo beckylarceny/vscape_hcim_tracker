@@ -724,39 +724,49 @@ def _database_rows(data: StatusData) -> list[tuple[str, str]]:
     ]
 
 
-def _collection_rows(data: StatusData) -> list[tuple[str, str]]:
+def _backfill_rows(data: StatusData) -> list[tuple[str, str]]:
+    return [
+        (
+            "backfill interval",
+            _interval_label(data.backfill_interval),
+        ),
+        ("retry window", years_months(data.retry_window)),
+        ("lookback interval", years_months(data.lookback)),
+        ("last run", _run_line(data.runs)),
+        ("last run ended", _last_run_ended(data.runs, data.now_epoch)),
+    ]
+
+
+def _live_rows(data: StatusData) -> list[tuple[str, str]]:
     newest = data.newest_checkpoint_epoch
     checkpoint_age = (
         f"{_elapsed(data.now_epoch - newest)} ago"
         if newest is not None else "unknown"
     )
+    return [
+        ("live interval", _interval_label(data.collect_interval)),
+        (
+            "next live fetch",
+            f"at {_clock(data.next_live_epoch)}, "
+            f"{_until(data.next_live_epoch - data.now_epoch)}",
+        ),
+        ("newest checkpoint", checkpoint_age),
+    ]
+
+
+def _priority_rows(data: StatusData) -> list[tuple[str, str]]:
     newest_priority = data.newest_priority_epoch
     priority_age = (
         f"{_elapsed(data.now_epoch - newest_priority)} ago"
         if newest_priority is not None else "unknown"
     )
     return [
-        (
-            "backfill interval",
-            _interval_label(data.backfill_interval),
-        ),
-        ("live interval", _interval_label(data.collect_interval)),
         ("priority interval", _interval_label(data.priority_interval)),
-        ("retry window", years_months(data.retry_window)),
-        ("lookback interval", years_months(data.lookback)),
-        ("last run", _run_line(data.runs)),
-        ("last run ended", _last_run_ended(data.runs, data.now_epoch)),
-        (
-            "next live fetch",
-            f"at {_clock(data.next_live_epoch)}, "
-            f"{_until(data.next_live_epoch - data.now_epoch)}",
-        ),
         (
             "next priority fetch",
             f"at {_clock(data.next_priority_epoch)}, "
             f"{_until(data.next_priority_epoch - data.now_epoch)}",
         ),
-        ("newest checkpoint", checkpoint_age),
         ("newest priority checkpoint", priority_age),
     ]
 
@@ -865,6 +875,12 @@ def render_status_page(data: StatusData) -> str:
         "<h1>xp tracker status</h1>",
         '<p class="sub"><a href="status.txt">text version</a></p>',
         f'<p class="meta">generated at: {esc(data.generated)}</p>',
+        "<h2>data coverage</h2>",
+        '<p class="note">each segment is an equal slice of the lookback '
+        "window, fading with the share of players that hold a checkpoint "
+        "there.</p>",
+        coverage_bar(data),
+        coverage_tip_html(),
         "<h2>service</h2>",
         _fact_rows(_service_rows(data)),
         "<h3>containers</h3>",
@@ -878,8 +894,12 @@ def render_status_page(data: StatusData) -> str:
         + "</tbody></table>",
         '<p class="note">players and runs are counted exactly; snapshot '
         "and checkpoint tables use the planner estimate.</p>",
-        "<h2>collection</h2>",
-        _fact_rows(_collection_rows(data)),
+        "<h2>backfill</h2>",
+        _fact_rows(_backfill_rows(data)),
+        "<h2>live</h2>",
+        _fact_rows(_live_rows(data)),
+        "<h2>priority</h2>",
+        _fact_rows(_priority_rows(data)),
         "<h2>players</h2>",
         _fact_rows(_players_rows(data)),
         "<h2>snapshots</h2>",
@@ -887,12 +907,6 @@ def render_status_page(data: StatusData) -> str:
         _frequency_table(data.fetches, "checkpoints"),
         '<p class="note">snapshots store only changed xp; checkpoints record '
         "every fetch.</p>",
-        "<h2>data coverage</h2>",
-        '<p class="note">each segment is an equal slice of the lookback '
-        "window, fading with the share of players that hold a checkpoint "
-        "there.</p>",
-        coverage_bar(data),
-        coverage_tip_html(),
         "<h2>recent runs</h2>",
         '<table class="grid runs"><thead><tr><th>#</th>'
         '<th>started (UTC)</th>'
@@ -1027,15 +1041,17 @@ def render_status_text(data: StatusData) -> str:
     lines.extend(_text_facts([("generated at", data.generated)]))
     lines.append("")
     sections = (
+        ("DATA COVERAGE", _coverage_labels(data)),
         ("SERVICE", _text_facts(_service_rows(data))),
         ("CONTAINERS", _text_containers(data.containers)),
         ("DATABASE", _text_facts(_database_rows(data))),
         ("TABLES", _text_tables(data)),
-        ("COLLECTION", _text_facts(_collection_rows(data))),
+        ("BACKFILL", _text_facts(_backfill_rows(data))),
+        ("LIVE", _text_facts(_live_rows(data))),
+        ("PRIORITY", _text_facts(_priority_rows(data))),
         ("PLAYERS", _text_facts(_players_rows(data))),
         ("SNAPSHOTS", _text_frequency(data.snapshots)),
         ("CHECKPOINTS", _text_frequency(data.fetches)),
-        ("DATA COVERAGE", _coverage_labels(data)),
         ("RECENT RUNS", _text_runs(data.runs)),
     )
     for heading, rows in sections:
