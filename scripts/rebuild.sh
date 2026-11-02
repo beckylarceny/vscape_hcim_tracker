@@ -17,10 +17,17 @@ printf '%s %s %s\n' "$hash" "$branch" "$stamp" > version
 mkdir -p reports
 cp version reports/version
 
+if docker info >/dev/null 2>&1; then
+    compose() { docker compose "$@"; }
+else
+    echo "docker socket needs root, using sudo"
+    compose() { sudo docker compose "$@"; }
+fi
+
 echo "building $branch at $hash"
-docker compose build collector
+compose build collector
 
 echo "recreating the containers"
-docker compose up -d --force-recreate collector web
+compose up -d --force-recreate collector web
 
-docker compose ps
+compose ps

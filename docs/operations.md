@@ -130,7 +130,8 @@ The script:
 
 The hash gets a `-dirty` suffix when the checkout has uncommitted changes,
 ignoring `version` itself. The branch name appears in the page footer version
-line.
+line. If the Docker socket requires root, the script runs the compose commands
+through `sudo`.
 
 ## Backups
 
