@@ -1,8 +1,0 @@
-- in priority reports: turn the xp/h graph into a variable width stacked bars graph with colors representing different skills (when looking at the overall graph)
-- have an index.html page with links to every other section of the website
-- make links point to pages without the ".html" suffix for cleaner urls
-- generate text reports for player tracking
-- default to 1 hour live tracking
-- visually distinguish the data coverage bar based on density of data (24 hour vs 6 hour vs 1 hour etc)
-- trim unit testing, goal is about half of current test count
-- refactor src/web/status_report.py into smaller modules (queries, docker, html, text)
