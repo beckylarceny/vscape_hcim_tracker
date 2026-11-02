@@ -16,22 +16,23 @@ from ..common.utility import (
     DEFAULT_PRIORITY_RETENTION_SECONDS,
     SKILLS,
 )
-from .player_report import (
-    ChartData,
+from .chart import ChartData, chart_svg, thin
+from .format import plural
+from .html import (
     SKILL_TAB_SCRIPT,
-    _atomic_write,
-    _chart_svg,
-    _current_line,
-    _esc,
-    _group_points,
-    _thin,
-    highscores_url,
-    player_slug,
+    atomic_write,
+    esc,
     skill_panel_open,
     skill_tabs_html,
+    style_tag,
+)
+from .player_report import (
+    current_line,
+    group_points,
+    highscores_url,
+    player_slug,
 )
 from ..common.storage import as_datetime, canonical_username
-from . import styles
 
 WINDOW_SECONDS = DEFAULT_PRIORITY_RETENTION_SECONDS
 MAX_FEED_EVENTS = (
@@ -65,7 +66,7 @@ def _points_by_skill(
         """,
         (username, as_datetime(start_epoch), as_datetime(end_epoch)),
     ).fetchall()
-    return _group_points(rows)
+    return group_points(rows)
 
 
 def _regular_points_by_skill(
@@ -80,7 +81,7 @@ def _regular_points_by_skill(
         """,
         (username, as_datetime(start_epoch), as_datetime(end_epoch)),
     ).fetchall()
-    return _group_points(rows)
+    return group_points(rows)
 
 
 def _merged_points(
@@ -164,8 +165,8 @@ def _merged_chart(
     return ChartData(
         start_epoch,
         end_epoch,
-        _thin(line, 120),
-        _thin(gains, 120),
+        thin(line, 120),
+        thin(gains, 120),
         frozenset(regular_xp),
         frozenset(regular_gains),
     )
@@ -264,27 +265,23 @@ def collect_events(
     return events[:MAX_FEED_EVENTS]
 
 
-def _plural(count: int, unit: str) -> str:
-    return f"{count} {unit}" + ("s" if count != 1 else "")
-
-
 def _ago(seconds: int) -> str:
     seconds = max(0, int(seconds))
     if seconds < 60:
         return "less than a minute"
     minutes = seconds // 60
     if minutes < 60:
-        return _plural(minutes, "minute")
+        return plural(minutes, "minute")
     hours, minutes = divmod(minutes, 60)
     if hours < 24:
-        text = _plural(hours, "hour")
+        text = plural(hours, "hour")
         if minutes:
-            text += f" {_plural(minutes, 'minute')}"
+            text += f" {plural(minutes, 'minute')}"
         return text
     days, hours = divmod(hours, 24)
-    text = _plural(days, "day")
+    text = plural(days, "day")
     if hours:
-        text += f" {_plural(hours, 'hour')}"
+        text += f" {plural(hours, 'hour')}"
     return text
 
 
@@ -326,11 +323,11 @@ def render_feed(
         description = since + " | " + _gains_text(event.changes)
         items.append(
             "<item>"
-            f"<title>{_esc(title)}</title>"
-            f"<link>{_esc(page_url)}</link>"
-            f'<guid isPermaLink="false">{_esc(slug)}-{event.epoch}</guid>'
+            f"<title>{esc(title)}</title>"
+            f"<link>{esc(page_url)}</link>"
+            f'<guid isPermaLink="false">{esc(slug)}-{event.epoch}</guid>'
             f"<pubDate>{email.utils.formatdate(event.epoch, usegmt=True)}</pubDate>"
-            f"<description>{_esc(description)}</description>"
+            f"<description>{esc(description)}</description>"
             "</item>"
         )
 
@@ -339,11 +336,11 @@ def render_feed(
         '<rss version="2.0" '
         'xmlns:atom="http://www.w3.org/2005/Atom">\n'
         "<channel>"
-        f"<title>{_esc(username)} priority xp</title>"
-        f"<link>{_esc(page_url)}</link>"
-        f"<description>10-minute xp updates for {_esc(username)}</description>"
+        f"<title>{esc(username)} priority xp</title>"
+        f"<link>{esc(page_url)}</link>"
+        f"<description>10-minute xp updates for {esc(username)}</description>"
         f"<lastBuildDate>{last_build}</lastBuildDate>"
-        f'<atom:link href="{_esc(feed_url)}" rel="self" '
+        f'<atom:link href="{esc(feed_url)}" rel="self" '
         'type="application/rss+xml"/>'
         + "".join(items)
         + "</channel></rss>\n"
@@ -366,21 +363,21 @@ def render_priority_page(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{_esc(data.username.lower())} priority - xp tracker</title>",
+        f"<title>{esc(data.username.lower())} priority - xp tracker</title>",
         '<link rel="alternate" type="application/rss+xml" '
-        f'title="{_esc(data.username)} priority xp" href="{_esc(feed_href)}">',
-        f"{styles.style_tag()}</head>",
+        f'title="{esc(data.username)} priority xp" href="{esc(feed_href)}">',
+        f"{style_tag()}</head>",
         '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
         '<a href="../general.html">general tracking</a> · '
         '<a href="index.html">priority tracking</a> · '
-        f'<a href="{_esc(player_href)}">player page</a> · '
+        f'<a href="{esc(player_href)}">player page</a> · '
         '<a href="../status.html">status</a></p></div>',
-        f"<h1>{_esc(data.username)}</h1>",
-        f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
+        f"<h1>{esc(data.username)}</h1>",
+        f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}">'
         "vidyascape highscores</a></h2>",
-        f'<h2 class="subheading"><a href="{_esc(feed_href)}">rss feed</a></h2>',
-        f'<p class="meta">generated at: {_esc(data.generated)}</p>',
+        f'<h2 class="subheading"><a href="{esc(feed_href)}">rss feed</a></h2>',
+        f'<p class="meta">generated at: {esc(data.generated)}</p>',
         '<p class="meta">priority report: 10-minute updates, last 24 hours</p>',
         skill_tabs_html(flat),
         '<div class="stats">',
@@ -394,13 +391,13 @@ def render_priority_page(
             if chart.regular_xp or chart.regular_gains else ""
         )
         parts.append(skill_panel_open(index, skill))
-        parts.append(f"<h2>{_esc(skill)}</h2>")
+        parts.append(f"<h2>{esc(skill)}</h2>")
         parts.append(
             '<p class="meta">current xp: '
-            f"{_current_line(skill, value, data.current)}</p>"
+            f"{current_line(skill, value, data.current)}</p>"
         )
         label = f"{skill} last 24 hours: total xp and xp/h"
-        chart_svg = _chart_svg(
+        chart_html = chart_svg(
             chart, label, width=720, height=200,
             time_axis=True, ticks=7, segmented_area=True,
         )
@@ -409,7 +406,7 @@ def render_priority_page(
             '<span class="key line-key">total xp</span>'
             '<span class="key area-key">xp/h</span>'
             f"{regular_key}</figcaption>"
-            f"{chart_svg}"
+            f"{chart_html}"
             "</figure>"
         )
         parts.append("</section>")
@@ -420,7 +417,7 @@ def render_priority_page(
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>"
     )
-    parts.append(f'<footer class="version">{_esc(version)}</footer>')
+    parts.append(f'<footer class="version">{esc(version)}</footer>')
     parts.append("</body></html>")
     return "\n".join(parts) + "\n"
 
@@ -430,7 +427,7 @@ def render_priority_index(
 ) -> str:
     items = "".join(
         f'<li><a href="{urllib.parse.quote(player_slug(name))}.html">'
-        f"{_esc(name)}</a> · "
+        f"{esc(name)}</a> · "
         f'<a href="{urllib.parse.quote(player_slug(name))}.xml">rss</a></li>'
         for name in players
     )
@@ -441,7 +438,7 @@ def render_priority_index(
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>priority tracking - xp tracker</title>",
-        f"{styles.style_tag()}</head>",
+        f"{style_tag()}</head>",
         '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
         '<a href="../general.html">general tracking</a> · '
@@ -455,7 +452,7 @@ def render_priority_index(
         f"<ul>{items}</ul>",
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>",
-        f'<footer class="version">{_esc(version)}</footer>',
+        f'<footer class="version">{esc(version)}</footer>',
         "</body></html>",
     ]) + "\n"
 
@@ -485,18 +482,18 @@ def write_priority_reports(
         stem = urllib.parse.quote(slug)
         data = collect_priority_data(conn, canonical, now_epoch, generated)
         events = collect_events(conn, canonical, now_epoch)
-        _atomic_write(
+        atomic_write(
             directory / f"{stem}.html",
             render_priority_page(data, version),
         )
-        _atomic_write(
+        atomic_write(
             directory / f"{stem}.xml",
             render_feed(canonical, slug, events, now_epoch, base_url),
         )
         expected.add(f"{stem}.html")
         expected.add(f"{stem}.xml")
         written += 1
-    _atomic_write(
+    atomic_write(
         directory / "index.html", render_priority_index(resolved, version)
     )
     for pattern in ("*.html", "*.xml", ".*.tmp"):

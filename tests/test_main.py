@@ -118,8 +118,10 @@ class CollectAllTest(unittest.TestCase):
                     return_value=dict(done or {}),
                 ), \
                 patch.object(
-                    collection.storage, "latest_xp_by_skill",
-                    side_effect=lambda conn, name: dict((last or {}).get(name, {})),
+                    collection.storage, "latest_xp_by_skill_many",
+                    side_effect=lambda conn, names: {
+                        name: dict((last or {}).get(name, {})) for name in names
+                    },
                 ), \
                 patch.object(
                     collection.storage, "insert_snapshots"

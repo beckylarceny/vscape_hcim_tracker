@@ -145,3 +145,10 @@ def effective_lookback(now_epoch: int, lookback: int | None) -> int:
     if lookback is None:
         return available
     return min(lookback, available)
+
+
+def next_slot(now: float, interval: int, grace: int = 0) -> float:
+    """Next timestamp on the interval grid, plus a grace period."""
+    if interval <= 0:
+        return int(now) + grace
+    return (int(now) // interval + 1) * interval + grace

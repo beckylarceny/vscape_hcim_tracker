@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 import time
 
+from ..common import storage
 from ..common.priority import refresh_priority_players
-from ..common.utility import parse_priority_players
+from ..common.utility import next_slot, parse_priority_players
 from .cli import build_parser
 from .priority import start_priority_thread
 from .rate import RateLimiter
 from .run import run_once
-from .schedule import next_slot
 
 log = logging.getLogger("vscape_hcim_tracker.collector")
 
@@ -30,6 +30,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     args.priority_players = parse_priority_players(args.priority)
+
+    try:
+        conn = storage.connect(args.dsn)
+        try:
+            storage.ensure_schema(conn)
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 - the run loop reports the failure
+        log.exception("could not prepare the database schema")
 
     limiter = RateLimiter(args.rate)
     if args.loop:

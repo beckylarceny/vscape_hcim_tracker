@@ -6,6 +6,7 @@ import logging
 import time
 from pathlib import Path
 
+from ..common import storage
 from ..common.utility import parse_priority_players
 from .cli import build_parser
 from .reporting import (
@@ -37,6 +38,15 @@ def main(argv: list[str] | None = None) -> int:
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     _remove_old_reports(report_dir)
+
+    try:
+        conn = storage.connect(args.dsn)
+        try:
+            storage.ensure_schema(conn)
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 - serving must still start
+        log.exception("could not prepare the database schema")
 
     try:
         write_current_report(args, args.dsn)

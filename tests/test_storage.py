@@ -163,6 +163,18 @@ class SnapshotTest(DatabaseTest):
         self.assertEqual(buckets[0], (T1, 2))
         self.assertEqual(buckets[1][1], 1)
 
+        by_skill = storage.xp_by_skill_at_or_before(self.conn, T2)
+        self.assertEqual(by_skill["overall"], {"alice": 200, "bob": 50})
+        self.assertEqual(by_skill["attack"], {"alice": 50})
+        self.assertEqual(
+            storage.latest_xp_by_skill_many(self.conn, ["alice", "bob"]),
+            {
+                "alice": {"overall": 200, "attack": 50},
+                "bob": {"overall": 50},
+            },
+        )
+        self.assertEqual(storage.latest_xp_by_skill_many(self.conn, []), {})
+
 
 class PriorityStorageTest(DatabaseTest):
     def test_priority_insert_latest_prune(self) -> None:
@@ -194,6 +206,27 @@ class PriorityStorageTest(DatabaseTest):
 
 
 class ReportTest(DatabaseTest):
+    def test_player_watermark_follows_xp_not_checkpoints(self) -> None:
+        self.add_player("alice")
+        self.add_snapshot("alice", "overall", T1, 100)
+        storage.insert_checkpoints(self.conn, "alice", [T1])
+        before = reporting._player_watermarks(self.conn)
+
+        storage.insert_checkpoints(self.conn, "alice", [T2])
+        self.assertEqual(reporting._player_watermarks(self.conn), before)
+
+        self.add_snapshot("alice", "overall", T2, 200)
+        after = reporting._player_watermarks(self.conn)
+        self.assertNotEqual(after, before)
+        self.assertEqual(after["alice"][0], 2)
+
+        storage.insert_priority_snapshots(
+            self.conn, [("alice", "overall", storage.as_datetime(T1), 300)]
+        )
+        priority = reporting._player_watermarks(self.conn)
+        self.assertNotEqual(priority, after)
+        self.assertEqual(priority["alice"][2], 1)
+
     def test_write_report_ranks_and_prunes(self) -> None:
         now = 1_800_000_000
         self.add_player("alice")
@@ -227,7 +260,10 @@ class ReportTest(DatabaseTest):
             names = sorted(p.name for p in Path(directory).iterdir())
             self.assertEqual(
                 names,
-                ["general.html", "latest.txt", "players", "priority"],
+                [
+                    "general.html", "latest.txt", "players", "priority",
+                    "status.html", "status.txt",
+                ],
             )
             page = Path(directory, "general.html").read_text(encoding="utf-8")
             self.assertIn("alice", page)

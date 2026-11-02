@@ -14,16 +14,10 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from . import report, styles
-from .player_report import (
-    _atomic_write,
-    _date,
-    _esc,
-    _frequency_name,
-    _years_months,
-)
+from .format import frequency_name, hours, players_line, plural, years_months
+from .html import atomic_write, date, esc, style_tag
 from ..common.storage import as_datetime
-from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS
+from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, next_slot
 
 PROCESS_STARTED_EPOCH = int(time.time())
 
@@ -383,9 +377,9 @@ def _frequencies(
     collect_interval: int,
     backfill_interval: int,
 ) -> tuple[tuple[FrequencyStatus, ...], tuple[FrequencyStatus, ...]]:
-    priority_name = f"{_frequency_name(priority_interval)} priority"
-    live_name = _frequency_name(collect_interval)
-    backfill_name = _frequency_name(backfill_interval)
+    priority_name = f"{frequency_name(priority_interval)} priority"
+    live_name = frequency_name(collect_interval)
+    backfill_name = frequency_name(backfill_interval)
 
     snapshots_grouped = _grouped_times(
         conn, snapshot_table, backfill_interval
@@ -410,12 +404,6 @@ def _frequencies(
     return build(snapshot_priority, snapshots_grouped), build(
         check_priority, checks_grouped
     )
-
-
-def _next_slot(now_epoch: int, interval: int, offset: int) -> int:
-    if interval <= 0:
-        return now_epoch + offset
-    return (now_epoch // interval + 1) * interval + offset
 
 
 def collect_status(
@@ -467,13 +455,9 @@ def collect_status(
         report_interval=report_interval,
         newest_checkpoint_epoch=_newest(conn, "checkpoints"),
         newest_priority_epoch=_newest(conn, "priority_checkpoints"),
-        next_live_epoch=_next_slot(now_epoch, collect_interval, 60),
-        next_priority_epoch=_next_slot(now_epoch, priority_interval, 5),
+        next_live_epoch=next_slot(now_epoch, collect_interval, 60),
+        next_priority_epoch=next_slot(now_epoch, priority_interval, 5),
     )
-
-
-def _plural(count: int, unit: str) -> str:
-    return f"{count} {unit}" + ("s" if count != 1 else "")
 
 
 def _elapsed(seconds: int) -> str:
@@ -483,11 +467,11 @@ def _elapsed(seconds: int) -> str:
     minutes = rest // 60
     parts: list[str] = []
     if days:
-        parts.append(_plural(days, "day"))
+        parts.append(plural(days, "day"))
     if hours:
-        parts.append(_plural(hours, "hour"))
+        parts.append(plural(hours, "hour"))
     if minutes and not days:
-        parts.append(_plural(minutes, "minute"))
+        parts.append(plural(minutes, "minute"))
     if not parts:
         return "less than a minute"
     return " ".join(parts)
@@ -507,7 +491,7 @@ def _size(size_bytes: int | None) -> str:
     for unit in ("bytes", "KB", "MB", "GB", "TB"):
         if value < 1024 or unit == "TB":
             if unit == "bytes":
-                return _plural(int(value), "byte")
+                return plural(int(value), "byte")
             return f"{value:.1f} {unit}"
         value /= 1024
     return f"{value:.1f} TB"
@@ -551,10 +535,10 @@ def _coverage_segments(
             if next_index < len(data.coverage)
             else data.now_epoch
         )
-        first = _date(start_epoch)
-        last = _date(end_epoch)
+        first = date(start_epoch)
+        last = date(end_epoch)
         when = first if first == last else f"{first} - {last}"
-        duration = _years_months(end_epoch - start_epoch)
+        duration = years_months(end_epoch - start_epoch)
         ratio = min(1.0, present / total)
         pct = round(ratio * 100)
         label = f"{when} ({duration}): {present}/{total} players ({pct}%)"
@@ -572,18 +556,18 @@ def coverage_bar(data: StatusData) -> str:
                 f' style="flex:{length};'
                 f'opacity:{0.15 + 0.85 * ratio:.2f}"'
             )
-            segments.append(f'<span data-tip="{_esc(label)}"{style}></span>')
+            segments.append(f'<span data-tip="{esc(label)}"{style}></span>')
         else:
             segments.append(
                 f'<span class="zero" style="flex:{length}" '
-                f'data-tip="{_esc(label)}"></span>'
+                f'data-tip="{esc(label)}"></span>'
             )
     if not segments:
         segments.append('<span class="zero"></span>')
     first = (
-        _date(data.coverage[0][0]) if data.coverage else _date(data.now_epoch)
+        date(data.coverage[0][0]) if data.coverage else date(data.now_epoch)
     )
-    last = _date(data.now_epoch)
+    last = date(data.now_epoch)
     return (
         '<div class="coverage" role="img" '
         f'aria-label="data coverage from {first} to {last}">'
@@ -659,7 +643,7 @@ def _fact_rows(rows: list[tuple[str, str]]) -> str:
     return (
         '<table class="facts"><tbody>'
         + "".join(
-            f"<tr><th>{label}</th><td>{_esc(value)}</td></tr>"
+            f"<tr><th>{label}</th><td>{esc(value)}</td></tr>"
             for label, value in rows
         )
         + "</tbody></table>"
@@ -668,11 +652,11 @@ def _fact_rows(rows: list[tuple[str, str]]) -> str:
 
 def _container_table(containers: DockerStatus) -> str:
     rows = "".join(
-        f'<tr><th scope="row">{_esc(container.service)}</th>'
-        f"<td>{_esc(container.name)}</td>"
-        f"<td>{_esc(container.state)}</td>"
-        f"<td>{_esc(container.status)}</td>"
-        f"<td>{_esc(container.image)}</td></tr>"
+        f'<tr><th scope="row">{esc(container.service)}</th>'
+        f"<td>{esc(container.name)}</td>"
+        f"<td>{esc(container.state)}</td>"
+        f"<td>{esc(container.status)}</td>"
+        f"<td>{esc(container.image)}</td></tr>"
         for container in containers.containers
     )
     if not rows:
@@ -682,7 +666,7 @@ def _container_table(containers: DockerStatus) -> str:
             else "no containers found"
         )
         rows = (
-            f'<tr><td class=empty colspan="5">{_esc(message)}</td></tr>'
+            f'<tr><td class=empty colspan="5">{esc(message)}</td></tr>'
         )
     return (
         '<table class="grid containers"><thead><tr><th>service</th>'
@@ -695,12 +679,12 @@ def _container_table(containers: DockerStatus) -> str:
 
 def _interval_label(seconds: int) -> str:
     if seconds < 3600:
-        return _plural(max(1, seconds // 60), "minute")
-    return report._hours(seconds)
+        return plural(max(1, seconds // 60), "minute")
+    return hours(seconds)
 
 
 def _date_or_dash(epoch: int | None) -> str:
-    return _date(epoch) if epoch is not None else "-"
+    return date(epoch) if epoch is not None else "-"
 
 
 def _service_rows(data: StatusData) -> list[tuple[str, str]]:
@@ -758,8 +742,8 @@ def _collection_rows(data: StatusData) -> list[tuple[str, str]]:
         ),
         ("live interval", _interval_label(data.collect_interval)),
         ("priority interval", _interval_label(data.priority_interval)),
-        ("retry window", _years_months(data.retry_window)),
-        ("lookback interval", _years_months(data.lookback)),
+        ("retry window", years_months(data.retry_window)),
+        ("lookback interval", years_months(data.lookback)),
         ("last run", _run_line(data.runs)),
         ("last run ended", _last_run_ended(data.runs, data.now_epoch)),
         (
@@ -779,7 +763,7 @@ def _collection_rows(data: StatusData) -> list[tuple[str, str]]:
 
 def _players_rows(data: StatusData) -> list[tuple[str, str]]:
     return [
-        ("players logged", report._players_line(data)),
+        ("players logged", players_line(data.player_count, data.coverage_total)),
         ("priority players tracked", str(data.priority_players)),
     ]
 
@@ -801,7 +785,7 @@ def _frequency_table(
     entries: tuple[FrequencyStatus, ...], heading: str
 ) -> str:
     rows = "".join(
-        f'<tr><th scope="row">{_esc(name)}</th>'
+        f'<tr><th scope="row">{esc(name)}</th>'
         f'<td class="num">{count:,}</td>'
         f'<td class="date">{_date_or_dash(first)}</td>'
         f'<td class="date">{_date_or_dash(last)}</td></tr>'
@@ -852,14 +836,14 @@ def _last_run_ended(
 
 def render_status_page(data: StatusData) -> str:
     tables = "".join(
-        f'<tr><th scope="row">{_esc(name)}</th>'
+        f'<tr><th scope="row">{esc(name)}</th>'
         f'<td class="num">{_num_or_dash(rows)}</td></tr>'
         for name, rows in _table_rows(data)
     )
     runs = "".join(
         f'<tr><th scope="row" class=rank>{run.id}</th>'
-        f"<td>{_esc(_stamp(run.started_epoch))}</td>"
-        f"<td>{_esc(run.status)}</td>"
+        f"<td>{esc(_stamp(run.started_epoch))}</td>"
+        f"<td>{esc(run.status)}</td>"
         f'<td class="num">{_num_or_dash(run.requests)}</td>'
         f'<td class="num">{run.failures:,}</td>'
         f'<td class="num">{_num_or_dash(run.players)}</td></tr>'
@@ -873,14 +857,14 @@ def render_status_page(data: StatusData) -> str:
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>status - xp tracker</title>",
-        styles.style_tag() + "</head>",
+        style_tag() + "</head>",
         '<body id="top" class="status">',
         '<div class="backlinks"><p class="sub">'
         '<a href="general.html">general tracking</a> · '
         '<a href="priority/index.html">priority tracking</a></p></div>',
         "<h1>xp tracker status</h1>",
         '<p class="sub"><a href="status.txt">text version</a></p>',
-        f'<p class="meta">generated at: {_esc(data.generated)}</p>',
+        f'<p class="meta">generated at: {esc(data.generated)}</p>',
         "<h2>service</h2>",
         _fact_rows(_service_rows(data)),
         "<h3>containers</h3>",
@@ -917,7 +901,7 @@ def render_status_page(data: StatusData) -> str:
         "</tr></thead><tbody>" + runs + "</tbody></table>",
         '<a class="to-top" href="#top" aria-label="back to top">'
         "&#8593; Top</a>",
-        f'<footer class="version">{_esc(data.version)}</footer>',
+        f'<footer class="version">{esc(data.version)}</footer>',
         "</body></html>",
     ]
     return "\n".join(parts) + "\n"
@@ -1068,6 +1052,6 @@ def write_status_page(conn, report_dir, **kwargs) -> Path:
     text = render_status_text(data)
     directory = Path(report_dir)
     path = directory / "status.html"
-    _atomic_write(path, page)
-    _atomic_write(directory / "status.txt", text)
+    atomic_write(path, page)
+    atomic_write(directory / "status.txt", text)
     return path
