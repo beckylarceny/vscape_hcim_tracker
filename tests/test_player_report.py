@@ -178,9 +178,11 @@ class RenderTest(unittest.TestCase):
         self.assertIn("overall day: total xp and xp/h", page)
         self.assertIn("overall all time: total xp and xp/h", page)
         self.assertIn('<figure class="wide">', page)
-        self.assertIn(".charts figure.wide{grid-column:1/-1}", page)
+        self.assertIn(
+            ".charts figure.wide {\n    grid-column: 1 / -1;\n}", page
+        )
         self.assertIn('class="key gap-key">missing data</span>', page)
-        self.assertIn("width:.95em;height:.95em", page)
+        self.assertIn("width: .95em;\n    height: .95em", page)
         self.assertIn('class="area"', page)
         self.assertIn('class="line"', page)
 
