@@ -3,6 +3,9 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
+COMPOSE_FILE=docker/compose.yaml
+export COMPOSE_FILE
+
 backup_dir=${BACKUP_DIR:-backups}
 mkdir -p "$backup_dir"
 

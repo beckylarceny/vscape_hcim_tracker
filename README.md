@@ -7,171 +7,43 @@ HTML rankings.
 > Flash** (`opencode-go/deepseek-v4.1-flash`) running in the OpenCode agent
 > harness. No human wrote the implementation. Review it before use.
 
-## How it works
-
-- `/api/tracker/player/{username}?time=n` returns xp gained over the last `n`
-  seconds, so `xp_at(t) = xp_now - gained(now - t)`.
-- Backfill is interval-major and newest first: every player at one timestamp
-  before the previous timestamp. It covers the 24h grid since 2025-01-26, the
-  earliest data the API holds, plus a 7-day retry window. Each run also adds the
-  current 6h checkpoint.
-- Only accounts reporting `ironman == 2` (hardcore) are stored.
-- Snapshot rows are written only when xp changes. Every fetched timestamp is a
-  checkpoint, so unchanged points are never fetched twice. Missing xp is treated
-  as the previous value.
-
-## Usage
+## Quick start
 
 ```sh
-cp .env.example .env      # set a real POSTGRES_PASSWORD
-docker compose up -d --build
+cp docker/.env.example docker/.env      # set a real POSTGRES_PASSWORD
+docker compose -f docker/compose.yaml up -d --build
 ```
 
 - page: <http://localhost:8000/>
-- status page: <http://localhost:8000/status.html>
-- text report: `reports/latest.txt`
-- start/stop/restart: `./scripts/start.sh`, `./scripts/stop.sh`,
-  `./scripts/restart.sh`
-- update: `./scripts/update.sh` pulls, rebuilds and recreates `collector` and
-  `web`; `db` keeps running
-- logs: `docker compose logs -f collector` or `docker compose logs -f web`
-- remove containers: `docker compose down`; delete data: `docker compose down -v`
+- status: <http://localhost:8000/status.html>
+- text reports: `reports/latest.txt`, `reports/status.txt`
 
-The first run backfills about 644 days: roughly 250,000 requests, 17.5 hours at
-the default 4 req/s. Later runs fetch the current 6h checkpoint plus retries.
-Reports regenerate every minute. `--lookback` defaults to the fixed start epoch
-and never reaches before 2025-01-26.
+The collector starts with a multi-hour backfill. Later runs add the current
+checkpoint and retry recent gaps.
 
-`POSTGRES_PASSWORD` applies only when the `pgdata` volume is created. To rotate
-it later, either `docker compose down -v` (deletes xp) or:
+## Basic commands
 
 ```sh
-docker compose exec db psql -U xp_tracker -d xp_tracker \
-  -c "ALTER ROLE xp_tracker PASSWORD 'new-password';"
+./scripts/start.sh
+./scripts/stop.sh
+./scripts/restart.sh
+./scripts/update.sh
+docker compose -f docker/compose.yaml logs -f collector
 ```
 
-`reports/` is bind-mounted; the container entrypoint fixes its ownership to uid
-1000 on startup.
+The compose file is in `docker/`. Pass `-f docker/compose.yaml` to manual compose
+commands, or `export COMPOSE_FILE=docker/compose.yaml` once per shell. The
+scripts set it automatically.
 
-## Source layout
+## Documentation
 
-Each container runs only its own service code:
+Full documentation is in [docs](docs/README.md).
 
-- `src/collector/` - highscores fetching, priority collection and the
-  collection loop. Container command: `python -m src.collector`.
-- `src/web/` - report generation, static HTTP server and the report timer.
-  Container command: `python -m src.web`. Shared rendering primitives live in
-  `html.py`, `chart.py` and `format.py`.
-- `src/db/` - PostgreSQL schema and `python -m src.db` for one-shot schema
-  creation.
-- `src/common/` - configuration, database queries and other code shared by the
-  services.
-- `src/main.py` - default entry point, which runs the collector.
-
-The collector never writes reports and the web service never fetches xp.
-
-## Configuration
-
-One YAML file per service in `config/`:
-
-- `collector.yaml` - skills, account filter codes, API urls; `interval_seconds`,
-  `collect_interval_seconds`, `retry_window_seconds`, `data_start_epoch`,
-  `workers`, `rate`; `priority.players`, interval, retention, top.
-- `web.yaml` - `report_interval_seconds`, `top_n`, `base_url`, record spans.
-- `db.yaml` - `host`, `port`, `database`, `user` fallbacks.
-
-Recommended values live in `config/defaults/`; active files are editable copies.
-`src/common/utility.py` loads them (`VSCAPE_HCIM_TRACKER_CONFIG_DIR` overrides
-the directory) and provides `build_dsn` and `parse_priority_players`.
-
-```sh
-./scripts/setup.sh             # prompts every value, defaults shown
-./scripts/setup.sh --defaults  # revert without prompting
-./scripts/reset-config.sh      # copy config/defaults over config/
-```
-
-Durations accept `10m`, `6h`, `7d`; the start date accepts `YYYY-MM-DD`.
-
-## Scheduled updates
-
-```sh
-./scripts/install-cron.sh          # daily update.sh at 04:00
-./scripts/install-cron.sh --remove
-```
-
-`update.sh` writes `version` with the pulled commit hash and time, and copies it
-to `reports/version`. Every webpage shows it as a grey footer, and
-`reports/latest.txt` ends with it: `software version <hash>, updated <time> UTC`.
-
-## Backups
-
-```sh
-./scripts/backup.sh                       # pg_dump -Fc into backups/
-./scripts/restore.sh                      # newest dump
-./scripts/restore.sh backups/<file>.dump
-```
-
-`backup.sh` needs the `db` service running; `BACKUP_DIR` changes the output
-directory. `restore.sh` copies `backups/` into the container, stops `collector`
-and `web`, runs `pg_restore --clean --if-exists`, prints row counts and restarts
-them. `RESTORE_DB` selects another target, `RESTORE_KEEP_SERVICES=1` leaves the
-services running. Restoring drops everything written after the dump.
-
-## Reports
-
-- `latest.txt` / `general.html`: top 5 gains per skill and span
-  (day/week/month/year), best windows, and player search. The HTML page carries
-  only the `generated at` metadata line; the coverage bar and the interval and
-  player-count lines moved to `status.html`.
-- `status.html` / `status.txt`: database connection, latency, version, size
-  and estimated row counts; process uptime; the backfill, live and priority
-  schedules with the next fetch slots and the last run ended; snapshot and
-  checkpoint counts per cadence; the data coverage bar; and the five most
-  recent runs. `status.txt` is the plain text version of the page. Links are
-  `general tracking` (`general.html`), `priority tracking`
-  (`priority/index.html`) and `text version` (`status.txt`). The `service`
-  section also lists the compose containers (service, container, state, status
-  and image) read from the mounted Docker socket. Both are rebuilt on the same
-  timer as the other reports.
-- `players/<name>.html`: current xp and level, past/best tables, and five charts
-  per skill (four spans plus a wide all-time chart). Stretches with fewer
-  checkpoints than the nearby cadence are shaded as missing data; idle time that
-  was fully fetched stays unshaded. The data coverage bar moved to
-  `status.html`; the `generated at` and per-cadence snapshot lines stay on the
-  player page.
-- `priority/`: index, one 24h page per player, and an RSS feed. Priority covers
-  the top 5 by `overall` xp plus `priority.players`, fetched every 10 minutes and
-  pruned after 24 hours.
-
-RSS links use `base_url` or `VSCAPE_HCIM_TRACKER_BASE_URL`.
-
-`web` mounts `/var/run/docker.sock` read-only to read the container list.
-Docker API access is equivalent to host root, so this is only for trusted
-hosts.
-
-## API limits
-
-No documented quota; overlapping requests return HTTP 503. One global limiter
-covers all workers and retries, so `--rate` is total requests per second
-(default `--workers 2 --rate 4`). 429, 500, 502, 503 and 504 are retried five
-times with 2-16 s backoff plus jitter, honouring `Retry-After`.
-
-## Storage
-
-Measured at 216 bytes per snapshot row and 111 bytes per checkpoint row,
-including indexes.
-
-- Per player: about 950 snapshot rows and 672 checkpoints.
-- Full backfill, 371 players: about 352,000 snapshot rows (~76 MB) and 250,000
-  checkpoints (~28 MB), roughly 100 MB total.
-- Ongoing 6h collection adds about 541,000 checkpoints and 199,000 snapshot rows
-  per year, roughly 100 MB/year.
-- Checkpoints grow for every player; snapshots only on xp changes. Player pages
-  are static files, about 117 KB each (~43 MB for 371), rewritten only when that
-  player's data changes.
-
-## Notes
-
-- `xp_now` and the gain query are separate requests, so `xp_at(t)` is only as
-  exact as the server's samples.
-- Negative derived xp is clamped to zero.
+- [Architecture](docs/architecture.md): services, collection cycle, schema and
+  report pipeline.
+- [Operations](docs/operations.md): setup, commands, updates, backups, restores
+  and health checks.
+- [Configuration](docs/configuration.md): YAML settings, environment variables
+  and CLI flags.
+- [Reports](docs/reports.md): general, player, priority and status output.
+- [Development](docs/development.md): local setup, tests and module map.

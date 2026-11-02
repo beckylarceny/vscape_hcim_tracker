@@ -1,0 +1,153 @@
+# Reports
+
+The web service writes static text and HTML files into `reports/` and serves the
+same directory over HTTP. Reports are rebuilt on a timer and are safe to read
+while being replaced.
+
+## Output files
+
+| Path | Content |
+| --- | --- |
+| `reports/latest.txt` | Plain-text general report. |
+| `reports/general.html` | General rankings page. |
+| `reports/status.txt` | Plain-text status page. |
+| `reports/status.html` | Service, database, collection and coverage status. |
+| `reports/players/<slug>.html` | One page per player. |
+| `reports/priority/index.html` | Priority player index. |
+| `reports/priority/<slug>.html` | One 24-hour priority page per player. |
+| `reports/priority/<slug>.xml` | RSS feed for one priority player. |
+| `reports/version` | Software version label written by `scripts/update.sh`. |
+
+The server maps `/`, `/general` and `/general/` to `general.html`.
+
+`player_slug` replaces characters outside `A-Z a-z 0-9 . _ -` with `_`. Names
+that reduce to an empty slug use `player`.
+
+## General report
+
+The general page has one tab per skill and a player finder. Each skill has:
+
+- `Past`: the top players by xp gained over each span.
+- `Best`: the best window of each span across the lookback.
+
+Past gain is:
+
+```text
+latest xp at or before now - latest xp at or before now - span
+```
+
+Rows with no baseline or no positive gain are omitted. The table shows the
+configured number of rows (`top_n`, default 5).
+
+Best windows scan the sparse stored points. A skill's xp is treated as constant
+between stored rows. A window needs one stored point at or before its start and
+one at its end. Each player contributes at most one record per span. Zero-gain
+windows are ignored. The `day` table shows one date; longer spans show start and
+end dates.
+
+Spans and `top_n` come from `config/web.yaml`. `latest.txt` contains the same
+skill, past and best sections in text form, followed by the version line.
+
+## Player pages
+
+Each player page contains:
+
+- Current xp and level per skill.
+- Total level on the `overall` row.
+- Past gains for day, week, month and year.
+- Best windows for the same spans.
+- Five charts per skill: the four spans plus an all-time chart.
+- Snapshot counts and date ranges per fetch frequency.
+
+Levels use the OSRS experience table and cap at 99. Total level sums every skill
+except `overall`.
+
+Charts show total xp as a line and xp/hour as a filled area. The all-time chart
+is wider and uses more points. Series are thinned to a fixed number of points
+while keeping their endpoints.
+
+Missing-data shading marks stretches with fewer checkpoints than expected.
+Edges use 36 hours or twice the live interval, whichever is larger. Interior
+gaps are compared with the smallest nearby gap, so a missed 6-hour fetch is
+flagged while a normal 24-hour backfill gap is not. Stretches that were fetched
+and had no xp change stay unshaded.
+
+Player pages are rebuilt only when that player's stored xp changes, when the
+file is missing, or when the priority set changes. Checkpoint-only changes do
+not rewrite inactive players.
+
+## Priority reports
+
+Priority tracking covers:
+
+- The top `priority.top` players by `overall` xp.
+- Any players in `priority.players`.
+- CLI or environment priority names.
+- Players who still have unpruned priority rows.
+
+Each priority page covers the last 24 hours. It shows current xp and one chart
+per skill with total xp and xp/hour. Priority samples are the base series.
+Regular snapshots fill gaps in the priority series and are drawn in a different
+colour, so periods without 10-minute collection are still visible.
+
+The RSS feed contains changed xp grouped by priority fetch time, newest first.
+Feed links use `base_url` or `VSCAPE_HCIM_TRACKER_BASE_URL`. The link points to
+the priority page and the feed itself.
+
+Players who leave the priority set remain in the index until their high-frequency
+rows are pruned.
+
+## Status report
+
+The status page has these sections:
+
+| Section | Contents |
+| --- | --- |
+| `service` | Process uptime, start time, Python and platform, report rebuild timer. |
+| `containers` | Compose service, container name, state, status and image. |
+| `database` | Connection, latency, server version, database uptime, name, host and size. |
+| `tables` | Row counts for players, snapshots, checkpoints, priority tables and runs. |
+| `collection` | Intervals, retry window, lookback, last run, next fetch times and newest checkpoints. |
+| `players` | Verified player count and tracked priority players. |
+| `snapshots` | Snapshot and checkpoint counts by fetch frequency, with first and last dates. |
+| `data coverage` | One bar segment per equal slice of the lookback window. |
+| `recent runs` | The last five runs with status, requests, failures and players. |
+
+`players` and `runs` are counted exactly. Snapshot and checkpoint counts use the
+PostgreSQL planner estimate.
+
+The coverage bar fades with the share of players that hold a checkpoint in each
+slice. Tooltips show the slice range and player count.
+
+The container table comes from the Docker API through the read-only socket
+mount. When the API is unavailable the page still renders and shows the error.
+
+`status.txt` mirrors the HTML page in plain text.
+
+## Rebuild and caching
+
+The web service rebuilds reports every `report_interval_seconds` (default 60
+seconds). `--report-interval 0` writes one report at startup and stops the
+timer.
+
+Ranking data is cached when:
+
+- Report parameters are unchanged.
+- Row counts for `players`, `snapshots` and `checkpoints` are unchanged.
+- The cache entry is at most one hour old.
+
+This avoids rescanning snapshot history every minute when no xp was written.
+Player pages use per-player watermarks and are written only when their data
+changes.
+
+Old `report_*.txt`, `report_*.html` and temporary files are removed. Player and
+priority pages that no longer have a corresponding player are deleted.
+
+All writes use a temporary file and `os.replace`, so a reader never sees a
+partially written report.
+
+## Related documentation
+
+- [Configuration](configuration.md)
+- [Architecture](architecture.md)
+- [Operations](operations.md)
