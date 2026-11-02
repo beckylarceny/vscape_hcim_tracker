@@ -10,6 +10,9 @@ h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:lowercase;
    letter-spacing:.04em}
 .meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
 .sub{margin:.2rem 0 .8rem;font-size:1.05rem}
+.backlinks{margin:-2rem 0 1.75rem;text-align:center}
+.backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}
+.backlinks .sub + .sub{margin-top:.15rem}
 .coverage{display:flex;gap:3px;height:14px;margin:.3rem 0 .1rem;
           background:#8882;border-radius:0;overflow:hidden}
 .coverage span{flex:1;background:#9079B6;min-width:1em}
@@ -106,11 +109,6 @@ body.wide{max-width:72rem}
 .rankings table.best.day th:nth-child(4),.rankings table.best.day td:nth-child(4){width:26%}
 
 .player .stats h2,.player .stats h3,.player .stats h4{text-align:center}
-.player .sub{margin:1rem 0 1.5rem;padding-bottom:.9rem;
-             border-bottom:1px solid #8884}
-.player .backlinks{margin:-2rem 0 1.75rem;text-align:center}
-.player .backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}
-.player .backlinks .sub + .sub{margin-top:.15rem}
 .player .subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
                     border:0;padding:0}
 .player .priority-link{margin:.1rem 0 .9rem}

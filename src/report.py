@@ -365,11 +365,11 @@ def render_html(data: ReportData) -> str:
         f"<title>xp tracker - {_esc(_date(data.now_epoch))}</title>",
         f"{styles.style_tag()}</head>",
         '<body id="top" class="rankings wide">',
+        '<div class="backlinks"><p class="sub">'
+        '<a href="priority/index.html">priority tracking</a> · '
+        '<a href="status.html">status</a></p></div>',
         "<h1>XP Tracker</h1>",
-        '<p class="sub"><a href="latest.txt">text report</a></p>',
-        '<p class="sub"><a href="priority/index.html">'
-        "priority tracking</a></p>",
-        '<p class="sub"><a href="status.html">status</a></p>',
+        '<p class="sub"><a href="latest.txt">text version</a></p>',
         metas,
         _player_finder(data),
     ]

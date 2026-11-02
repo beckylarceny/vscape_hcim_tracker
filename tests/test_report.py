@@ -159,6 +159,36 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn('href="status.html"', page)
         self.assertIn('class="rankings wide"', page)
 
+    def test_backlinks_sit_above_the_title(self) -> None:
+        page = render_html(self.make_data())
+        backlinks = (
+            '<div class="backlinks"><p class="sub">'
+            '<a href="priority/index.html">priority tracking</a> · '
+            '<a href="status.html">status</a></p></div>'
+        )
+        self.assertIn(backlinks, page)
+        self.assertLess(page.index('<div class="backlinks">'), page.index("<h1>"))
+
+        text_version = '<p class="sub"><a href="latest.txt">text version</a></p>'
+        self.assertIn(text_version, page)
+        self.assertLess(page.index("<h1>"), page.index(text_version))
+        self.assertLess(page.index(text_version), page.index("generated at"))
+
+        self.assertNotIn("text report", page)
+        self.assertNotIn(
+            "</h1>\n<p class=\"sub\"><a href=\"priority/index.html\">", page
+        )
+        self.assertNotIn(
+            "</h1>\n<p class=\"sub\"><a href=\"status.html\">", page
+        )
+        self.assertIn(
+            ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
+        )
+        self.assertIn(
+            ".backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}",
+            page,
+        )
+
     def test_version_footer_and_text_line(self) -> None:
         import tempfile
         from pathlib import Path

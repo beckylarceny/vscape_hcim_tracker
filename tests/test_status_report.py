@@ -214,20 +214,38 @@ class PageTest(unittest.TestCase):
         )
         self.assertIn("<td>17.0.11</td>", page)
         self.assertIn("snapshots store only changed xp", page)
-        self.assertIn(
-            '<p class="sub"><a href="latest.html">general tracking</a> · '
-            '<a href="priority/index.html">priority tracking</a></p>',
-            page,
-        )
-        self.assertIn(
-            '<p class="sub"><a href="status.txt">text version</a></p>',
-            page,
-        )
-        self.assertNotIn('href="latest.txt"', page)
         self.assertNotIn("pid ", page)
         self.assertNotIn("<th>user</th>", page)
         self.assertIn("python ", page)
         self.assertIn("class=\"status\"", page)
+
+    def test_backlinks_sit_above_the_title(self) -> None:
+        page = render_status_page(collect())
+        backlinks = (
+            '<div class="backlinks"><p class="sub">'
+            '<a href="latest.html">general tracking</a> · '
+            '<a href="priority/index.html">priority tracking</a></p></div>'
+        )
+        self.assertIn(backlinks, page)
+        self.assertLess(page.index('<div class="backlinks">'), page.index("<h1>"))
+
+        text_version = '<p class="sub"><a href="status.txt">text version</a></p>'
+        self.assertIn(text_version, page)
+        self.assertLess(page.index("<h1>"), page.index(text_version))
+        self.assertLess(page.index(text_version), page.index("generated at"))
+
+        self.assertNotIn("text report", page)
+        self.assertNotIn('href="latest.txt"', page)
+        self.assertNotIn(
+            "</h1>\n<p class=\"sub\"><a href=\"latest.html\">", page
+        )
+        self.assertIn(
+            ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
+        )
+        self.assertIn(
+            ".backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}",
+            page,
+        )
 
     def test_players_line_shows_partial_total(self) -> None:
         page = render_status_page(collect(coverage_total=4))
