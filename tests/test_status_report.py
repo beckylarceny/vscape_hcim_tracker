@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from src.common.storage import CoverageSlice
 from src.web.status_report import (
     ContainerInfo,
     DockerStatus,
@@ -142,7 +143,11 @@ def collect(conn: FakeConn | None = None, **overrides):
         collect_interval=COLLECT,
         retry_window=7 * DAY,
         lookback=LOOKBACK,
-        coverage=[(NOW - 2 * DAY, 2), (NOW - DAY, 1), (NOW, 0)],
+        coverage=[
+            CoverageSlice(NOW - 2 * DAY, 2, 48),
+            CoverageSlice(NOW - DAY, 1, 4),
+            CoverageSlice(NOW, 0, 0),
+        ],
         player_count=2,
         coverage_total=2,
         priority_players=3,
@@ -243,9 +248,11 @@ class CoverageTest(unittest.TestCase):
         page = render_status_page(data)
         bar = coverage_bar(data)
         self.assertIn('class="coverage"', bar)
-        self.assertIn("(1 day): 1/2 players (50%)", bar)
+        self.assertIn("(1 day): 1/2 players (50%), 6-hour checkpoints", bar)
         self.assertIn('data-tip="', bar)
         self.assertIn('class="zero"', bar)
+        self.assertIn('class="density-hourly"', bar)
+        self.assertIn('class="coverage-legend"', bar)
         self.assertIn("min-width:1em", page)
         self.assertIn('id="coverage-tip"', page)
         self.assertIn("(hover: none)", page)
@@ -255,14 +262,31 @@ class CoverageTest(unittest.TestCase):
         self.assertIn('<span class="zero"></span>', empty)
 
         self.assertEqual(
-            coverage_runs(
-                [(0, 5), (86400, 5), (172800, 2), (259200, 2), (345600, 0)]
-            ),
-            [(0, 2, 5), (2, 2, 2), (4, 1, 0)],
+            coverage_runs([
+                CoverageSlice(0, 5, 120),
+                CoverageSlice(86400, 5, 20),
+                CoverageSlice(172800, 2, 2),
+                CoverageSlice(259200, 2, 2),
+                CoverageSlice(345600, 0, 0),
+            ]),
+            [
+                (0, 1, 5, "hourly"),
+                (1, 1, 5, "six-hour"),
+                (2, 2, 2, "daily"),
+                (4, 1, 0, "none"),
+            ],
         )
         self.assertEqual(
-            coverage_runs([(0, 1), (86400, 2), (172800, 1)]),
-            [(0, 1, 1), (1, 1, 2), (2, 1, 1)],
+            coverage_runs([
+                CoverageSlice(0, 1, 4),
+                CoverageSlice(86400, 2, 2),
+                CoverageSlice(172800, 1, 1),
+            ]),
+            [
+                (0, 1, 1, "six-hour"),
+                (1, 1, 2, "daily"),
+                (2, 1, 1, "daily"),
+            ],
         )
 
 

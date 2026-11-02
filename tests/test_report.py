@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
+from src.common.storage import CoverageSlice
 from src.common.utility import SKILLS, SPANS, parse_duration
 from src.web import reporting
 from src.web.format import hours as _hours
@@ -113,7 +114,11 @@ class HtmlReportTest(unittest.TestCase):
             coverage_total=2,
             gains=gains,
             records=records,
-            coverage=[(NOW - 2 * 86400, 2), (NOW - 86400, 1), (NOW, 0)],
+            coverage=[
+                CoverageSlice(NOW - 2 * 86400, 2, 48),
+                CoverageSlice(NOW - 86400, 1, 4),
+                CoverageSlice(NOW, 0, 0),
+            ],
         )
 
     def test_escapes_player_names_and_formats_gains(self) -> None:

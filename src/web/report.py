@@ -26,6 +26,7 @@ from .player_report import (
     scan_player_points as _scan_player_points,
 )
 from ..common.storage import (
+    CoverageSlice,
     as_datetime,
     coverage_buckets,
     xp_by_skill_at_or_before,
@@ -42,7 +43,7 @@ class ReportData(NamedTuple):
     coverage_total: int
     gains: dict[str, dict[str, list[tuple[str, int]]]]
     records: dict[str, dict[str, list[Record]]]
-    coverage: list[tuple[int, int]]
+    coverage: list[CoverageSlice]
     players: tuple[str, ...] = ()
     version: str = "software version unknown"
 

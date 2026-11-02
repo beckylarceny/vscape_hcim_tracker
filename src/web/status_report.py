@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 from .format import frequency_name, hours, players_line, plural, years_months
 from .html import SITE_NAME, atomic_write, date, esc, style_tag
-from ..common.storage import as_datetime
+from ..common.storage import CoverageSlice, as_datetime
 from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, next_slot
 
 PROCESS_STARTED_EPOCH = int(time.time())
@@ -87,7 +87,7 @@ class StatusData(NamedTuple):
     runs: tuple[RunInfo, ...]
     snapshots: tuple[FrequencyStatus, ...]
     fetches: tuple[FrequencyStatus, ...]
-    coverage: list[tuple[int, int]]
+    coverage: list[CoverageSlice]
     player_count: int
     coverage_total: int
     priority_players: int
@@ -417,7 +417,7 @@ def collect_status(
     collect_interval: int,
     retry_window: int,
     lookback: int,
-    coverage: list[tuple[int, int]],
+    coverage: list[CoverageSlice],
     player_count: int,
     coverage_total: int,
     priority_players: int,
@@ -507,31 +507,66 @@ def _clock(epoch: int) -> str:
     return as_datetime(epoch).strftime("%H:%M UTC")
 
 
+DENSITY_LABELS = {
+    "hourly": "hourly checkpoints",
+    "six-hour": "6-hour checkpoints",
+    "daily": "daily checkpoints",
+    "sparse": "sparse checkpoints",
+}
+
+
+def coverage_density(
+    coverage: CoverageSlice, bucket_seconds: int
+) -> str:
+    """Fetch density class from checkpoints per player per day."""
+    if not coverage.players:
+        return "none"
+    per_day = (
+        coverage.checkpoints / coverage.players
+        * 86400 / max(1, bucket_seconds)
+    )
+    if per_day >= 12:
+        return "hourly"
+    if per_day >= 3:
+        return "six-hour"
+    if per_day >= 1:
+        return "daily"
+    return "sparse"
+
+
 def coverage_runs(
-    coverage: list[tuple[int, int]]
-) -> list[tuple[int, int, int]]:
-    """(start index, length, player count) for equal-count runs."""
-    runs: list[tuple[int, int, int]] = []
-    for index, (_, present) in enumerate(coverage):
-        if runs and runs[-1][2] == present:
-            start, length, _ = runs[-1]
-            runs[-1] = (start, length + 1, present)
+    coverage: list[CoverageSlice], bucket_seconds: int = 86400
+) -> list[tuple[int, int, int, str]]:
+    """(start index, length, player count, density) for equal runs."""
+    runs: list[tuple[int, int, int, str]] = []
+    for index, item in enumerate(coverage):
+        density = coverage_density(item, bucket_seconds)
+        if runs and runs[-1][2:] == (item.players, density):
+            start, length, _, _ = runs[-1]
+            runs[-1] = (start, length + 1, item.players, density)
         else:
-            runs.append((index, 1, present))
+            runs.append((index, 1, item.players, density))
     return runs
 
 
 def _coverage_segments(
     data: StatusData,
-) -> list[tuple[int, int, str]]:
-    """(length, player count, label) for each coverage run."""
+) -> list[tuple[int, int, str, str]]:
+    """(length, player count, density, label) for each coverage run."""
     total = max(1, data.coverage_total)
-    segments: list[tuple[int, int, str]] = []
-    for index, length, present in coverage_runs(data.coverage):
-        start_epoch = data.coverage[index][0]
+    if len(data.coverage) > 1:
+        bucket_seconds = (
+            data.coverage[1].start_epoch - data.coverage[0].start_epoch
+        )
+    else:
+        bucket_seconds = data.lookback
+    segments: list[tuple[int, int, str, str]] = []
+    runs = coverage_runs(data.coverage, bucket_seconds)
+    for index, length, present, density in runs:
+        start_epoch = data.coverage[index].start_epoch
         next_index = index + length
         end_epoch = (
-            data.coverage[next_index][0]
+            data.coverage[next_index].start_epoch
             if next_index < len(data.coverage)
             else data.now_epoch
         )
@@ -542,21 +577,26 @@ def _coverage_segments(
         ratio = min(1.0, present / total)
         pct = round(ratio * 100)
         label = f"{when} ({duration}): {present}/{total} players ({pct}%)"
-        segments.append((length, present, label))
+        if density in DENSITY_LABELS:
+            label += f", {DENSITY_LABELS[density]}"
+        segments.append((length, present, density, label))
     return segments
 
 
 def coverage_bar(data: StatusData) -> str:
     total = max(1, data.coverage_total)
     segments: list[str] = []
-    for length, present, label in _coverage_segments(data):
+    for length, present, density, label in _coverage_segments(data):
         ratio = min(1.0, present / total)
         if present:
+            css = f"density-{density}"
             style = (
                 f' style="flex:{length};'
                 f'opacity:{0.15 + 0.85 * ratio:.2f}"'
             )
-            segments.append(f'<span data-tip="{esc(label)}"{style}></span>')
+            segments.append(
+                f'<span class="{css}" data-tip="{esc(label)}"{style}></span>'
+            )
         else:
             segments.append(
                 f'<span class="zero" style="flex:{length}" '
@@ -565,7 +605,8 @@ def coverage_bar(data: StatusData) -> str:
     if not segments:
         segments.append('<span class="zero"></span>')
     first = (
-        date(data.coverage[0][0]) if data.coverage else date(data.now_epoch)
+        date(data.coverage[0].start_epoch)
+        if data.coverage else date(data.now_epoch)
     )
     last = date(data.now_epoch)
     return (
@@ -574,6 +615,19 @@ def coverage_bar(data: StatusData) -> str:
         + "".join(segments)
         + "</div>"
         f'<div class="range"><span>{first}</span><span>{last}</span></div>'
+        + coverage_legend()
+    )
+
+
+def coverage_legend() -> str:
+    """Colour key for the fetch density shown in the coverage bar."""
+    return (
+        '<div class="coverage-legend">'
+        '<span class="density-hourly">hourly</span>'
+        '<span class="density-six-hour">6-hour</span>'
+        '<span class="density-daily">daily</span>'
+        '<span class="density-sparse">sparse</span>'
+        "</div>"
     )
 
 
@@ -1033,7 +1087,7 @@ def _text_runs(runs: tuple[RunInfo, ...]) -> list[str]:
 
 
 def _coverage_labels(data: StatusData) -> list[str]:
-    return [label for _, _, label in _coverage_segments(data)]
+    return [label for _, _, _, label in _coverage_segments(data)]
 
 
 def render_status_text(data: StatusData) -> str:

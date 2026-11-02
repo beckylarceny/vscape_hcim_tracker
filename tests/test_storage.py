@@ -160,8 +160,8 @@ class SnapshotTest(DatabaseTest):
         storage.insert_checkpoints(self.conn, "alice", [T1, T2])
         storage.insert_checkpoints(self.conn, "bob", [T1])
         buckets = storage.coverage_buckets(self.conn, T1, T2, 2)
-        self.assertEqual(buckets[0], (T1, 2))
-        self.assertEqual(buckets[1][1], 1)
+        self.assertEqual(buckets[0], storage.CoverageSlice(T1, 2, 2))
+        self.assertEqual(buckets[1], storage.CoverageSlice(T2, 1, 1))
 
         by_skill = storage.xp_by_skill_at_or_before(self.conn, T2)
         self.assertEqual(by_skill["overall"], {"alice": 200, "bob": 50})

@@ -127,7 +127,9 @@ The status page has these sections:
 PostgreSQL planner estimate.
 
 The coverage bar fades with the share of players that hold a checkpoint in each
-slice. Tooltips show the slice range and player count.
+slice. Its colour and pattern show fetch density: solid for hourly checkpoints,
+striped for 6-hour, dotted for daily and grey for sparse data. Tooltips show the
+slice range, player count and density.
 
 The container table comes from the Docker API through the read-only socket
 mount. When the API is unavailable the page still renders and shows the error.
