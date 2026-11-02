@@ -99,7 +99,7 @@ Shared code used by every service.
 | `src/web/format.py` | Duration and count formatting. |
 | `src/web/html.py` | Escaping, tabs, atomic writes and inline page style. |
 | `src/web/main.py` | Report startup, server startup and service loop. |
-| `src/web/player_report.py` | Player data, best windows and player pages. |
+| `src/web/player_report.py` | Player data, best windows and player pages and text. |
 | `src/web/priority_report.py` | Priority pages and RSS feeds. |
 | `src/web/report.css` | Page styles. Edited here and copied into generated pages. |
 | `src/web/report.py` | General rankings, text report and HTML report. |

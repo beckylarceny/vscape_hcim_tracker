@@ -1,4 +1,4 @@
-"""Per-player HTML reports with inline SVG xp charts."""
+"""Per-player HTML and text reports with inline SVG xp charts."""
 
 from __future__ import annotations
 
@@ -527,6 +527,71 @@ def _best_table(data: PlayerData, skill: str) -> str:
     )
 
 
+def _text_frequency(data: PlayerData) -> list[str]:
+    lines: list[str] = []
+    for info in data.frequencies:
+        if info.first_epoch is None:
+            lines.append(f"{info.name} snapshots: 0")
+            continue
+        first = date(info.first_epoch)
+        last = date(info.last_epoch)
+        when = first if first == last else f"{first} to {last}"
+        lines.append(
+            f"{info.name} snapshots: {info.snapshots}, {when}"
+        )
+    return lines
+
+
+def _text_gain_table(data: PlayerData, skill: str) -> list[str]:
+    lines = ["PAST"]
+    for name in SPANS:
+        past = data.past[skill][name]
+        shown = num(past) if past is not None else "-"
+        lines.append(f"    {name.capitalize():<10}{shown:>14}")
+    lines.append("")
+    lines.append("BEST")
+    for name in SPANS:
+        record = data.best[skill][name]
+        if record is None:
+            lines.append(f"    {name.capitalize():<10}{'-':>14}")
+            continue
+        first = date(record.start_epoch)
+        last = date(record.end_epoch)
+        when = first if first == last else f"{first} to {last}"
+        lines.append(
+            f"    {name.capitalize():<10}{num(record.gain):>14}   {when}"
+        )
+    return lines
+
+
+def render_player_text(
+    data: PlayerData,
+    is_priority: bool = False,
+    version: str = "software version unknown",
+) -> str:
+    """Plain-text player report with the same values as the HTML page."""
+    lines = [f"{SITE_NAME.upper()} PLAYER REPORT", ""]
+    lines.append(f"{'player:':<20}{data.username}")
+    lines.append(f"{'generated at:':<20}{data.generated}")
+    lines.append(f"{'lookback:':<20}{years_months(data.lookback)}")
+    if is_priority:
+        lines.append(f"{'priority report:':<20}yes")
+    lines.extend(_text_frequency(data))
+    lines.append("")
+
+    for skill in SKILLS:
+        lines.append("=" * 78)
+        lines.append(skill)
+        lines.append("=" * 78)
+        value = data.current.get(skill)
+        lines.append(f"current xp: {current_line(skill, value, data.current)}")
+        lines.extend(_text_gain_table(data, skill))
+        lines.append("")
+
+    lines.append(version)
+    return "\n".join(lines) + "\n"
+
+
 def _frequency_meta(data: PlayerData) -> str:
     lines: list[str] = []
     for info in data.frequencies:
@@ -573,6 +638,9 @@ def render_player_page(
             if is_priority else []
         ),
         f'<p class="meta">generated at: {esc(data.generated)}</p>',
+        '<p class="sub"><a href="'
+        f'{urllib.parse.quote(player_slug(data.username))}.txt">text version</a>'
+        "</p>",
         _frequency_meta(data),
         '<div class="stats">',
         "<h2>Current xp</h2>",

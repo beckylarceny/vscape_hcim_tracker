@@ -16,7 +16,8 @@ docker compose -f docker/compose.yaml up -d --build
 
 - page: <http://localhost:8000/>
 - status: <http://localhost:8000/status.html>
-- text reports: `reports/latest.txt`, `reports/status.txt`
+- text reports: `reports/latest.txt`, `reports/status.txt` and
+  `reports/players/<slug>.txt`
 
 The collector starts with a multi-hour backfill. Later runs add the current
 checkpoint and retry recent gaps.

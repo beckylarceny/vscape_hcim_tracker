@@ -24,6 +24,7 @@ from src.web.player_report import (
     player_page_href,
     player_slug,
     render_player_page,
+    render_player_text,
     total_level,
 )
 
@@ -139,7 +140,16 @@ class RenderTest(unittest.TestCase):
             page.index("generated at:"), page.index("<h2>Current xp</h2>")
         )
         self.assertIn('href="../status.html"', page)
+        self.assertIn('href="Fuck_Jagex.txt">text version</a>', page)
         self.assertIn('class="player"', page)
+
+        text = render_player_text(fake_data(), version="software version abc")
+        self.assertTrue(
+            text.startswith("VIDYASCAPE HCIM XP TRACKER PLAYER REPORT\n")
+        )
+        self.assertIn("player:             Fuck Jagex", text)
+        self.assertIn("current xp:", text)
+        self.assertTrue(text.endswith("software version abc\n"))
 
         priority = render_player_page(fake_data(), is_priority=True)
         self.assertIn(
@@ -312,12 +322,12 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(record.gain, 1000)
 
         info = {item.name: item for item in data.frequencies}
-        self.assertEqual(info["6 hour"].snapshots, 4)
+        self.assertEqual(info["1 hour"].snapshots, 4)
         self.assertEqual(info["24 hour"].snapshots, 0)
         self.assertEqual(info["10 minute priority"].snapshots, 0)
         page = render_player_page(data)
         self.assertIn("generated at: 2026-01-01", page)
-        self.assertIn("6 hour snapshots: 4, 2027-01-12 to 2027-01-15", page)
+        self.assertIn("1 hour snapshots: 4, 2027-01-12 to 2027-01-15", page)
         self.assertIn("24 hour snapshots: 0", page)
         self.assertIn("10 minute priority snapshots: 0", page)
 
@@ -456,8 +466,10 @@ class WritePagesTest(unittest.TestCase):
                 self.conn, report_dir, self.data(), {"alice": 1}, None
             )
             page = report_dir / "players" / "alice.html"
+            text = report_dir / "players" / "alice.txt"
             before = page.read_text(encoding="utf-8")
             self.assertIn("first", before)
+            self.assertIn("first", text.read_text(encoding="utf-8"))
 
             written = reporting.write_player_pages(
                 self.conn, report_dir, self.data("second"),
@@ -472,6 +484,7 @@ class WritePagesTest(unittest.TestCase):
             )
             self.assertEqual(written, 1)
             self.assertIn("second", page.read_text(encoding="utf-8"))
+            self.assertIn("second", text.read_text(encoding="utf-8"))
 
             data = self.data()
             data.players = ()
@@ -479,6 +492,7 @@ class WritePagesTest(unittest.TestCase):
                 self.conn, report_dir, data, {}, {"alice": 1}
             )
             self.assertFalse(page.exists())
+            self.assertFalse(text.exists())
 
 
 if __name__ == "__main__":

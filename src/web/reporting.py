@@ -147,28 +147,33 @@ def write_player_pages(
     force: bool = False,
     version: str = "software version unknown",
 ) -> int:
-    """Write one HTML report per player whose stored xp changed."""
+    """Write HTML and text reports for each player whose stored xp changed."""
     directory = report_dir / "players"
     directory.mkdir(parents=True, exist_ok=True)
     priority = set(priority_names)
     entries = [
-        (username, f"{player_report.player_slug(username)}.html")
+        (username, player_report.player_slug(username))
         for username in data.players
     ]
-    expected = {name for _, name in entries}
+    expected = {
+        f"{stem}{suffix}"
+        for _, stem in entries
+        for suffix in (".html", ".txt")
+    }
     stale = [
         username
-        for username, name in entries
+        for username, stem in entries
         if force
         or previous is None
         or previous.get(username) != watermarks.get(username)
-        or not (directory / name).exists()
+        or not (directory / f"{stem}.html").exists()
+        or not (directory / f"{stem}.txt").exists()
     ]
 
     names = dict(entries)
     written = 0
     for username in stale:
-        name = names[username]
+        stem = names[username]
         try:
             page_data = player_report.collect_player_data(
                 conn, username, data.now_epoch, data.lookback,
@@ -177,18 +182,23 @@ def write_player_pages(
             page = player_report.render_player_page(
                 page_data, is_priority=username in priority, version=version
             )
+            text = player_report.render_player_text(
+                page_data, is_priority=username in priority, version=version
+            )
         except Exception:  # noqa: BLE001 - one page must not break the rest
             log.exception("could not build the player report for %r", username)
             continue
-        atomic_write(directory / name, page)
+        atomic_write(directory / f"{stem}.html", page)
+        atomic_write(directory / f"{stem}.txt", text)
         written += 1
         if written % 50 == 0:
             log.info(
                 "wrote %d/%d player reports", written, len(stale)
             )
-    for path in directory.glob("*.html"):
-        if path.name not in expected:
-            path.unlink(missing_ok=True)
+    for pattern in ("*.html", "*.txt"):
+        for path in directory.glob(pattern):
+            if path.name not in expected:
+                path.unlink(missing_ok=True)
     return written
 
 
