@@ -416,11 +416,13 @@ class PageTest(unittest.TestCase):
         page = render_status_page(collect())
         self.assertIn('<table class="grid runs">', page)
         self.assertIn(
-            ".status table.runs th:first-child,\n"
-            ".status table.runs td:first-child"
-            "{width:6rem;white-space:nowrap}",
+            ".status table th:first-child,.status table td:first-child"
+            "{color:#888;",
             page,
         )
+        self.assertIn("width:1%;white-space:nowrap", page)
+        self.assertNotIn("width:6rem", page)
+        self.assertNotIn(".status table.runs", page)
 
     def test_containers_table_uses_containers_class(self) -> None:
         page = render_status_page(collect())
