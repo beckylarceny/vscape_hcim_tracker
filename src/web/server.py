@@ -20,7 +20,12 @@ class ReportRequestHandler(http.server.SimpleHTTPRequestHandler):
         if base in ("", "/"):
             base = "/index.html"
         elif base.endswith("/"):
-            base += "index.html"
+            index = super().translate_path(base + "index.html")
+            if Path(index).is_file():
+                return index
+            page = super().translate_path(base.rstrip("/") + ".html")
+            if Path(page).is_file():
+                return page
         else:
             candidate = super().translate_path(base + ".html")
             if Path(candidate).is_file():

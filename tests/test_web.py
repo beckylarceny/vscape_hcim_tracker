@@ -32,9 +32,12 @@ class ServerTest(unittest.TestCase):
             for path, expected in (
                 ("/", "home"),
                 ("/general", "general"),
+                ("/general/", "general"),
                 ("/general.html", "general"),
                 ("/status", "status"),
+                ("/status/", "status"),
                 ("/players/alice", "player"),
+                ("/players/alice/", "player"),
                 ("/priority", "priority index"),
                 ("/priority/", "priority index"),
                 ("/priority/alice", "priority player"),
