@@ -29,10 +29,14 @@ checkpoint and retry recent gaps.
 ./scripts/stop.sh
 ./scripts/restart.sh
 ./scripts/update.sh
+./scripts/rebuild.sh
 ./scripts/logs.sh
 ./scripts/logs.sh web
 ./scripts/ps.sh
 ```
+
+`update.sh` pulls `main` before rebuilding. `rebuild.sh` builds the current
+branch without pulling, for testing non-main branches.
 
 The compose file is in `docker/`. Pass `-f docker/compose.yaml` to manual compose
 commands, or `export COMPOSE_FILE=docker/compose.yaml` once per shell. The

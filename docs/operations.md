@@ -59,6 +59,7 @@ URLs:
 ./scripts/start.sh
 ./scripts/stop.sh
 ./scripts/restart.sh
+./scripts/rebuild.sh
 ./scripts/logs.sh
 ./scripts/logs.sh web
 ./scripts/ps.sh
@@ -74,7 +75,7 @@ With `COMPOSE_FILE` exported, drop the `-f` argument.
 Basic service commands stay in `scripts/`:
 
 - `start.sh`, `stop.sh`, `restart.sh`
-- `update.sh`
+- `update.sh`, `rebuild.sh`
 - `logs.sh`, `ps.sh`
 
 Specialized commands are in `scripts/maintenance/`:
@@ -112,6 +113,24 @@ To install a daily 04:00 update job:
 
 The cron line calls `scripts/update.sh` and appends output to `update.log` in the
 repository root.
+
+## Testing a branch
+
+```sh
+./scripts/rebuild.sh
+```
+
+The script:
+
+1. Skips `git pull`.
+2. Writes `version` with the short commit hash, branch name and UTC time.
+3. Rebuilds the collector image from the current checkout.
+4. Recreates `collector` and `web`.
+5. Leaves `db` running.
+
+The hash gets a `-dirty` suffix when the checkout has uncommitted changes,
+ignoring `version` itself. The branch name appears in the page footer version
+line.
 
 ## Backups
 
@@ -206,8 +225,8 @@ rm -rf reports/*
 docker compose -f docker/compose.yaml start web
 ```
 
-`version` is maintained by `scripts/update.sh` and is recreated on the next
-update.
+`version` is maintained by `scripts/update.sh` and `scripts/rebuild.sh`, and is
+recreated on the next rebuild.
 
 ## Docker socket access
 

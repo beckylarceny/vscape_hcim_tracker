@@ -30,6 +30,12 @@ python -m src.web --report-interval 0 --serve-host 127.0.0.1
 The web service defaults to `reports/` and port 8000. `python -m src` runs the
 collector.
 
+To run the current branch in the containers without pulling:
+
+```sh
+./scripts/rebuild.sh
+```
+
 ## Tests
 
 ```sh
