@@ -5,3 +5,4 @@
 - default to 1 hour live tracking
 - visually distinguish the data coverage bar based on density of data (24 hour vs 6 hour vs 1 hour etc)
 - trim unit testing, goal is about half of current test count
+- refactor src/web/status_report.py into smaller modules (queries, docker, html, text)
