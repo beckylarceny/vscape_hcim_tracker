@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from src.common.utility import SKILLS
-from src.web.chart import ChartData
+from src.web.chart import ChartData, StackedBar
 from src.web.priority_report import (
     Event,
     PriorityData,
@@ -65,6 +65,7 @@ class DataTest(unittest.TestCase):
         conn = FakeConn(rows(
             ("overall", NOW - 1800, 1000),
             ("overall", NOW, 2000),
+            ("attack", NOW - 1800, 0),
             ("attack", NOW, 50),
         ))
         data = collect_priority_data(conn, "alice", NOW, "generated")
@@ -74,6 +75,8 @@ class DataTest(unittest.TestCase):
         chart = data.charts["overall"]
         self.assertEqual(chart.xp[-1], (NOW, 2000))
         self.assertAlmostEqual(chart.gains[0][1], 2000.0)
+        self.assertEqual(chart.stacked[0].start_epoch, NOW - 1800)
+        self.assertEqual(chart.stacked[0].segments, (("attack", 100.0),))
 
         missing = data.charts["defence"]
         self.assertEqual(missing.xp, [])
@@ -182,12 +185,22 @@ class PageTest(unittest.TestCase):
             [(NOW - 86400, 400), (NOW, 1000)],
             [(NOW, 600)],
         )
+        charts = {skill: chart for skill in SKILLS}
+        charts["overall"] = chart._replace(
+            stacked=(
+                StackedBar(
+                    NOW - 86400,
+                    NOW,
+                    (("attack", 400.0), ("defence", 200.0)),
+                ),
+            )
+        )
         return PriorityData(
             username="alice",
             generated="2026-01-01 00:00 UTC",
             now_epoch=NOW,
             current={skill: 1000 for skill in SKILLS},
-            charts={skill: chart for skill in SKILLS},
+            charts=charts,
         )
 
     def test_priority_page_charts_and_axis(self) -> None:
@@ -196,6 +209,10 @@ class PageTest(unittest.TestCase):
         self.assertIn('viewBox="0 0 720 200"', page)
         self.assertIn("priority report: 10-minute updates", page)
         self.assertIn("generated at:", page)
+        self.assertIn('class="bar skill-attack"', page)
+        self.assertIn("<title>attack: 400 xp/h</title>", page)
+        self.assertIn("xp/h by skill", page)
+        self.assertIn('class="skill-legend"', page)
         version = "software version abc1234, updated 2026-11-01 13:00 UTC"
         tagged = render_priority_page(self.make_data(), version)
         self.assertIn(f'<footer class="version">{version}</footer>', tagged)

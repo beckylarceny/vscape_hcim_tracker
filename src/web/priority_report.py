@@ -16,7 +16,13 @@ from ..common.utility import (
     DEFAULT_PRIORITY_RETENTION_SECONDS,
     SKILLS,
 )
-from .chart import ChartData, chart_svg, thin
+from .chart import (
+    ChartData,
+    StackedBar,
+    chart_svg,
+    stacked_legend_html,
+    thin,
+)
 from .format import plural
 from .html import (
     SITE_NAME,
@@ -173,6 +179,59 @@ def _merged_chart(
     )
 
 
+def _stacked_bars(
+    chosen_by_skill: dict[str, dict[int, tuple[int, bool]]],
+    start_epoch: int,
+    end_epoch: int,
+) -> tuple[StackedBar, ...]:
+    """Variable-width xp/h bars split into per-skill segments."""
+    overall = chosen_by_skill.get("overall", {})
+    times = sorted(overall)
+    if not times:
+        return ()
+    index = bisect_right(times, start_epoch) - 1
+    if index >= 0:
+        previous_time = times[index]
+        rest = times[index + 1:]
+    else:
+        previous_time = None
+        rest = times
+
+    series: dict[str, tuple[list[int], list[int]]] = {}
+    for skill in SKILLS:
+        if skill == "overall":
+            continue
+        points = chosen_by_skill.get(skill, {})
+        skill_times = sorted(points)
+        series[skill] = (
+            skill_times, [points[timestamp][0] for timestamp in skill_times]
+        )
+
+    bars: list[StackedBar] = []
+    for timestamp in rest:
+        if timestamp > end_epoch:
+            break
+        if previous_time is None:
+            previous_time = timestamp
+            continue
+        elapsed = timestamp - previous_time
+        if elapsed <= 0:
+            continue
+        segments: list[tuple[str, float]] = []
+        for skill, (skill_times, xp_values) in series.items():
+            after = bisect_right(skill_times, timestamp) - 1
+            before = bisect_right(skill_times, previous_time) - 1
+            if after < 0 or before < 0:
+                continue
+            gain = max(0, xp_values[after] - xp_values[before])
+            if gain:
+                segments.append((skill, gain * 3600 / elapsed))
+        if segments:
+            bars.append(StackedBar(previous_time, timestamp, tuple(segments)))
+        previous_time = timestamp
+    return tuple(bars)
+
+
 def collect_priority_data(
     conn: psycopg.Connection,
     username: str,
@@ -189,14 +248,19 @@ def collect_priority_data(
     )
     current: dict[str, int] = {}
     charts: dict[str, ChartData] = {}
+    chosen_by_skill: dict[str, dict[int, tuple[int, bool]]] = {}
     for skill in SKILLS:
         chosen = _merged_points(
             priority.get(skill, []), regular.get(skill, [])
         )
+        chosen_by_skill[skill] = chosen
         times = sorted(chosen)
         if times:
             current[skill] = chosen[times[-1]][0]
         charts[skill] = _merged_chart(chosen, start, now_epoch)
+    charts["overall"] = charts["overall"]._replace(
+        stacked=_stacked_bars(chosen_by_skill, start, now_epoch)
+    )
     return PriorityData(
         username=username,
         generated=generated,
@@ -397,17 +461,25 @@ def render_priority_page(
             '<p class="meta">current xp: '
             f"{current_line(skill, value, data.current)}</p>"
         )
+        is_overall = skill == "overall"
         label = f"{skill} last 24 hours: total xp and xp/h"
+        if is_overall:
+            label += " by skill"
         chart_html = chart_svg(
             chart, label, width=720, height=200,
-            time_axis=True, ticks=7, segmented_area=True,
+            time_axis=True, ticks=7, segmented_area=not is_overall,
         )
+        gain_key = (
+            '<span class="key bar-key">xp/h by skill</span>'
+            if is_overall
+            else '<span class="key area-key">xp/h</span>'
+        )
+        legend = stacked_legend_html() if is_overall else ""
         parts.append(
             '<figure class="big"><figcaption><b>last 24 hours</b>'
             '<span class="key line-key">total xp</span>'
-            '<span class="key area-key">xp/h</span>'
-            f"{regular_key}</figcaption>"
-            f"{chart_html}"
+            f"{gain_key}{regular_key}</figcaption>"
+            f"{legend}{chart_html}"
             "</figure>"
         )
         parts.append("</section>")

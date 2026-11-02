@@ -94,7 +94,9 @@ Priority tracking covers:
 - Players who still have unpruned priority rows.
 
 Each priority page covers the last 24 hours. It shows current xp and one chart
-per skill with total xp and xp/hour. Priority samples are the base series.
+per skill with total xp and xp/hour. The `overall` chart draws xp/hour as
+variable-width bars, stacked and coloured by skill. Other skill charts use a
+filled xp/hour area. Priority snapshots are the base series.
 Regular snapshots fill gaps in the priority series and are drawn in a different
 colour, so periods without 10-minute collection are still visible.
 
