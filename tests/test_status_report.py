@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from src.status_report import (
     _elapsed,
     _interval_label,
+    _server_version,
     _size,
     _until,
     collect_status,
@@ -50,7 +51,7 @@ class FakeConn:
         database: str = "xp tracker",
         host: str = "db",
         user: str = "xp_tracker",
-        server_version: str = "16.1",
+        server_version: str | int = 170011,
     ) -> None:
         self.fail = fail
         self.info = SimpleNamespace(
@@ -77,6 +78,10 @@ class FakeConn:
                 ("priority_checkpoints", 4000),
                 ("runs", 5),
             ])
+        if "count(*) FROM players" in sql:
+            return FakeResult([(101,)])
+        if "count(*) FROM runs" in sql:
+            return FakeResult([(7,)])
         if "max(observed_at) FROM priority_checkpoints" in sql:
             return FakeResult([(stamp(NOW - 600),)])
         if "max(observed_at) FROM checkpoints" in sql:
@@ -169,6 +174,13 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(_interval_label(21600), "6 hours")
         self.assertEqual(_interval_label(86400), "24 hours")
 
+    def test_server_version_formats_integers(self) -> None:
+        self.assertEqual(_server_version(170011), "17.0.11")
+        self.assertEqual(_server_version(160004), "16.0.4")
+        self.assertEqual(_server_version("170011"), "17.0.11")
+        self.assertEqual(_server_version("17.11"), "17.11")
+        self.assertIsNone(_server_version(None))
+
 
 class PageTest(unittest.TestCase):
     def test_every_section_and_moved_metadata(self) -> None:
@@ -190,7 +202,14 @@ class PageTest(unittest.TestCase):
         self.assertIn("newest priority checkpoint", page)
         self.assertIn("10 minutes ago", page)
         self.assertIn("every 1 minute", page)
-        self.assertIn("estimated rows", page)
+        self.assertIn('<th class="num">rows</th>', page)
+        self.assertNotIn("estimated rows", page)
+        self.assertIn(
+            "players and runs are counted exactly; snapshot and checkpoint "
+            "tables use the planner estimate.",
+            page,
+        )
+        self.assertIn("<td>17.0.11</td>", page)
         self.assertIn("snapshots store only changed xp", page)
         self.assertIn('href="latest.html"', page)
         self.assertIn('href="latest.txt"', page)
@@ -256,6 +275,19 @@ class PageTest(unittest.TestCase):
         page = render_status_page(data)
         self.assertIn("10 minute priority", page)
         self.assertIn("24 hour", page)
+
+    def test_small_tables_are_counted_exactly(self) -> None:
+        data = collect()
+        rows = {table.name: table.rows for table in data.tables}
+        self.assertEqual(rows["players"], 101)
+        self.assertEqual(rows["runs"], 7)
+        self.assertEqual(rows["snapshots"], 1000)
+        self.assertEqual(rows["checkpoints"], 2000)
+        self.assertEqual(rows["priority_snapshots"], 3000)
+        self.assertEqual(rows["priority_checkpoints"], 4000)
+        page = render_status_page(data)
+        self.assertIn('<td>runs</td><td class="num">7</td>', page)
+        self.assertIn('<td>players</td><td class="num">101</td>', page)
 
     def test_write_status_page(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

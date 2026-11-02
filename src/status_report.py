@@ -95,6 +95,8 @@ TABLE_NAMES = (
     "runs",
 )
 
+EXACT_TABLES = ("players", "runs")
+
 
 def _epoch(value) -> int | None:
     return int(value.timestamp()) if value is not None else None
@@ -102,6 +104,23 @@ def _epoch(value) -> int | None:
 
 def _text(value) -> str | None:
     return None if value is None else str(value)
+
+
+def _server_version(value) -> str | None:
+    """Render psycopg's integer server_version as major.minor.patch."""
+    if value is None:
+        return None
+    text = str(value)
+    try:
+        number = int(text)
+    except ValueError:
+        return text
+    if number < 10000:
+        return text
+    major = number // 10000
+    minor = number // 100 % 100
+    patch = number % 100
+    return f"{major}.{minor}.{patch}"
 
 
 def _rows(conn, sql: str, params=None) -> list[tuple]:
@@ -143,7 +162,7 @@ def _database_status(conn) -> DatabaseStatus:
     return DatabaseStatus(
         True,
         latency_ms,
-        _text(getattr(info, "server_version", None)),
+        _server_version(getattr(info, "server_version", None)),
         _text(getattr(info, "dbname", None)),
         _text(getattr(info, "user", None)),
         _text(getattr(info, "host", None)),
@@ -163,6 +182,10 @@ def _table_info(conn) -> tuple[TableInfo, ...]:
         (list(TABLE_NAMES),),
     )
     counts = {row[0]: int(row[1]) for row in rows}
+    for name in EXACT_TABLES:
+        row = _row(conn, f"SELECT count(*) FROM {name}")
+        if row and row[0] is not None:
+            counts[name] = int(row[0])
     return tuple(
         TableInfo(name, counts.get(name)) for name in TABLE_NAMES
     )
@@ -662,9 +685,11 @@ def render_status_page(data: StatusData) -> str:
         ]),
         "<h3>tables</h3>",
         '<table class="grid"><thead><tr><th>table</th>'
-        '<th class="num">estimated rows</th></tr></thead><tbody>'
+        '<th class="num">rows</th></tr></thead><tbody>'
         + tables
         + "</tbody></table>",
+        '<p class="note">players and runs are counted exactly; snapshot '
+        "and checkpoint tables use the planner estimate.</p>",
         "<h2>collection</h2>",
         _fact_rows([
             (
