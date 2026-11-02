@@ -22,13 +22,14 @@ config/
 are resolved from the process working directory, so an absolute path is safer in
 containers.
 
-`config/defaults/` is the reference copy. `scripts/setup.sh` writes editable
-copies into `config/`. `scripts/reset-config.sh` copies the defaults back.
+`config/defaults/` is the reference copy. `scripts/maintenance/setup.sh` writes
+editable copies into `config/`. `scripts/maintenance/reset-config.sh` copies the
+defaults back.
 
 ```sh
-./scripts/setup.sh             # prompt for values
-./scripts/setup.sh --defaults  # copy defaults without prompting
-./scripts/reset-config.sh      # copy defaults over active files
+./scripts/maintenance/setup.sh             # prompt for values
+./scripts/maintenance/setup.sh --defaults  # copy defaults without prompting
+./scripts/maintenance/reset-config.sh      # copy defaults over active files
 ```
 
 The Docker image copies `config/` into `/app/config`. Compose also bind-mounts
@@ -194,7 +195,8 @@ python -m src.db --dsn "postgresql://user:pass@localhost:5432/xp_tracker"
 
 A bare number is seconds. Fractional values are accepted, for example `1.5h`.
 
-`scripts/setup.sh` accepts the same suffixes and `YYYY-MM-DD` for the data start
+`scripts/maintenance/setup.sh` accepts the same suffixes and `YYYY-MM-DD` for the
+data start
 date.
 
 ## Precedence

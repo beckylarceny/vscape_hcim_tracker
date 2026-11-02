@@ -30,11 +30,12 @@ checkpoint and retry recent gaps.
 ./scripts/update.sh
 ./scripts/logs.sh
 ./scripts/logs.sh web
+./scripts/ps.sh
 ```
 
 The compose file is in `docker/`. Pass `-f docker/compose.yaml` to manual compose
 commands, or `export COMPOSE_FILE=docker/compose.yaml` once per shell. The
-scripts set it automatically.
+scripts that call compose set it automatically.
 
 ## Documentation
 

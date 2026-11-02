@@ -20,7 +20,7 @@ docker compose -f docker/compose.yaml up -d --build
 
 The compose file is `docker/compose.yaml`. Its build context is the repository
 root, so the image can copy `config/`, `src/`, `tests/` and
-`scripts/docker-entrypoint.sh`.
+`scripts/internal/docker-entrypoint.sh`.
 
 The compose project loads `docker/.env` automatically. To use compose commands
 from the repository root without `-f`, export the file once per shell:
@@ -30,7 +30,7 @@ export COMPOSE_FILE=docker/compose.yaml
 docker compose ps
 ```
 
-All scripts in `scripts/` set `COMPOSE_FILE` themselves.
+Scripts that call compose set `COMPOSE_FILE` themselves.
 
 ## What starts
 
@@ -61,12 +61,29 @@ URLs:
 ./scripts/restart.sh
 ./scripts/logs.sh
 ./scripts/logs.sh web
-docker compose -f docker/compose.yaml ps
+./scripts/ps.sh
 ```
 
-`logs.sh` follows one service and defaults to `collector`.
+`logs.sh` follows one service and defaults to `collector`. `ps.sh` accepts the
+same options as `docker compose ps`.
 
 With `COMPOSE_FILE` exported, drop the `-f` argument.
+
+### Script layout
+
+Basic service commands stay in `scripts/`:
+
+- `start.sh`, `stop.sh`, `restart.sh`
+- `update.sh`
+- `logs.sh`, `ps.sh`
+
+Specialized commands are in `scripts/maintenance/`:
+
+- `setup.sh`, `reset-config.sh`
+- `backup.sh`, `restore.sh`
+- `install-cron.sh`
+
+The container entrypoint is `scripts/internal/docker-entrypoint.sh`.
 
 ## Updates
 
@@ -89,8 +106,8 @@ The version string appears in every page footer and at the end of
 To install a daily 04:00 update job:
 
 ```sh
-./scripts/install-cron.sh
-./scripts/install-cron.sh --remove
+./scripts/maintenance/install-cron.sh
+./scripts/maintenance/install-cron.sh --remove
 ```
 
 The cron line calls `scripts/update.sh` and appends output to `update.log` in the
@@ -99,7 +116,7 @@ repository root.
 ## Backups
 
 ```sh
-./scripts/backup.sh
+./scripts/maintenance/backup.sh
 ```
 
 The script needs the `db` service running. It reads `POSTGRES_DB` from the
@@ -112,8 +129,8 @@ exists.
 ## Restores
 
 ```sh
-./scripts/restore.sh                 # newest dump in backups/
-./scripts/restore.sh backups/file.dump
+./scripts/maintenance/restore.sh                 # newest dump in backups/
+./scripts/maintenance/restore.sh backups/file.dump
 ```
 
 The script:
