@@ -28,6 +28,7 @@ docker compose up -d --build
 ```
 
 - page: <http://localhost:8000/>
+- status page: <http://localhost:8000/status.html>
 - text report: `reports/latest.txt`
 - start/stop/restart: `./scripts/start.sh`, `./scripts/stop.sh`,
   `./scripts/restart.sh`
@@ -102,12 +103,20 @@ services running. Restoring drops everything written after the dump.
 ## Reports
 
 - `latest.txt` / `latest.html`: top 5 gains per skill and span
-  (day/week/month/year), best windows, metadata, coverage bar, player search.
-- `players/<name>.html`: current xp and level, checkpoint coverage, past/best
-  tables, and five charts per skill (four spans plus a wide all-time chart).
-  Stretches with fewer checkpoints than the nearby cadence are shaded as
-  missing data; idle time that was fully fetched stays unshaded. Coverage bar
-  segments fade to the share of expected checkpoints they hold.
+  (day/week/month/year), best windows, and player search. The HTML page carries
+  only the `generated at` metadata line; the coverage bar and the interval and
+  player-count lines moved to `status.html`.
+- `status.html`: database connection, latency, version, size and estimated row
+  counts; process uptime; the backfill, live and priority schedules with the
+  next fetch slots; snapshot and checkpoint counts per cadence; the data
+  coverage bar; and the five most recent runs. It is rebuilt on the same timer
+  as the other reports.
+- `players/<name>.html`: current xp and level, past/best tables, and five charts
+  per skill (four spans plus a wide all-time chart). Stretches with fewer
+  checkpoints than the nearby cadence are shaded as missing data; idle time that
+  was fully fetched stays unshaded. The data coverage bar moved to
+  `status.html`; the `generated at` and per-cadence snapshot lines stay on the
+  player page.
 - `priority/`: index, one 24h page per player, and an RSS feed. Priority covers
   the top 5 by `overall` xp plus `priority.players`, fetched every 10 minutes and
   pruned after 24 hours.
