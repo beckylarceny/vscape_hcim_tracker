@@ -18,9 +18,7 @@ from .utility import (
 )
 from .player_report import (
     ChartData,
-    SKILL_TABS_CSS,
     SKILL_TAB_SCRIPT,
-    _PLAYER_CSS,
     _atomic_write,
     _chart_svg,
     _current_line,
@@ -33,6 +31,7 @@ from .player_report import (
     skill_tabs_html,
 )
 from .storage import as_datetime, canonical_username
+from . import styles
 
 WINDOW_SECONDS = DEFAULT_PRIORITY_RETENTION_SECONDS
 MAX_FEED_EVENTS = (
@@ -351,19 +350,6 @@ def render_feed(
     )
 
 
-_PRIORITY_CSS = """
-figure.big{margin:.5rem 0 1.75rem;padding:.6rem .7rem .4rem}
-figure.big figcaption{text-align:center}
-svg .line.regular{stroke:#f59e0b;stroke-dasharray:4 3}
-svg .area.regular{fill:#f59e0b33;stroke:#f59e0b33}
-svg .dot.regular{fill:#f59e0b}
-.key.regular-key::before{background:#f59e0b}
-ul{max-width:44rem;margin:1rem auto;padding-left:1.4rem}
-p.blurb{max-width:44rem;margin:1rem auto;color:#888;font-size:.9rem;
-        line-height:1.5}
-"""
-
-
 def render_priority_page(
     data: PriorityData, version: str = "software version unknown"
 ) -> str:
@@ -383,12 +369,13 @@ def render_priority_page(
         f"<title>{_esc(data.username.lower())} priority - xp tracker</title>",
         '<link rel="alternate" type="application/rss+xml" '
         f'title="{_esc(data.username)} priority xp" href="{_esc(feed_href)}">',
-        f"<style>{_PLAYER_CSS}{SKILL_TABS_CSS}{_PRIORITY_CSS}</style></head>"
-        '<body id="top">',
+        f"{styles.style_tag()}</head>",
+        '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
         '<a href="../latest.html">all rankings</a> · '
         '<a href="index.html">priority tracking</a> · '
-        f'<a href="{_esc(player_href)}">player page</a></p></div>',
+        f'<a href="{_esc(player_href)}">player page</a> · '
+        '<a href="../status.html">status</a></p></div>',
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
         "vidyascape highscores</a></h2>",
@@ -454,10 +441,11 @@ def render_priority_index(
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>priority tracking - xp tracker</title>",
-        f"<style>{_PLAYER_CSS}{_PRIORITY_CSS}</style>"
-        '</head><body id="top">',
+        f"{styles.style_tag()}</head>",
+        '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
-        '<a href="../latest.html">all rankings</a></p></div>',
+        '<a href="../latest.html">all rankings</a> · '
+        '<a href="../status.html">status</a></p></div>',
         "<h1>priority tracking</h1>",
         '<p class="blurb">the top 5 players by overall xp, and any players '
         "added to the priority list file, are fetched every 10 minutes. "

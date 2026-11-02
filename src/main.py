@@ -10,7 +10,15 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from . import api, player_report, priority_report, report, storage, web
+from . import (
+    api,
+    player_report,
+    priority_report,
+    report,
+    status_report,
+    storage,
+    web,
+)
 from .player_report import _atomic_write
 from .utility import (
     DEFAULT_BASE_URL,
@@ -535,6 +543,8 @@ def write_report(
     coverage_total: int | None = None,
     priority_players: tuple[str, ...] = (),
     base_url: str = DEFAULT_BASE_URL,
+    report_interval: int = 0,
+    retry_window: int = DEFAULT_RETRY_WINDOW_SECONDS,
 ) -> Path:
     """Write the text and HTML reports from one shared computation."""
     with _REPORT_LOCK:
@@ -555,6 +565,25 @@ def write_report(
 
         key = report_dir.resolve()
         priority_names = tracked_priority_names(conn, priority_players)
+        try:
+            status_report.write_status_page(
+                conn, report_dir,
+                generated=data.generated,
+                now_epoch=data.now_epoch,
+                version=data.version,
+                report_interval=report_interval,
+                backfill_interval=data.interval,
+                collect_interval=data.collect_interval,
+                retry_window=retry_window,
+                lookback=data.lookback,
+                coverage=data.coverage,
+                player_count=data.player_count,
+                coverage_total=data.coverage_total,
+                priority_players=len(priority_names),
+            )
+        except Exception:  # noqa: BLE001 - status must not block rankings
+            log.exception("could not write status.html")
+
         priority_key = frozenset(priority_names)
         force = _PLAYER_PRIORITY_STATE.get(key) != priority_key
         _PLAYER_PRIORITY_STATE[key] = priority_key
@@ -654,6 +683,10 @@ def run_once(
                     coverage_total=len(names) if names else None,
                     priority_players=getattr(args, "priority_players", ()),
                     base_url=getattr(args, "base_url", DEFAULT_BASE_URL),
+                    report_interval=getattr(args, "report_interval", 0),
+                    retry_window=getattr(
+                        args, "retry_window", DEFAULT_RETRY_WINDOW_SECONDS
+                    ),
                 )
         finally:
             storage.finish_run(
@@ -807,6 +840,10 @@ def write_current_report(args: argparse.Namespace, dsn: str) -> None:
             coverage_total=candidates,
             priority_players=getattr(args, "priority_players", ()),
             base_url=getattr(args, "base_url", DEFAULT_BASE_URL),
+            report_interval=getattr(args, "report_interval", 0),
+            retry_window=getattr(
+                args, "retry_window", DEFAULT_RETRY_WINDOW_SECONDS
+            ),
         )
     finally:
         conn.close()

@@ -11,12 +11,9 @@ if TYPE_CHECKING:
 
 from .utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
 from .player_report import (
-    COVERAGE_TIP_HTML,
     Record,
-    SKILL_TABS_CSS,
     SKILL_TAB_SCRIPT,
     _bucket_count,
-    _coverage_runs,
     _date,
     _esc,
     _years_months,
@@ -26,6 +23,7 @@ from .player_report import (
     skill_tabs_html,
 )
 from .storage import as_datetime, coverage_buckets, xp_at_or_before
+from . import styles
 
 
 class ReportData(NamedTuple):
@@ -255,82 +253,6 @@ def render_text(data: ReportData) -> str:
     return "\n".join(lines) + "\n\n" + data.version + "\n"
 
 
-_CSS = """
-:root{color-scheme:light dark}
-*{box-sizing:border-box}
-body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0 auto;
-     padding:2rem 1rem;max-width:72rem;text-transform:lowercase}
-h1{font-size:1.9rem;margin:0 0 .35rem}
-h2{font-size:1.5rem;margin:2.75rem 0 .6rem;border-bottom:1px solid #8884;
-   padding-bottom:.3rem}
-h3{font-size:1.15rem;margin:1.4rem 0 .35rem;font-weight:600}
-.meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
-.sub{margin:.2rem 0 .8rem;font-size:1.05rem}
-.coverage{display:flex;gap:3px;height:14px;margin:.3rem 0 .1rem;
-          background:#8882;border-radius:0;overflow:hidden}
-.coverage span{flex:1;background:#9079B6;min-width:1em}
-.coverage span.zero{background:#8883;opacity:1}
-.range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
-.find{display:flex;gap:.5rem;margin:1.25rem 0 2.5rem;
-      padding-bottom:1.25rem;border-bottom:1px solid #8884}
-.find input{flex:1;min-width:0;max-width:26rem;padding:.4rem .55rem;
-            font:inherit;color:inherit;background:transparent;
-            border:1px solid #8886;border-radius:0}
-.find button{padding:.4rem .9rem;font:inherit;border:1px solid #8886;
-             border-radius:0;background:#9079B6;color:#fff;cursor:pointer}
-h4{font-size:.95rem;margin:.9rem 0 .2rem;color:#888;text-transform:lowercase;
-   letter-spacing:.04em}
-h2,h3,h4{text-align:center}
-.tables{display:grid;align-items:start;
-        grid-template-columns:repeat(auto-fit,minmax(min(32rem,100%),1fr));
-        gap:.75rem 2rem}
-.tables>div{min-width:0;overflow-x:auto}
-table{width:auto;max-width:100%;border-collapse:collapse;
-      margin:.25rem auto 1rem;table-layout:auto}
-th,td{text-align:left;padding:.25rem .55rem;border-bottom:1px solid #8884;
-      overflow-wrap:anywhere}
-th{font-weight:600}
-td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-th.num{text-align:right}
-td.date{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-table.past th:nth-child(1),table.past td:nth-child(1){width:6%}
-table.past th:nth-child(2),table.past td:nth-child(2){width:56%}
-table.past td:nth-child(2),table.best td:nth-child(2){white-space:nowrap}
-table.past th:nth-child(3),table.past td:nth-child(3){width:38%}
-table.best th:nth-child(1),table.best td:nth-child(1){width:6%}
-table.best th:nth-child(3),table.best td:nth-child(3){width:26%}
-table.best.wide th:nth-child(2),table.best.wide td:nth-child(2){width:22%}
-table.best.wide th:nth-child(4),table.best.wide td:nth-child(4){width:23%}
-table.best.wide th:nth-child(5),table.best.wide td:nth-child(5){width:23%}
-table.best.day th:nth-child(2),table.best.day td:nth-child(2){width:42%}
-table.best.day th:nth-child(4),table.best.day td:nth-child(4){width:26%}
-td.rank{width:2.5rem;color:#888}
-tr:nth-child(even) td{background:#8881}
-td.empty{text-align:center;color:#888}
-a{color:#7BB59A}
-.to-top{position:fixed;right:1rem;bottom:1rem;z-index:10;padding:.45rem .7rem;
-        background:#9079B6;color:#fff;font-size:.85rem;line-height:1;
-        text-decoration:none;border:1px solid #8886;border-radius:0;
-        box-shadow:0 1px 4px #0003}
-.to-top:hover{background:#7B659C;color:#fff}
-.version{text-align:right;color:#888;font-size:.75rem;margin:2rem 0 3.5rem}
-.tip{position:fixed;z-index:20;max-width:22rem;padding:.3rem .45rem;
-     background:#1b1b1b;color:#eee;font-size:.75rem;line-height:1.35;
-     border-radius:0;pointer-events:none;white-space:normal}
-.tip[hidden]{display:none}
-@media (max-width:48rem){
-  table{font-size:.8em;table-layout:fixed;width:calc(100% - 2rem);
-        margin-left:auto;margin-right:auto}
-  th,td{padding:.15rem .3rem}
-  table.past td:nth-child(2),table.best td:nth-child(2){white-space:normal}
-  table.best.wide th:nth-child(2),table.best.wide td:nth-child(2){width:20%}
-  table.best.wide th:nth-child(3),table.best.wide td:nth-child(3){width:28%}
-  table.best.wide th:nth-child(4),table.best.wide td:nth-child(4){width:23%}
-  table.best.wide th:nth-child(5),table.best.wide td:nth-child(5){width:23%}
-}
-"""
-
-
 def _player_link(username: str) -> str:
     return f'<a href="{_esc(player_page_href(username))}">{_esc(username)}</a>'
 
@@ -394,50 +316,6 @@ def _records_table(records: list[Record], span_name: str) -> str:
     return _table(css, header, rows, colspan)
 
 
-def _coverage_bar(data: ReportData) -> str:
-    total = max(1, data.coverage_total)
-    segments: list[str] = []
-    for index, length, present in _coverage_runs(data.coverage):
-        start_epoch = data.coverage[index][0]
-        next_index = index + length
-        end_epoch = (
-            data.coverage[next_index][0]
-            if next_index < len(data.coverage)
-            else data.now_epoch
-        )
-        first = _date(start_epoch)
-        last = _date(end_epoch)
-        when = first if first == last else f"{first} - {last}"
-        duration = _years_months(end_epoch - start_epoch)
-        ratio = min(1.0, present / total)
-        pct = round(ratio * 100)
-        label = f"{when} ({duration}): {present}/{total} players ({pct}%)"
-        if present:
-            style = (
-                f' style="flex:{length};'
-                f'opacity:{0.15 + 0.85 * ratio:.2f}"'
-            )
-            segments.append(f'<span data-tip="{_esc(label)}"{style}></span>')
-        else:
-            segments.append(
-                f'<span class="zero" style="flex:{length}" '
-                f'data-tip="{_esc(label)}"></span>'
-            )
-    if not segments:
-        segments.append('<span class="zero"></span>')
-    first = (
-        _date(data.coverage[0][0]) if data.coverage else _date(data.now_epoch)
-    )
-    last = _date(data.now_epoch)
-    return (
-        '<div class="coverage" role="img" '
-        f'aria-label="data coverage from {first} to {last}">'
-        + "".join(segments)
-        + "</div>"
-        f'<div class="range"><span>{first}</span><span>{last}</span></div>'
-    )
-
-
 def _js_literal(value: object) -> str:
     """JSON that is safe to embed in an inline <script> element."""
     text = json.dumps(value, ensure_ascii=True)
@@ -478,11 +356,6 @@ def render_html(data: ReportData) -> str:
         f'<p class="meta">{name}: {value}</p>'
         for name, value in (
             ("generated at", _esc(data.generated)),
-            ("players logged", _players_line(data)),
-            ("backfill interval", _hours(data.interval)),
-            ("live interval", _hours(data.collect_interval)),
-            ("priority interval", f"{DEFAULT_PRIORITY_INTERVAL_SECONDS // 60} minutes"),
-            ("lookback interval", _years_months(data.lookback)),
         )
     )
     parts: list[str] = [
@@ -490,14 +363,14 @@ def render_html(data: ReportData) -> str:
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         f"<title>xp tracker - {_esc(_date(data.now_epoch))}</title>",
-        f"<style>{_CSS}{SKILL_TABS_CSS}</style></head><body id=\"top\">",
+        f"{styles.style_tag()}</head>",
+        '<body id="top" class="rankings wide">',
+        '<div class="backlinks"><p class="sub">'
+        '<a href="priority/index.html">priority tracking</a> · '
+        '<a href="status.html">status</a></p></div>',
         "<h1>XP Tracker</h1>",
-        '<p class="sub"><a href="latest.txt">text report</a></p>',
-        '<p class="sub"><a href="priority/index.html">priority tracking</a></p>',
+        '<p class="sub"><a href="latest.txt">text version</a></p>',
         metas,
-        '<p class="meta">data coverage:</p>',
-        _coverage_bar(data),
-        COVERAGE_TIP_HTML,
         _player_finder(data),
     ]
 

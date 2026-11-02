@@ -16,8 +16,6 @@ from src.player_report import (
     PlayerData,
     Record,
     _chart_svg,
-    _coverage_bar,
-    _coverage_series,
     _frequency_info,
     _thin,
     collect_player_data,
@@ -107,12 +105,6 @@ def fake_data(username: str = "Fuck Jagex") -> PlayerData:
         past=past,
         best=best,
         charts=charts,
-        coverage=[
-            (NOW - LOOKBACK, True),
-            (NOW - LOOKBACK // 2, False),
-            (NOW - DAY, True),
-            (NOW, True),
-        ],
     )
 
 
@@ -128,7 +120,7 @@ class SlugTest(unittest.TestCase):
 
 
 class RenderTest(unittest.TestCase):
-    def test_header_escape_priority_and_coverage(self) -> None:
+    def test_header_escape_priority_and_metadata(self) -> None:
         page = render_player_page(fake_data())
         self.assertIn("<h1>Fuck Jagex</h1>", page)
         self.assertIn(
@@ -136,17 +128,15 @@ class RenderTest(unittest.TestCase):
             f'{highscores_url("Fuck Jagex")}">Vidyascape highscores</a></h2>',
             page,
         )
-        self.assertIn("data coverage:", page)
-        self.assertIn('class="zero"', page)
-        self.assertIn("(1 day): covered", page)
-        self.assertIn('id="coverage-tip"', page)
-        self.assertIn("(hover: none)", page)
+        self.assertIn("generated at: 2026-01-01 00:00 UTC", page)
+        self.assertNotIn("data coverage:", page)
+        self.assertNotIn('class="coverage"', page)
+        self.assertNotIn('id="coverage-tip"', page)
         self.assertLess(
-            page.index("data coverage:"), page.index("<h2>Current xp</h2>")
+            page.index("generated at:"), page.index("<h2>Current xp</h2>")
         )
-        self.assertLess(
-            page.index("generated at:"), page.index("data coverage:")
-        )
+        self.assertIn('href="../status.html"', page)
+        self.assertIn('class="player"', page)
 
         priority = render_player_page(fake_data(), is_priority=True)
         self.assertIn(
@@ -430,41 +420,7 @@ class CollectTest(unittest.TestCase):
             empty.charts["overall"]["day"].missing, ((NOW - DAY, NOW),)
         )
 
-    def test_coverage_shares_follow_the_checkpoint_cadence(self) -> None:
-        # Four checkpoints per day, one 6 hour fetch missed: 80% covered.
-        six_hourly = [0, 6 * 3600, 12 * 3600, 18 * 3600]
-        series = _coverage_series(six_hourly, 0, DAY, 1)
-        self.assertEqual([share for _, share in series], [0.8])
-
-        # A daily backfill day with one checkpoint is fully covered.
-        daily = [0, DAY]
-        series = _coverage_series(daily, 0, DAY, 1)
-        self.assertEqual([share for _, share in series], [1.0])
-
-        # Empty buckets are reported as no data.
-        series = _coverage_series([0], 0, 2 * DAY, 2)
-        self.assertEqual(series[1][1], 0.0)
-
-    def test_partial_coverage_buckets_are_faded(self) -> None:
-        data = SimpleNamespace(
-            coverage=[(0, 0.6), (DAY, 0.0), (2 * DAY, 1.0)],
-            now_epoch=3 * DAY,
-        )
-        bar = _coverage_bar(data)
-        self.assertIn("60% covered", bar)
-        self.assertIn("opacity:0.66", bar)
-        self.assertIn('class="zero"', bar)
-        self.assertIn("no data", bar)
-
-    def test_coverage_and_absent_skills(self) -> None:
-        conn = FakeConn(
-            [], checkpoints=[NOW - 30 * DAY, NOW - 20 * DAY, NOW - 10 * DAY]
-        )
-        data = self.collect(conn)
-        self.assertEqual(len(data.coverage), 300)
-        covered = [flag for _, flag in data.coverage]
-        self.assertEqual(sum(covered), 3)
-
+    def test_absent_skills_are_empty(self) -> None:
         data = self.collect(FakeConn([]))
         self.assertEqual(data.current, {})
         self.assertIsNone(data.past["overall"]["day"])

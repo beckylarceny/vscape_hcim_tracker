@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import re
 import unittest
 
 from src.utility import SKILLS, SPANS
 from src.main import parse_duration
-from src.player_report import _bucket_count
 from src.report import (
     Record,
     ReportData,
-    _coverage_runs,
     _hours,
     _scan_player_points,
     _years_months,
@@ -151,35 +148,45 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn('"fuck jagex": "players/Fuck_Jagex.html"', page)
         self.assertIn("window.open(url,'_blank','noopener')", page)
 
-    def test_coverage_bar_renders_runs(self) -> None:
+    def test_rankings_page_has_only_generated_metadata(self) -> None:
+        data = self.make_data()._replace(coverage_total=4)
+        page = render_html(data)
+        self.assertIn("generated at: 2026-01-01 00:00 UTC", page)
+        self.assertNotIn("players logged", page)
+        self.assertNotIn("data coverage:", page)
+        self.assertNotIn('class="coverage"', page)
+        self.assertEqual(page.count("generated at:"), 1)
+        self.assertIn('href="status.html"', page)
+        self.assertIn('class="rankings wide"', page)
+
+    def test_backlinks_sit_above_the_title(self) -> None:
         page = render_html(self.make_data())
-        self.assertIn('class="coverage"', page)
-        self.assertIn("1/2 players (50%)", page)
-        self.assertIn('class="zero"', page)
-        self.assertIn("min-width:1em", page)
-        self.assertIn("(1 day): 1/2 players (50%)", page)
-        self.assertIn('data-tip="', page)
-        self.assertIn('id="coverage-tip"', page)
-        self.assertIn("(hover: none)", page)
-        self.assertNotIn('<span title="', page)
-        flexes = re.findall(r'style="flex:([^;"]+)', page)
-        self.assertTrue(flexes)
-        self.assertTrue(all(value.isdigit() for value in flexes), flexes)
-        self.assertEqual(_bucket_count(1000 * 86400), 300)
-
-        page = render_html(self.make_data()._replace(coverage_total=4))
-        self.assertIn("2/4 players (50%)", page)
-        self.assertIn("players logged: 2 / 4", page)
-
-        self.assertEqual(
-            _coverage_runs(
-                [(0, 5), (86400, 5), (172800, 2), (259200, 2), (345600, 0)]
-            ),
-            [(0, 2, 5), (2, 2, 2), (4, 1, 0)],
+        backlinks = (
+            '<div class="backlinks"><p class="sub">'
+            '<a href="priority/index.html">priority tracking</a> · '
+            '<a href="status.html">status</a></p></div>'
         )
-        self.assertEqual(
-            _coverage_runs([(0, 1), (86400, 2), (172800, 1)]),
-            [(0, 1, 1), (1, 1, 2), (2, 1, 1)],
+        self.assertIn(backlinks, page)
+        self.assertLess(page.index('<div class="backlinks">'), page.index("<h1>"))
+
+        text_version = '<p class="sub"><a href="latest.txt">text version</a></p>'
+        self.assertIn(text_version, page)
+        self.assertLess(page.index("<h1>"), page.index(text_version))
+        self.assertLess(page.index(text_version), page.index("generated at"))
+
+        self.assertNotIn("text report", page)
+        self.assertNotIn(
+            "</h1>\n<p class=\"sub\"><a href=\"priority/index.html\">", page
+        )
+        self.assertNotIn(
+            "</h1>\n<p class=\"sub\"><a href=\"status.html\">", page
+        )
+        self.assertIn(
+            ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
+        )
+        self.assertIn(
+            ".backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}",
+            page,
         )
 
     def test_version_footer_and_text_line(self) -> None:

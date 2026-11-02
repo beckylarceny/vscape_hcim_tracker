@@ -21,6 +21,7 @@ from .utility import (
     SPANS,
 )
 from .storage import as_datetime
+from . import styles
 
 PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/highscores?player={username}"
 
@@ -79,7 +80,6 @@ class PlayerData(NamedTuple):
     past: dict[str, dict[str, int | None]]
     best: dict[str, dict[str, Record | None]]
     charts: dict[str, dict[str, ChartData]]
-    coverage: list[tuple[int, float]] = ()
     frequencies: tuple[Frequency, ...] = ()
 
 
@@ -333,81 +333,6 @@ def _chart_data(
     )
 
 
-def _slot_count(start: int, end: int, anchor: int, cadence: int) -> int:
-    """How many `cadence`-spaced slots from `anchor` fall in [start, end)."""
-    if cadence <= 0 or end <= start:
-        return 0
-    first = -((anchor - start) // cadence)
-    last = -((anchor - end) // cadence) - 1
-    return max(0, last - first + 1)
-
-
-def _coverage_series(
-    times: list[int], start_epoch: int, end_epoch: int, buckets: int
-) -> list[tuple[int, float]]:
-    """Covered share of each bucket, from the checkpoints inside it.
-
-    The expected count comes from the cadence of the nearby checkpoint gaps,
-    so a daily backfill day counts as full while a skipped fetch inside a 6
-    hour cadence does not.
-    """
-    if buckets <= 0 or end_epoch <= start_epoch:
-        return []
-    width = (end_epoch + 1 - start_epoch) / buckets
-    counts = [0] * buckets
-    for stamp in times:
-        if start_epoch <= stamp <= end_epoch:
-            index = min(int((stamp - start_epoch) / width), buckets - 1)
-            counts[index] += 1
-    gaps = [
-        (earlier, later, later - earlier)
-        for earlier, later in zip(times, times[1:])
-        if later > earlier
-    ]
-    series: list[tuple[int, float]] = []
-    for index in range(buckets):
-        start = int(start_epoch + index * width)
-        end = int(start_epoch + (index + 1) * width)
-        if counts[index] == 0:
-            series.append((start, 0.0))
-            continue
-        near = [
-            (earlier, gap) for earlier, later, gap in gaps
-            if earlier < end and later > start
-        ]
-        if not near:
-            series.append((start, 1.0))
-            continue
-        anchor, cadence = min(near, key=lambda item: item[1])
-        expected = max(1, _slot_count(start, end, anchor, cadence))
-        series.append(
-            (start, round(min(1.0, counts[index] / expected), 2))
-        )
-    return series
-
-
-def _coverage_buckets(
-    conn: psycopg.Connection,
-    username: str,
-    start_epoch: int,
-    end_epoch: int,
-    lookback: int,
-) -> list[tuple[int, float]]:
-    """Covered share of each bucket over the player's lookback window."""
-    buckets = _bucket_count(lookback)
-    rows = conn.execute(
-        """
-        SELECT observed_at
-        FROM checkpoints
-        WHERE username = %s AND observed_at >= %s AND observed_at <= %s
-        ORDER BY observed_at
-        """,
-        (username, as_datetime(start_epoch), as_datetime(end_epoch)),
-    ).fetchall()
-    times = [int(observed_at.timestamp()) for (observed_at,) in rows]
-    return _coverage_series(times, start_epoch, end_epoch, buckets)
-
-
 def _snapshot_times(
     conn: psycopg.Connection, username: str, earliest: int, table: str
 ) -> list[int]:
@@ -568,9 +493,6 @@ def collect_player_data(
             )
         )
 
-    coverage = _coverage_buckets(
-        conn, username, now_epoch - lookback, now_epoch, lookback
-    )
     frequencies = _frequency_info(
         _snapshot_times(conn, username, now_epoch - lookback, "snapshots"),
         _snapshot_times(
@@ -589,7 +511,6 @@ def collect_player_data(
         past=past,
         best=best,
         charts=charts,
-        coverage=coverage,
         frequencies=frequencies,
     )
 
@@ -858,213 +779,6 @@ def _best_table(data: PlayerData, skill: str) -> str:
     )
 
 
-_PLAYER_CSS = """
-:root{color-scheme:light dark}
-*{box-sizing:border-box}
-body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0 auto;
-     padding:2rem 1rem;max-width:64rem;text-transform:lowercase}
-h1{font-size:1.9rem;margin:0 0 .35rem}
-h2{font-size:1.5rem;margin:2.5rem 0 .5rem;border-bottom:1px solid #8884;
-   padding-bottom:.3rem}
-h3{font-size:1rem;margin:1.2rem 0 .3rem;text-transform:lowercase;
-   letter-spacing:.04em;color:#888}
-h4{font-size:.85rem;margin:.5rem 0 .2rem;color:#888;text-transform:lowercase;
-   letter-spacing:.04em}
-.stats h2,.stats h3,.stats h4{text-align:center}
-.sub{margin:1rem 0 1.5rem;padding-bottom:.9rem;
-     border-bottom:1px solid #8884}
-.backlinks{margin:-2rem 0 1.75rem;text-align:center}
-.backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}
-.backlinks .sub + .sub{margin-top:.15rem}
-.subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
-            border:0;padding:0}
-.priority-link{margin:.1rem 0 .9rem}
-.meta{color:#888;font-size:.85rem;margin:0 0 .15rem}
-.coverage{display:flex;gap:3px;height:14px;margin:.3rem 0 .1rem;
-          background:#8882;overflow:hidden}
-.coverage span{flex:1;background:#9079B6;min-width:1em}
-.coverage span.zero{background:#8883}
-.range{display:flex;justify-content:space-between;color:#888;font-size:.75rem}
-table{width:auto;max-width:100%;border-collapse:collapse;
-      margin:.25rem auto .75rem;table-layout:auto}
-th,td{text-align:left;padding:.25rem .55rem;border-bottom:1px solid #8884}
-th{font-weight:600}
-td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;
-              white-space:nowrap}
-td.date,th.date{text-align:right;font-variant-numeric:tabular-nums;
-                white-space:nowrap}
-tr:nth-child(even) td{background:#8881}
-table.current{width:auto;max-width:32rem;margin-left:auto;margin-right:auto}
-table.past th:nth-child(1),table.past td:nth-child(1){width:45%}
-table.best th:nth-child(1),table.best td:nth-child(1){width:25%}
-.gain-tables{display:grid;align-items:start;
-             grid-template-columns:repeat(2,minmax(0,1fr));
-             gap:.5rem 1.5rem}
-.charts{display:grid;align-items:start;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:.75rem 1rem}
-.charts figure.wide{grid-column:1/-1}
-figure{min-width:0;margin:0;padding:.5rem .6rem .35rem;
-       border:1px solid #8883;border-radius:0}
-figcaption{font-size:.8rem;color:#888;margin-bottom:.25rem}
-.key{font-size:.7rem;color:#888;margin-left:.45rem}
-.key::before{content:"";display:inline-block;width:.55em;height:.55em;
-             margin-right:.25em}
-.line-key::before{background:#9079B6}
-.area-key::before{background:#7BB59A}
-.charts figcaption{display:flex;align-items:baseline;flex-wrap:wrap}
-.charts .key.gap-key{margin-left:auto}
-.key.gap-key::before{background:#8883;width:.95em;height:.95em;
-                     border:1px solid #8886}
-svg{display:block;width:100%;height:auto}
-svg .grid{stroke:#8884;stroke-width:.5}
-svg .gap{fill:#8883}
-svg .line{fill:none;stroke:#9079B6;stroke-width:1.5;
-          vector-effect:non-scaling-stroke}
-svg .area{fill:#7BB59A33;stroke:#7BB59A33;stroke-width:1;
-          vector-effect:non-scaling-stroke}
-svg .dot{fill:#9079B6}
-svg text{fill:#888;font-size:9px}
-svg text.xp{fill:#9079B6}
-svg text.gain{fill:#7BB59A}
-.empty{color:#888;margin:.2rem 0}
-a{color:#7BB59A}
-.to-top{position:fixed;right:1rem;bottom:1rem;z-index:10;padding:.45rem .7rem;
-        background:#9079B6;color:#fff;font-size:.85rem;line-height:1;
-        text-decoration:none;border:1px solid #8886;border-radius:0;
-        box-shadow:0 1px 4px #0003}
-.to-top:hover{background:#7B659C;color:#fff}
-.version{text-align:right;color:#888;font-size:.75rem;margin:2rem 0 3.5rem}
-.tip{position:fixed;z-index:20;max-width:22rem;padding:.3rem .45rem;
-     background:#1b1b1b;color:#eee;font-size:.75rem;line-height:1.35;
-     border-radius:0;pointer-events:none;white-space:normal}
-.tip[hidden]{display:none}
-@media (max-width:52rem){
-  .charts,.gain-tables{grid-template-columns:1fr}
-}
-@media (max-width:40rem){
-  body{padding:1.25rem .85rem}
-  .backlinks{margin-top:-1.25rem}
-  table{font-size:.85em}
-  th,td{padding:.2rem .4rem}
-}
-"""
-
-
-COVERAGE_TIP_HTML = (
-    '<div class="tip" id="coverage-tip" role="tooltip" hidden></div>'
-    "<script>(function(){"
-    "var tip=document.getElementById('coverage-tip');"
-    "if(!tip){return;}"
-    "function place(x,y){"
-    "tip.style.left='0px';tip.style.top='0px';"
-    "var box=tip.getBoundingClientRect(),pad=8;"
-    "var left=Math.min(Math.max(pad,x-box.width/2),"
-    "window.innerWidth-box.width-pad);"
-    "var top=y-box.height-14;"
-    "if(top<pad){top=y+18;}"
-    "tip.style.left=left+'px';tip.style.top=top+'px';}"
-    "function show(span,x,y){"
-    "tip.textContent=span.getAttribute('data-tip');"
-    "tip.hidden=false;place(x,y);}"
-    "function hide(){tip.hidden=true;tip.removeAttribute('data-target');}"
-    "var coarse=window.matchMedia&&"
-    "window.matchMedia('(hover: none)').matches;"
-    "var spans=document.querySelectorAll('.coverage span[data-tip]');"
-    "Array.prototype.forEach.call(spans,function(span){"
-    "if(coarse){"
-    "span.addEventListener('click',function(event){"
-    "event.preventDefault();"
-    "var target=span.getAttribute('data-tip');"
-    "var same=!tip.hidden&&"
-    "tip.getAttribute('data-target')===target;"
-    "if(same){hide();return;}"
-    "tip.setAttribute('data-target',target);"
-    "show(span,event.clientX,event.clientY);});"
-    "}else{"
-    "span.addEventListener('mouseenter',function(event){"
-    "show(span,event.clientX,event.clientY);});"
-    "span.addEventListener('mousemove',function(event){"
-    "place(event.clientX,event.clientY);});"
-    "span.addEventListener('mouseleave',hide);"
-    "}});"
-    "document.addEventListener('click',function(event){"
-    "var target=event.target;"
-    "if(!target.closest||"
-    "!target.closest('.coverage span[data-tip]')){hide();}});"
-    "})();</script>"
-)
-
-
-def _coverage_runs(
-    coverage: list[tuple[int, float]]
-) -> list[tuple[int, int, float]]:
-    """(start index, length, covered share) for equal-share runs."""
-    runs: list[tuple[int, int, float]] = []
-    for index, (_, covered) in enumerate(coverage):
-        if runs and runs[-1][2] == covered:
-            start, length, _ = runs[-1]
-            runs[-1] = (start, length + 1, covered)
-        else:
-            runs.append((index, 1, covered))
-    return runs
-
-
-def _coverage_bar(data: PlayerData) -> str:
-    if not data.coverage:
-        return ""
-    segments: list[str] = []
-    for index, length, covered in _coverage_runs(data.coverage):
-        start_epoch = data.coverage[index][0]
-        next_index = index + length
-        end_epoch = (
-            data.coverage[next_index][0]
-            if next_index < len(data.coverage)
-            else data.now_epoch
-        )
-        first = _date(start_epoch)
-        last = _date(end_epoch)
-        when = first if first == last else f"{first} - {last}"
-        duration = _years_months(end_epoch - start_epoch)
-        if covered:
-            share = min(1.0, covered)
-            pct = round(share * 100)
-            state = "covered" if pct >= 100 else f"{pct}% covered"
-            label = f"{when} ({duration}): {state}"
-            segments.append(
-                f'<span data-tip="{_esc(label)}" '
-                f'style="flex:{length};opacity:{0.15 + 0.85 * share:.2f}">'
-                "</span>"
-            )
-        else:
-            label = f"{when} ({duration}): no data"
-            segments.append(
-                f'<span class="zero" data-tip="{_esc(label)}" '
-                f'style="flex:{length}"></span>'
-            )
-    first = _date(data.coverage[0][0])
-    last = _date(data.now_epoch)
-    return (
-        '<p class="meta">data coverage:</p>'
-        '<div class="coverage" role="img" '
-        f'aria-label="checkpoint coverage from {first} to {last}">'
-        + "".join(segments)
-        + "</div>"
-        f'<div class="range"><span>{first}</span><span>{last}</span></div>'
-    )
-
-
-SKILL_TABS_CSS = """
-.tabs{display:flex;flex-wrap:wrap;gap:.3rem;margin:1rem 0 1.5rem}
-.tab{font:inherit;font-size:.85rem;padding:.35rem .8rem;border:1px solid #8886;
-     border-radius:0;background:transparent;color:inherit;cursor:pointer}
-.tab.flat{color:#888}
-.tab[aria-selected="true"]{background:#9079B6;color:#fff;border-color:#9079B6}
-.stats .tabs{margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid #8884}
-.tab-panel[hidden]{display:none}
-.tab-panel>h2:first-child{margin-top:.6rem}
-"""
-
 SKILL_TAB_SCRIPT = (
     "<script>"
     "const TABS=document.querySelectorAll('[role=tab]');"
@@ -1138,10 +852,11 @@ def render_player_page(
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         f"<title>{_esc(data.username.lower())} - xp tracker</title>",
-        f"<style>{_PLAYER_CSS}{SKILL_TABS_CSS}</style></head>"
-        '<body id="top">',
+        f"{styles.style_tag()}</head>",
+        '<body id="top" class="player">',
         '<div class="backlinks">'
-        '<p class="sub"><a href="../latest.html">all rankings</a></p>'
+        '<p class="sub"><a href="../latest.html">all rankings</a> · '
+        '<a href="../status.html">status</a></p>'
         "</div>",
         f"<h1>{_esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{_esc(highscores_url(data.username))}">'
@@ -1156,8 +871,6 @@ def render_player_page(
         ),
         f'<p class="meta">generated at: {_esc(data.generated)}</p>',
         _frequency_meta(data),
-        _coverage_bar(data),
-        COVERAGE_TIP_HTML,
         '<div class="stats">',
         "<h2>Current xp</h2>",
         _current_table(data),
