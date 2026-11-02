@@ -8,7 +8,7 @@ import logging
 import threading
 from pathlib import Path
 
-log = logging.getLogger("vscape_hcim_tracker.web")
+log = logging.getLogger("vscape_hcim_tracker.web.server")
 
 
 class ReportRequestHandler(http.server.SimpleHTTPRequestHandler):

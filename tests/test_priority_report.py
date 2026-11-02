@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.utility import SKILLS
-from src.player_report import ChartData
-from src.priority_report import (
+from src.common.utility import SKILLS
+from src.web.player_report import ChartData
+from src.web.priority_report import (
     Event,
     PriorityData,
     collect_events,

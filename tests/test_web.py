@@ -7,7 +7,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from src import web
+from src.web import server as web
 
 
 class ServerTest(unittest.TestCase):

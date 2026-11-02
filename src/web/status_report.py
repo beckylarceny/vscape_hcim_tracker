@@ -18,8 +18,8 @@ from .player_report import (
     _frequency_name,
     _years_months,
 )
-from .storage import as_datetime
-from .utility import DEFAULT_PRIORITY_INTERVAL_SECONDS
+from ..common.storage import as_datetime
+from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS
 
 PROCESS_STARTED_EPOCH = int(time.time())
 

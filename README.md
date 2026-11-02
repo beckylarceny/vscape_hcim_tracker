@@ -53,6 +53,22 @@ docker compose exec db psql -U xp_tracker -d xp_tracker \
 `reports/` is bind-mounted; the container entrypoint fixes its ownership to uid
 1000 on startup.
 
+## Source layout
+
+Each container runs only its own service code:
+
+- `src/collector/` - highscores fetching, priority collection and the
+  collection loop. Container command: `python -m src.collector`.
+- `src/web/` - report generation, static HTTP server and the report timer.
+  Container command: `python -m src.web`.
+- `src/db/` - PostgreSQL schema and `python -m src.db` for one-shot schema
+  creation.
+- `src/common/` - configuration, database queries and other code shared by the
+  services.
+- `src/main.py` - default entry point, which runs the collector.
+
+The collector never writes reports and the web service never fetches xp.
+
 ## Configuration
 
 One YAML file per service in `config/`:
@@ -64,8 +80,8 @@ One YAML file per service in `config/`:
 - `db.yaml` - `host`, `port`, `database`, `user` fallbacks.
 
 Recommended values live in `config/defaults/`; active files are editable copies.
-`src/utility.py` loads them (`VSCAPE_HCIM_TRACKER_CONFIG_DIR` overrides the
-directory) and provides `build_dsn` and `parse_priority_players`.
+`src/common/utility.py` loads them (`VSCAPE_HCIM_TRACKER_CONFIG_DIR` overrides
+the directory) and provides `build_dsn` and `parse_priority_players`.
 
 ```sh
 ./scripts/setup.sh             # prompts every value, defaults shown

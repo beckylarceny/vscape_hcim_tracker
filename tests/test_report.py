@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from src.utility import SKILLS, SPANS
-from src.main import parse_duration
-from src.report import (
+from src.common.utility import SKILLS, SPANS, parse_duration
+from src.web.report import (
     Record,
     ReportData,
     _hours,
@@ -193,7 +192,7 @@ class HtmlReportTest(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from src.report import read_version
+        from src.web.report import read_version
 
         version = "software version abc1234, updated 2026-11-01 13:00 UTC"
         data = self.make_data()._replace(version=version)

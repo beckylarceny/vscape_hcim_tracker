@@ -1,15 +1,15 @@
-"""Configuration loading and small helpers shared by the collector."""
+"""Configuration loading and small helpers shared by the services."""
 
 from __future__ import annotations
 
-import json
+import argparse
 import os
 import pathlib
 import urllib.parse
 
 import yaml
 
-_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
+_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 CONFIG_DIR_ENV = "VSCAPE_HCIM_TRACKER_CONFIG_DIR"
 DEFAULT_CONFIG_DIR = _PROJECT_ROOT / "config"
@@ -125,3 +125,23 @@ def parse_priority_players(values: list[str] | None) -> tuple[str, ...]:
     for value in values:
         names.extend(value.split(","))
     return _dedupe(names)
+
+
+_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+
+
+def parse_duration(text: str) -> int:
+    value = text.strip().lower()
+    if value.isdigit():
+        return int(value)
+    if value and value[-1] in _UNITS:
+        return int(float(value[:-1]) * _UNITS[value[-1]])
+    raise argparse.ArgumentTypeError(f"invalid duration: {text!r}")
+
+
+def effective_lookback(now_epoch: int, lookback: int | None) -> int:
+    """History to reconstruct, never before the known data start."""
+    available = max(0, now_epoch - DATA_START_EPOCH)
+    if lookback is None:
+        return available
+    return min(lookback, available)

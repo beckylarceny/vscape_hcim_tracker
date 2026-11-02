@@ -12,7 +12,12 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any
 
-from .utility import HCIM, PLAYER_HIGHSCORES_URL, PLAYER_TRACKER_URL, SKILLS
+from ..common.utility import (
+    HCIM,
+    PLAYER_HIGHSCORES_URL,
+    PLAYER_TRACKER_URL,
+    SKILLS,
+)
 
 log = logging.getLogger(__name__)
 

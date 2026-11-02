@@ -10,13 +10,19 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from src import api, main, storage
-from src.utility import (
+from src.collector import api, collection, rate, run
+from src.collector import priority as collector_priority
+from src.collector.grid import build_grid
+from src.collector.rate import RateLimiter
+from src.common import priority as common_priority
+from src.common.priority import refresh_priority_players
+from src.common.utility import (
     DATA_START_EPOCH,
     HCIM,
     CONFIG_DIR_ENV,
     SKILLS,
     build_dsn,
+    effective_lookback,
     parse_priority_players,
 )
 
@@ -33,7 +39,7 @@ def xp(amount: int) -> dict[str, int]:
 
 class GridTest(unittest.TestCase):
     def test_backfill_uses_day_grid_and_recent_retry_window(self) -> None:
-        grid = main.build_grid(
+        grid = build_grid(
             NOW, DAY, COLLECT, 365 * DAY, 7 * DAY, no_backfill=False
         )
         current = (NOW // COLLECT) * COLLECT
@@ -44,7 +50,7 @@ class GridTest(unittest.TestCase):
         self.assertTrue(recent <= set(grid))
 
     def test_no_backfill_only_covers_retry_window(self) -> None:
-        grid = main.build_grid(
+        grid = build_grid(
             NOW, DAY, COLLECT, 365 * DAY, 7 * DAY, no_backfill=True
         )
         current = (NOW // COLLECT) * COLLECT
@@ -53,7 +59,7 @@ class GridTest(unittest.TestCase):
         )
         self.assertGreaterEqual(min(grid), NOW - 7 * DAY - COLLECT)
 
-        later = main.build_grid(
+        later = build_grid(
             NOW + COLLECT, DAY, COLLECT, 365 * DAY, 7 * DAY, True
         )
         self.assertIn(current, later)
@@ -62,30 +68,30 @@ class GridTest(unittest.TestCase):
 class RateLimiterTest(unittest.TestCase):
     def test_spaces_calls_and_zero_is_unlimited(self) -> None:
         with patch.object(
-            main.time, "monotonic", side_effect=[0.0, 0.1]
-        ), patch.object(main.time, "sleep") as sleep:
-            limiter = main.RateLimiter(4)
+            rate.time, "monotonic", side_effect=[0.0, 0.1]
+        ), patch.object(rate.time, "sleep") as sleep:
+            limiter = RateLimiter(4)
             limiter.wait()
             limiter.wait()
         self.assertEqual(sleep.call_args_list[0].args[0], 0.15)
 
-        with patch.object(main.time, "sleep") as sleep:
-            main.RateLimiter(0).wait()
+        with patch.object(rate.time, "sleep") as sleep:
+            RateLimiter(0).wait()
         sleep.assert_not_called()
 
 
 class LookbackTest(unittest.TestCase):
     def test_default_starts_at_the_fixed_data_epoch(self) -> None:
         now = DATA_START_EPOCH + 100 * DAY
-        self.assertEqual(main.effective_lookback(now, None), 100 * DAY)
+        self.assertEqual(effective_lookback(now, None), 100 * DAY)
         self.assertEqual(
-            main.effective_lookback(now, 365 * DAY), 100 * DAY
+            effective_lookback(now, 365 * DAY), 100 * DAY
         )
         self.assertEqual(
-            main.effective_lookback(now, 10 * DAY), 10 * DAY
+            effective_lookback(now, 10 * DAY), 10 * DAY
         )
         self.assertEqual(
-            main.effective_lookback(DATA_START_EPOCH - 5, None), 0
+            effective_lookback(DATA_START_EPOCH - 5, None), 0
         )
 
 
@@ -93,7 +99,7 @@ class CollectAllTest(unittest.TestCase):
     def setUp(self) -> None:
         self.conn = MagicMock()
         self.conn.close = MagicMock()
-        self.limiter = main.RateLimiter(0)
+        self.limiter = RateLimiter(0)
         self.calls: list[tuple[str, int]] = []
 
     def run_collect(
@@ -104,29 +110,29 @@ class CollectAllTest(unittest.TestCase):
             self.calls.append((name, timestamp))
             return (name, fetch_gains(name, timestamp))
 
-        with patch.object(main.storage, "connect", return_value=self.conn), \
-                patch.object(main.storage, "ensure_schema"), \
-                patch.object(main.storage, "upsert_players") as upsert, \
+        with patch.object(collection.storage, "connect", return_value=self.conn), \
+                patch.object(collection.storage, "ensure_schema"), \
+                patch.object(collection.storage, "upsert_players") as upsert, \
                 patch.object(
-                    main.storage, "checkpoint_times_by_player",
+                    collection.storage, "checkpoint_times_by_player",
                     return_value=dict(done or {}),
                 ), \
                 patch.object(
-                    main.storage, "latest_xp_by_skill",
+                    collection.storage, "latest_xp_by_skill",
                     side_effect=lambda conn, name: dict((last or {}).get(name, {})),
                 ), \
                 patch.object(
-                    main.storage, "insert_snapshots"
+                    collection.storage, "insert_snapshots"
                 ) as insert, \
                 patch.object(
-                    main.storage, "insert_checkpoint_pairs"
+                    collection.storage, "insert_checkpoint_pairs"
                 ) as pairs, \
                 patch.object(
-                    main.api, "fetch_player_xp",
+                    collection.api, "fetch_player_xp",
                     side_effect=lambda name, wait=None: fetch_xp(name),
                 ), \
-                patch.object(main, "_fetch_gains", side_effect=gains):
-            stats = main.collect_all(
+                patch.object(collection, "_fetch_gains", side_effect=gains):
+            stats = collection.collect_all(
                 "dsn", list(players), list(grid), 1, self.limiter
             )
         return stats, upsert, insert, pairs
@@ -228,8 +234,8 @@ class CollectAllTest(unittest.TestCase):
         self.assertEqual(pairs.call_args.args[1], [("bob", T2)])
 
 
-class ModeTest(unittest.TestCase):
-    def test_collect_only_run_skips_report_generation(self) -> None:
+class RunOnceTest(unittest.TestCase):
+    def test_run_once_collects_and_records_the_run(self) -> None:
         conn = MagicMock()
         args = SimpleNamespace(
             interval=86400,
@@ -237,27 +243,22 @@ class ModeTest(unittest.TestCase):
             lookback=365 * 86400,
             retry_window=7 * 86400,
             no_backfill=True,
-            report_only=False,
-            collect_only=True,
-            report_dir="reports",
-            top=5,
             workers=2,
             rate=4,
             limit=0,
         )
         totals = {"requests": 1, "rows": 1, "failures": 0, "players": 1}
-        with patch.object(main.storage, "connect", return_value=conn), \
-                patch.object(main.storage, "ensure_schema"), \
+        with patch.object(run.storage, "connect", return_value=conn), \
+                patch.object(run.storage, "ensure_schema"), \
                 patch.object(
-                    main.api, "list_hcim_players", return_value={"a": 1}
+                    run.api, "list_hcim_players", return_value={"a": 1}
                 ), \
-                patch.object(main, "collect_all", return_value=totals), \
-                patch.object(main.storage, "start_run", return_value=1), \
-                patch.object(main.storage, "finish_run") as finish, \
-                patch.object(main, "write_report") as write:
-            main.run_once(args, "dsn")
+                patch.object(run, "collect_all", return_value=totals) as collect, \
+                patch.object(run.storage, "start_run", return_value=1), \
+                patch.object(run.storage, "finish_run") as finish:
+            run.run_once(args, "dsn")
 
-        write.assert_not_called()
+        collect.assert_called_once()
         finish.assert_called_once()
 
 
@@ -363,14 +364,14 @@ class PriorityListTest(unittest.TestCase):
     def test_refresh_reloads_file_unless_cli_pinned(self) -> None:
         args = SimpleNamespace(priority=None, priority_players=("old",))
         with patch.object(
-            main, "parse_priority_players", return_value=("new",)
+            common_priority, "parse_priority_players", return_value=("new",)
         ):
-            main.refresh_priority_players(args)
+            refresh_priority_players(args)
         self.assertEqual(args.priority_players, ("new",))
 
         pinned = SimpleNamespace(priority=["fixed"], priority_players=("fixed",))
-        with patch.object(main, "parse_priority_players") as parse:
-            main.refresh_priority_players(pinned)
+        with patch.object(common_priority, "parse_priority_players") as parse:
+            refresh_priority_players(pinned)
         parse.assert_not_called()
         self.assertEqual(pinned.priority_players, ("fixed",))
 
@@ -379,32 +380,32 @@ class PriorityCollectTest(unittest.TestCase):
     def setUp(self) -> None:
         self.conn = MagicMock()
         self.conn.close = MagicMock()
-        self.limiter = main.RateLimiter(0)
+        self.limiter = RateLimiter(0)
 
     def collect(self, fetched, gains, last_xp=None, canonical=None):
-        with patch.object(main.storage, "connect", return_value=self.conn), \
+        with patch.object(collector_priority.storage, "connect", return_value=self.conn), \
                 patch.object(
-                    main.storage, "canonical_username",
+                    collector_priority.storage, "canonical_username",
                     return_value=canonical,
                 ), \
-                patch.object(main.storage, "upsert_players"), \
+                patch.object(collector_priority.storage, "upsert_players"), \
                 patch.object(
-                    main.storage, "latest_priority_xp_by_skill",
+                    collector_priority.storage, "latest_priority_xp_by_skill",
                     return_value=dict(last_xp or {}),
                 ), \
                 patch.object(
-                    main.storage, "insert_priority_snapshots"
+                    collector_priority.storage, "insert_priority_snapshots"
                 ) as insert, \
                 patch.object(
-                    main.storage, "insert_priority_checkpoints"
+                    collector_priority.storage, "insert_priority_checkpoints"
                 ) as checkpoints, \
                 patch.object(
-                    main.api, "fetch_player_xp", return_value=fetched
+                    collector_priority.api, "fetch_player_xp", return_value=fetched
                 ), \
                 patch.object(
-                    main.api, "fetch_player_gains", side_effect=gains
+                    collector_priority.api, "fetch_player_gains", side_effect=gains
                 ):
-            stats = main.collect_priority_player(
+            stats = collector_priority.collect_priority_player(
                 "dsn", "alice", T1, self.limiter
             )
         return stats, insert, checkpoints
@@ -440,15 +441,15 @@ class PriorityCollectTest(unittest.TestCase):
         insert.assert_not_called()
         checkpoints.assert_not_called()
 
-        with patch.object(main.storage, "connect", return_value=self.conn), \
+        with patch.object(collector_priority.storage, "connect", return_value=self.conn), \
                 patch.object(
-                    main.storage, "canonical_username", return_value=None
+                    collector_priority.storage, "canonical_username", return_value=None
                 ), \
                 patch.object(
-                    main.api, "fetch_player_xp",
+                    collector_priority.api, "fetch_player_xp",
                     side_effect=api.ApiError("503"),
                 ):
-            stats = main.collect_priority_player(
+            stats = collector_priority.collect_priority_player(
                 "dsn", "alice", T1, self.limiter
             )
         self.assertEqual(stats["failures"], 1)
@@ -457,20 +458,20 @@ class PriorityCollectTest(unittest.TestCase):
     def test_collect_once_uses_tracked_players_and_prunes(self) -> None:
         args = SimpleNamespace(priority_players=("alice", "bob"))
         totals = {"requests": 2, "rows": 2, "failures": 0, "players": 1}
-        with patch.object(main.storage, "connect", return_value=self.conn), \
-                patch.object(main.storage, "ensure_schema"), \
-                patch.object(main.storage, "prune_priority_data") as prune, \
+        with patch.object(collector_priority.storage, "connect", return_value=self.conn), \
+                patch.object(collector_priority.storage, "ensure_schema"), \
+                patch.object(collector_priority.storage, "prune_priority_data") as prune, \
                 patch.object(
-                    main.storage, "top_players_by_xp",
+                    collector_priority.storage, "top_players_by_xp",
                     return_value=["Cojultad"],
                 ), \
                 patch.object(
-                    main.storage, "canonical_username", return_value=None
+                    collector_priority.storage, "canonical_username", return_value=None
                 ), \
                 patch.object(
-                    main, "collect_priority_player", return_value=totals
+                    collector_priority, "collect_priority_player", return_value=totals
                 ) as collect:
-            result = main.collect_priority_once(args, "dsn", self.limiter)
+            result = collector_priority.collect_priority_once(args, "dsn", self.limiter)
         self.assertEqual(
             [call.args[1] for call in collect.call_args_list],
             ["Cojultad", "alice", "bob"],
@@ -480,20 +481,20 @@ class PriorityCollectTest(unittest.TestCase):
         self.assertEqual(result["failures"], 0)
 
         args = SimpleNamespace(priority_players=())
-        with patch.object(main.storage, "connect", return_value=self.conn), \
-                patch.object(main.storage, "ensure_schema"), \
-                patch.object(main.storage, "prune_priority_data"), \
+        with patch.object(collector_priority.storage, "connect", return_value=self.conn), \
+                patch.object(collector_priority.storage, "ensure_schema"), \
+                patch.object(collector_priority.storage, "prune_priority_data"), \
                 patch.object(
-                    main.storage, "top_players_by_xp",
+                    collector_priority.storage, "top_players_by_xp",
                     return_value=["Cojultad"],
                 ), \
                 patch.object(
-                    main.storage, "canonical_username", return_value=None
+                    collector_priority.storage, "canonical_username", return_value=None
                 ), \
                 patch.object(
-                    main, "collect_priority_player", return_value=totals
+                    collector_priority, "collect_priority_player", return_value=totals
                 ) as collect:
-            main.collect_priority_once(args, "dsn", self.limiter)
+            collector_priority.collect_priority_once(args, "dsn", self.limiter)
         self.assertEqual(collect.call_args.args[1], "Cojultad")
 
 

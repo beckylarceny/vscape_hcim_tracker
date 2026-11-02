@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from src import main
-from src.utility import DATA_START_EPOCH, SKILLS, SPANS
-from src.player_report import (
+from src.common.utility import DATA_START_EPOCH, SKILLS, SPANS
+from src.web import reporting
+from src.web.player_report import (
     ChartData,
     PlayerData,
     Record,
@@ -206,7 +206,7 @@ class RenderTest(unittest.TestCase):
 
 class ChartTest(unittest.TestCase):
     def test_gap_rectangles_mark_missing_sections(self) -> None:
-        from src.player_report import _missing_ranges
+        from src.web.player_report import _missing_ranges
 
         self.assertEqual(_missing_ranges([], 0, 100, 10), ((0, 100),))
         self.assertEqual(_missing_ranges([50], 0, 100, 100), ())
@@ -226,7 +226,7 @@ class ChartTest(unittest.TestCase):
         self.assertIn('class="gap"', svg)
 
     def test_skipped_fetch_shades_the_gap(self) -> None:
-        from src.player_report import _missing_ranges
+        from src.web.player_report import _missing_ranges
 
         six_hourly = [0, 21600, 43200, 64800, 86400]
         self.assertEqual(_missing_ranges(six_hourly, 0, DAY, 2 * DAY), ())
@@ -449,21 +449,21 @@ class WritePagesTest(unittest.TestCase):
     def test_page_lifecycle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             report_dir = Path(directory)
-            main.write_player_pages(
+            reporting.write_player_pages(
                 self.conn, report_dir, self.data(), {"alice": 1}, None
             )
             page = report_dir / "players" / "alice.html"
             before = page.read_text(encoding="utf-8")
             self.assertIn("first", before)
 
-            written = main.write_player_pages(
+            written = reporting.write_player_pages(
                 self.conn, report_dir, self.data("second"),
                 {"alice": 1}, {"alice": 1},
             )
             self.assertEqual(written, 0)
             self.assertEqual(page.read_text(encoding="utf-8"), before)
 
-            written = main.write_player_pages(
+            written = reporting.write_player_pages(
                 self.conn, report_dir, self.data("second"),
                 {"alice": 2}, {"alice": 1},
             )
@@ -472,7 +472,7 @@ class WritePagesTest(unittest.TestCase):
 
             data = self.data()
             data.players = ()
-            main.write_player_pages(
+            reporting.write_player_pages(
                 self.conn, report_dir, data, {}, {"alice": 1}
             )
             self.assertFalse(page.exists())
