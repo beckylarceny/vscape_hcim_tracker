@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
 from .format import bucket_count, hours, players_line, years_months
 from .html import (
+    SITE_NAME,
     SKILL_TAB_SCRIPT,
     date,
     esc,
@@ -216,7 +217,7 @@ def _text_span_block(
 
 
 def render_text(data: ReportData) -> str:
-    lines = ["XP TRACKER REPORT"]
+    lines = [f"{SITE_NAME.upper()} REPORT"]
     for name, value in (
         ("generated at", data.generated),
         ("grid end", date(data.now_epoch)),
@@ -363,7 +364,7 @@ def render_html(data: ReportData) -> str:
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>general tracking - xp tracker</title>",
+        f"<title>general tracking - {SITE_NAME}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="rankings wide">',
         '<div class="backlinks"><p class="sub">'

@@ -19,6 +19,7 @@ from ..common.utility import (
 from .chart import ChartData, chart_svg, thin
 from .format import plural
 from .html import (
+    SITE_NAME,
     SKILL_TAB_SCRIPT,
     atomic_write,
     esc,
@@ -363,7 +364,7 @@ def render_priority_page(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{esc(data.username.lower())} priority - xp tracker</title>",
+        f"<title>{esc(data.username.lower())} priority - {SITE_NAME}</title>",
         '<link rel="alternate" type="application/rss+xml" '
         f'title="{esc(data.username)} priority xp" href="{esc(feed_href)}">',
         f"{style_tag()}</head>",
@@ -437,7 +438,7 @@ def render_priority_index(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>priority tracking - xp tracker</title>",
+        f"<title>priority tracking - {SITE_NAME}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'

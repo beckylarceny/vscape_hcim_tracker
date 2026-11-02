@@ -4,6 +4,11 @@ The web service writes static text and HTML files into `reports/` and serves the
 same directory over HTTP. Reports are rebuilt on a timer and are safe to read
 while being replaced.
 
+HTML pages use `vidyascape hcim xp tracker` as the site name in the browser
+title, for example `general tracking - vidyascape hcim xp tracker`. The plain-text
+reports start with `VIDYASCAPE HCIM XP TRACKER REPORT` or
+`VIDYASCAPE HCIM XP TRACKER STATUS`.
+
 ## Output files
 
 | Path | Content |

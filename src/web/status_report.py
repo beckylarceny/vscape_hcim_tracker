@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     import psycopg
 
 from .format import frequency_name, hours, players_line, plural, years_months
-from .html import atomic_write, date, esc, style_tag
+from .html import SITE_NAME, atomic_write, date, esc, style_tag
 from ..common.storage import as_datetime
 from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, next_slot
 
@@ -866,13 +866,13 @@ def render_status_page(data: StatusData) -> str:
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>status - xp tracker</title>",
+        f"<title>status - {SITE_NAME}</title>",
         style_tag() + "</head>",
         '<body id="top" class="status">',
         '<div class="backlinks"><p class="sub">'
         '<a href="general.html">general tracking</a> · '
         '<a href="priority/index.html">priority tracking</a></p></div>',
-        "<h1>xp tracker status</h1>",
+        f"<h1>{SITE_NAME} status</h1>",
         '<p class="sub"><a href="status.txt">text version</a></p>',
         f'<p class="meta">generated at: {esc(data.generated)}</p>',
         "<h2>data coverage</h2>",
@@ -1037,7 +1037,7 @@ def _coverage_labels(data: StatusData) -> list[str]:
 
 
 def render_status_text(data: StatusData) -> str:
-    lines = ["XP TRACKER STATUS"]
+    lines = [f"{SITE_NAME.upper()} STATUS"]
     lines.extend(_text_facts([("generated at", data.generated)]))
     lines.append("")
     sections = (

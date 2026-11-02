@@ -261,8 +261,12 @@ class WriteTest(unittest.TestCase):
             self.assertTrue(feed.exists())
             self.assertTrue(index.exists())
             self.assertIn(
-                "alice priority - xp tracker",
+                "alice priority - vidyascape hcim xp tracker",
                 page.read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "<title>priority tracking - vidyascape hcim xp tracker</title>",
+                index.read_text(encoding="utf-8"),
             )
             self.assertIn(
                 "the top 5 players by overall xp",

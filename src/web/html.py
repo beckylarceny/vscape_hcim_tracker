@@ -12,6 +12,8 @@ from ..common.utility import SKILLS
 
 _CSS_PATH = Path(__file__).with_name("report.css")
 
+SITE_NAME = "vidyascape hcim xp tracker"
+
 
 @lru_cache(maxsize=1)
 def page_style() -> str:

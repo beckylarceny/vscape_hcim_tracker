@@ -28,6 +28,7 @@ from .chart import (
 )
 from .format import frequency_name, years_months
 from .html import (
+    SITE_NAME,
     SKILL_TAB_SCRIPT,
     date,
     esc,
@@ -553,7 +554,7 @@ def render_player_page(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{esc(data.username.lower())} - xp tracker</title>",
+        f"<title>{esc(data.username.lower())} - {SITE_NAME}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="player">',
         '<div class="backlinks">'

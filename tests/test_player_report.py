@@ -122,6 +122,9 @@ class SlugTest(unittest.TestCase):
 class RenderTest(unittest.TestCase):
     def test_header_escape_priority_and_metadata(self) -> None:
         page = render_player_page(fake_data())
+        self.assertIn(
+            "<title>fuck jagex - vidyascape hcim xp tracker</title>", page
+        )
         self.assertIn("<h1>Fuck Jagex</h1>", page)
         self.assertIn(
             '<h2 class="subheading"><a href="'

@@ -125,6 +125,7 @@ class HtmlReportTest(unittest.TestCase):
 
     def test_text_report_groups_by_skill_then_past_best(self) -> None:
         text = render_text(self.make_data())
+        self.assertTrue(text.startswith("VIDYASCAPE HCIM XP TRACKER REPORT\n"))
         self.assertIn("overall", text)
         self.assertLess(text.index("  PAST"), text.index("  BEST"))
         self.assertIn("    Day (24h)", text)
@@ -152,6 +153,9 @@ class HtmlReportTest(unittest.TestCase):
     def test_rankings_page_has_only_generated_metadata(self) -> None:
         data = self.make_data()._replace(coverage_total=4)
         page = render_html(data)
+        self.assertIn(
+            "<title>general tracking - vidyascape hcim xp tracker</title>", page
+        )
         self.assertIn("generated at: 2026-01-01 00:00 UTC", page)
         self.assertNotIn("players logged", page)
         self.assertNotIn("data coverage:", page)
