@@ -14,6 +14,7 @@ reports start with `VIDYASCAPE HCIM XP TRACKER REPORT` or
 | Path | Content |
 | --- | --- |
 | `reports/latest.txt` | Plain-text general report. |
+| `reports/index.html` | Home page linking every report section. |
 | `reports/general.html` | General rankings page. |
 | `reports/status.txt` | Plain-text status page. |
 | `reports/status.html` | Service, database, collection and coverage status. |
@@ -24,10 +25,16 @@ reports start with `VIDYASCAPE HCIM XP TRACKER REPORT` or
 | `reports/priority/<slug>.xml` | RSS feed for one priority player. |
 | `reports/version` | Software version label written by `scripts/update.sh`. |
 
-The server maps `/`, `/general` and `/general/` to `general.html`.
+The server maps `/` to `index.html` and `/general`, `/general/` to
+`general.html`.
 
 `player_slug` replaces characters outside `A-Z a-z 0-9 . _ -` with `_`. Names
 that reduce to an empty slug use `player`.
+
+## Home page
+
+`index.html` links to general tracking, priority tracking and status. It shows
+the generation time, tracked player count and version.
 
 ## General report
 

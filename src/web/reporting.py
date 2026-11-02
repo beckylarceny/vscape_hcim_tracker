@@ -19,7 +19,13 @@ from ..common.utility import (
     DEFAULT_RETRY_WINDOW_SECONDS,
     effective_lookback,
 )
-from . import player_report, priority_report, report, status_report
+from . import (
+    index_report,
+    player_report,
+    priority_report,
+    report,
+    status_report,
+)
 from .html import atomic_write
 
 log = logging.getLogger("vscape_hcim_tracker.web.reporting")
@@ -236,6 +242,10 @@ def write_report(
 
         key = report_dir.resolve()
         priority_names = tracked_priority_names(conn, priority_players)
+        index_report.write_index_page(
+            report_dir, data.generated, data.player_count,
+            len(priority_names), data.version,
+        )
         try:
             status_report.write_status_page(
                 conn, report_dir,

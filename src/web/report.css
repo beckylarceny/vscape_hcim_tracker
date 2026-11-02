@@ -98,6 +98,14 @@ table.current{width:auto;max-width:32rem;margin-left:auto;margin-right:auto}
 .tab-panel[hidden]{display:none}
 .tab-panel>h2:first-child{margin-top:.6rem}
 body.wide{max-width:72rem}
+.home .sections{display:grid;gap:.75rem;margin:2rem 0 3rem;
+                grid-template-columns:repeat(auto-fit,minmax(min(18rem,100%),1fr))}
+.home .section{display:block;padding:1rem 1.1rem;border:1px solid #8884;
+               text-decoration:none;color:inherit}
+.home .section:hover{border-color:#9079B6}
+.home .section h2{margin:0 0 .4rem;border:0;padding:0;font-size:1.25rem;
+                  color:#7BB59A}
+.home .section p{margin:0;color:#888;font-size:.9rem}
 
 .rankings h2,.rankings h3,.rankings h4{text-align:center}
 .rankings h3{font-size:1.4rem}

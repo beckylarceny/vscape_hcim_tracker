@@ -9,6 +9,7 @@ from src.common.storage import CoverageSlice
 from src.common.utility import SKILLS, SPANS, parse_duration
 from src.web import reporting
 from src.web.format import hours as _hours
+from src.web.index_report import render_index
 from src.web.format import years_months as _years_months
 from src.web.report import (
     Record,
@@ -222,6 +223,19 @@ class HtmlReportTest(unittest.TestCase):
                 "abc1234 2026-11-01 13:00 UTC\n", encoding="utf-8"
             )
             self.assertEqual(read_version(report_dir), version)
+
+    def test_index_links_every_section(self) -> None:
+        page = render_index(
+            "2026-01-01 00:00 UTC", 371, 5, "software version abc"
+        )
+        self.assertIn(
+            "<title>vidyascape hcim xp tracker</title>", page
+        )
+        self.assertIn('href="general.html"', page)
+        self.assertIn('href="priority/index.html"', page)
+        self.assertIn('href="status.html"', page)
+        self.assertIn("players tracked: 371", page)
+        self.assertIn("software version abc", page)
 
     def test_skills_are_tabs(self) -> None:
         page = render_html(self.make_data())
