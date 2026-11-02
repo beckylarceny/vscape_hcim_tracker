@@ -246,7 +246,7 @@ class CoverageTest(unittest.TestCase):
         self.assertIn("(1 day): 1/2 players (50%)", bar)
         self.assertIn('data-tip="', bar)
         self.assertIn('class="zero"', bar)
-        self.assertIn("min-width:1em", page)
+        self.assertIn("min-width: 1em", page)
         self.assertIn('id="coverage-tip"', page)
         self.assertIn("(hover: none)", page)
         self.assertNotIn('<span title="', page)
@@ -367,10 +367,19 @@ class PageTest(unittest.TestCase):
             "</h1>\n<p class=\"sub\"><a href=\"general.html\">", page
         )
         self.assertIn(
-            ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
+            ".backlinks {\n"
+            "    margin: -2rem 0 1.75rem;\n"
+            "    text-align: center;\n"
+            "}",
+            page,
         )
         self.assertIn(
-            ".backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}",
+            ".backlinks .sub {\n"
+            "    margin: 0;\n"
+            "    padding: 0;\n"
+            "    border: 0;\n"
+            "    font-size: .9rem;\n"
+            "}",
             page,
         )
 
@@ -436,12 +445,13 @@ class PageTest(unittest.TestCase):
         page = render_status_page(collect())
         self.assertIn('<table class="grid runs">', page)
         self.assertIn(
-            ".status table th:first-child,.status table td:first-child"
-            "{color:#888;",
+            ".status table th:first-child,\n"
+            ".status table td:first-child {\n"
+            "    color: #888;",
             page,
         )
-        self.assertIn("width:1%;white-space:nowrap", page)
-        self.assertNotIn("width:6rem", page)
+        self.assertIn("width: 1%;\n    white-space: nowrap", page)
+        self.assertNotIn("width: 6rem", page)
         self.assertNotIn(".status table.runs", page)
 
     def test_containers_table_uses_containers_class(self) -> None:
@@ -449,8 +459,10 @@ class PageTest(unittest.TestCase):
         self.assertIn('<table class="grid containers">', page)
         self.assertIn(
             ".status table.containers th:nth-child(3),\n"
-            ".status table.containers td:nth-child(3)"
-            "{width:7rem;white-space:nowrap}",
+            ".status table.containers td:nth-child(3) {\n"
+            "    width: 7rem;\n"
+            "    white-space: nowrap;\n"
+            "}",
             page,
         )
         self.assertIn("<td>running</td>", page)
@@ -460,16 +472,21 @@ class PageTest(unittest.TestCase):
         self.assertIn('<th scope="row">6 hour</th>', page)
         self.assertIn('<th scope="row" class=rank>', page)
         self.assertIn(
-            ".status table{width:100%;max-width:52rem;"
-            "margin:.25rem auto 1.1rem}",
+            ".status table {\n"
+            "    width: 100%;\n"
+            "    max-width: 52rem;\n"
+            "    margin: .25rem auto 1.1rem;\n"
+            "}",
             page,
         )
         self.assertIn(
-            ".status table th:first-child,.status table td:first-child{color:#888",
+            ".status table th:first-child,\n"
+            ".status table td:first-child {\n"
+            "    color: #888",
             page,
         )
-        self.assertNotIn("table.facts{", page)
-        self.assertNotIn("table.grid{", page)
+        self.assertNotIn("table.facts {", page)
+        self.assertNotIn("table.grid {", page)
 
     def test_page_lists_compose_containers(self) -> None:
         page = render_status_page(collect())
@@ -530,21 +547,29 @@ class PageTest(unittest.TestCase):
     def test_status_tables_are_centered(self) -> None:
         page = render_status_page(collect())
         self.assertIn(
-            ".status table{width:100%;max-width:52rem;"
-            "margin:.25rem auto 1.1rem}",
+            ".status table {\n"
+            "    width: 100%;\n"
+            "    max-width: 52rem;\n"
+            "    margin: .25rem auto 1.1rem;\n"
+            "}",
             page,
         )
 
     def test_header_first_cell_is_bold_but_row_labels_are_not(self) -> None:
         page = render_status_page(collect())
         self.assertIn("<th>interval</th>", page)
-        bold = ".status table thead th:first-child{font-weight:600}"
+        bold = (
+            ".status table thead th:first-child {\n"
+            "    font-weight: 600;\n"
+            "}"
+        )
         self.assertIn(bold, page)
         self.assertIn('<th scope="row">6 hour</th>', page)
         self.assertLess(
             page.index(
-                ".status table th:first-child,.status table td:first-child"
-                "{color:#888;"
+                ".status table th:first-child,\n"
+                ".status table td:first-child {\n"
+                "    color: #888;"
             ),
             page.index(bold),
         )
