@@ -170,6 +170,7 @@ class FeedTest(unittest.TestCase):
         )
         self.assertIn(f"A_B-{NOW}", feed)
         self.assertEqual(feed.count("<item>"), 2)
+        self.assertIn("<link>https://example.test/priority/A_B</link>", feed)
         self.assertIn("https://example.test/priority/A_B.xml", feed)
 
         empty = render_feed("alice", "alice", [], NOW, "http://localhost:8000")
@@ -221,7 +222,7 @@ class PageTest(unittest.TestCase):
             '<h2 class="subheading"><a href="alice.xml">rss feed</a></h2>',
             page,
         )
-        self.assertIn('href="../players/alice.html"', page)
+        self.assertIn('href="../players/alice"', page)
         self.assertIn('type="application/rss+xml"', page)
         labels = re.findall(
             r'<text x="[^"]+" y="\d+" text-anchor="[^"]+">'

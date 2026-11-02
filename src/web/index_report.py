@@ -16,18 +16,18 @@ def render_index(
     """HTML home page with one link per report section."""
     sections = (
         (
-            "general.html",
+            "general",
             "general tracking",
             "Skill rankings for the past day, week, month and year.",
         ),
         (
-            "priority/index.html",
+            "priority/",
             "priority tracking",
             f"{priority_players} players with 10-minute updates "
             "over the last 24 hours.",
         ),
         (
-            "status.html",
+            "status",
             "status",
             "Collection schedules, data coverage, database and containers.",
         ),

@@ -15,7 +15,7 @@ docker compose -f docker/compose.yaml up -d --build
 ```
 
 - page: <http://localhost:8000/>
-- status: <http://localhost:8000/status.html>
+- status: <http://localhost:8000/status>
 - text reports: `reports/latest.txt`, `reports/status.txt` and
   `reports/players/<slug>.txt`
 

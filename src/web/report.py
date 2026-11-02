@@ -369,8 +369,8 @@ def render_html(data: ReportData) -> str:
         f"{style_tag()}</head>",
         '<body id="top" class="rankings wide">',
         '<div class="backlinks"><p class="sub">'
-        '<a href="priority/index.html">priority tracking</a> · '
-        '<a href="status.html">status</a></p></div>',
+        '<a href="priority/">priority tracking</a> · '
+        '<a href="status">status</a></p></div>',
         "<h1>General Tracking</h1>",
         '<p class="sub"><a href="latest.txt">text version</a></p>',
         metas,

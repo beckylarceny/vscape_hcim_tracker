@@ -150,10 +150,10 @@ class HtmlReportTest(unittest.TestCase):
         page = render_html(
             data._replace(gains=gains, players=("Alice", "Fuck Jagex"))
         )
-        self.assertIn('href="players/Fuck_Jagex.html"', page)
+        self.assertIn('href="players/Fuck_Jagex"', page)
         self.assertIn(">Fuck Jagex</a>", page)
         self.assertIn('<option value="Alice">', page)
-        self.assertIn('"fuck jagex": "players/Fuck_Jagex.html"', page)
+        self.assertIn('"fuck jagex": "players/Fuck_Jagex"', page)
         self.assertIn("window.open(url,'_blank','noopener')", page)
 
     def test_rankings_page_has_only_generated_metadata(self) -> None:
@@ -167,15 +167,15 @@ class HtmlReportTest(unittest.TestCase):
         self.assertNotIn("data coverage:", page)
         self.assertNotIn('class="coverage"', page)
         self.assertEqual(page.count("generated at:"), 1)
-        self.assertIn('href="status.html"', page)
+        self.assertIn('href="status"', page)
         self.assertIn('class="rankings wide"', page)
 
     def test_backlinks_sit_above_the_title(self) -> None:
         page = render_html(self.make_data())
         backlinks = (
             '<div class="backlinks"><p class="sub">'
-            '<a href="priority/index.html">priority tracking</a> · '
-            '<a href="status.html">status</a></p></div>'
+            '<a href="priority/">priority tracking</a> · '
+            '<a href="status">status</a></p></div>'
         )
         self.assertIn(backlinks, page)
         self.assertLess(page.index('<div class="backlinks">'), page.index("<h1>"))
@@ -187,10 +187,10 @@ class HtmlReportTest(unittest.TestCase):
 
         self.assertNotIn("text report", page)
         self.assertNotIn(
-            "</h1>\n<p class=\"sub\"><a href=\"priority/index.html\">", page
+            "</h1>\n<p class=\"sub\"><a href=\"priority/\">", page
         )
         self.assertNotIn(
-            "</h1>\n<p class=\"sub\"><a href=\"status.html\">", page
+            "</h1>\n<p class=\"sub\"><a href=\"status\">", page
         )
         self.assertIn(
             ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
@@ -231,9 +231,9 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn(
             "<title>vidyascape hcim xp tracker</title>", page
         )
-        self.assertIn('href="general.html"', page)
-        self.assertIn('href="priority/index.html"', page)
-        self.assertIn('href="status.html"', page)
+        self.assertIn('href="general"', page)
+        self.assertIn('href="priority/"', page)
+        self.assertIn('href="status"', page)
         self.assertIn("players tracked: 371", page)
         self.assertIn("software version abc", page)
 

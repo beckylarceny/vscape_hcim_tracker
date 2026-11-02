@@ -364,7 +364,7 @@ def render_feed(
     base_url: str,
 ) -> str:
     base = base_url.rstrip("/")
-    page_url = f"{base}/priority/{urllib.parse.quote(slug)}.html"
+    page_url = f"{base}/priority/{urllib.parse.quote(slug)}"
     feed_url = f"{base}/priority/{urllib.parse.quote(slug)}.xml"
     last_build = email.utils.formatdate(
         events[0].epoch if events else now_epoch, usegmt=True
@@ -417,8 +417,7 @@ def render_priority_page(
 ) -> str:
     slug = player_slug(data.username)
     feed_href = f"{urllib.parse.quote(slug)}.xml"
-    page_href = f"{urllib.parse.quote(slug)}.html"
-    player_href = f"../players/{urllib.parse.quote(slug)}.html"
+    player_href = f"../players/{urllib.parse.quote(slug)}"
     flat = {
         skill
         for skill in SKILLS
@@ -434,10 +433,10 @@ def render_priority_page(
         f"{style_tag()}</head>",
         '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
-        '<a href="../general.html">general tracking</a> · '
-        '<a href="index.html">priority tracking</a> · '
+        '<a href="../general">general tracking</a> · '
+        '<a href="./">priority tracking</a> · '
         f'<a href="{esc(player_href)}">player page</a> · '
-        '<a href="../status.html">status</a></p></div>',
+        '<a href="../status">status</a></p></div>',
         f"<h1>{esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}">'
         "vidyascape highscores</a></h2>",
@@ -499,7 +498,7 @@ def render_priority_index(
     players: list[str], version: str = "software version unknown"
 ) -> str:
     items = "".join(
-        f'<li><a href="{urllib.parse.quote(player_slug(name))}.html">'
+        f'<li><a href="{urllib.parse.quote(player_slug(name))}">'
         f"{esc(name)}</a> · "
         f'<a href="{urllib.parse.quote(player_slug(name))}.xml">rss</a></li>'
         for name in players
@@ -514,8 +513,8 @@ def render_priority_index(
         f"{style_tag()}</head>",
         '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
-        '<a href="../general.html">general tracking</a> · '
-        '<a href="../status.html">status</a></p></div>',
+        '<a href="../general">general tracking</a> · '
+        '<a href="../status">status</a></p></div>',
         "<h1>priority tracking</h1>",
         '<p class="blurb">the top 5 players by overall xp, and any players '
         "added to the priority list file, are fetched every 10 minutes. "

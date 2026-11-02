@@ -49,8 +49,8 @@ service serves empty or partial reports immediately.
 URLs:
 
 - general report: <http://localhost:8000/>
-- status report: <http://localhost:8000/status.html>
-- priority report: <http://localhost:8000/priority/index.html>
+- status report: <http://localhost:8000/status>
+- priority report: <http://localhost:8000/priority/>
 - text versions: `reports/latest.txt`, `reports/status.txt`
 
 ## Daily commands
@@ -231,7 +231,7 @@ docker compose -f docker/compose.yaml ps
 docker compose -f docker/compose.yaml logs --tail=100 db
 docker compose -f docker/compose.yaml logs --tail=100 collector
 docker compose -f docker/compose.yaml logs --tail=100 web
-curl -fsS http://localhost:8000/status.html >/dev/null
+curl -fsS http://localhost:8000/status >/dev/null
 ```
 
 Check `reports/status.txt` for:

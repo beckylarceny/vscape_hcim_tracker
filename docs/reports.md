@@ -25,8 +25,10 @@ reports start with `VIDYASCAPE HCIM XP TRACKER REPORT` or
 | `reports/priority/<slug>.xml` | RSS feed for one priority player. |
 | `reports/version` | Software version label written by `scripts/update.sh`. |
 
-The server maps `/` to `index.html` and `/general`, `/general/` to
-`general.html`.
+Pages are served without the `.html` suffix. `/` serves the home page,
+`/general` the rankings, `/status` the status page, `/players/<slug>` a player
+page and `/priority/<slug>` a priority page. `/priority/` serves the priority
+index. The `.html` paths still work.
 
 `player_slug` replaces characters outside `A-Z a-z 0-9 . _ -` with `_`. Names
 that reduce to an empty slug use `player`.

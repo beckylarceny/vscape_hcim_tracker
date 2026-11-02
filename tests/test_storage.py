@@ -261,8 +261,8 @@ class ReportTest(DatabaseTest):
             self.assertEqual(
                 names,
                 [
-                    "general.html", "latest.txt", "players", "priority",
-                    "status.html", "status.txt",
+                    "general.html", "index.html", "latest.txt", "players",
+                    "priority", "status.html", "status.txt",
                 ],
             )
             page = Path(directory, "general.html").read_text(encoding="utf-8")
@@ -273,6 +273,9 @@ class ReportTest(DatabaseTest):
                 "https://vidyaplace.org/highscores?player=alice", player_html
             )
             self.assertIn("Current xp", player_html)
+            self.assertTrue(
+                Path(directory, "players", "alice.txt").exists()
+            )
             self.assertTrue(
                 Path(directory, "priority", "index.html").exists()
             )

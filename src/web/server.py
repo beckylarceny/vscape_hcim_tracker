@@ -12,21 +12,20 @@ log = logging.getLogger("vscape_hcim_tracker.web.server")
 
 
 class ReportRequestHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve the report directory, mapping / to the site index."""
+    """Serve report pages with or without the .html suffix."""
 
-    def _redirect_root(self) -> None:
-        if self.path in ("", "/"):
-            self.path = "/index.html"
-        elif self.path in ("/general", "/general/"):
-            self.path = "/general.html"
-
-    def do_GET(self) -> None:  # noqa: N802 - http.server API
-        self._redirect_root()
-        super().do_GET()
-
-    def do_HEAD(self) -> None:  # noqa: N802 - http.server API
-        self._redirect_root()
-        super().do_HEAD()
+    def translate_path(self, path: str) -> str:
+        """Map clean URLs to generated HTML files."""
+        base, _, _ = path.partition("?")
+        if base in ("", "/"):
+            base = "/index.html"
+        elif base.endswith("/"):
+            base += "index.html"
+        else:
+            candidate = super().translate_path(base + ".html")
+            if Path(candidate).is_file():
+                return candidate
+        return super().translate_path(base)
 
     def log_message(self, format: str, *args) -> None:  # noqa: A002
         log.debug("%s - %s", self.address_string(), format % args)

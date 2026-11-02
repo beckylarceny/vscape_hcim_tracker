@@ -924,8 +924,8 @@ def render_status_page(data: StatusData) -> str:
         style_tag() + "</head>",
         '<body id="top" class="status">',
         '<div class="backlinks"><p class="sub">'
-        '<a href="general.html">general tracking</a> · '
-        '<a href="priority/index.html">priority tracking</a></p></div>',
+        '<a href="general">general tracking</a> · '
+        '<a href="priority/">priority tracking</a></p></div>',
         f"<h1>{SITE_NAME} status</h1>",
         '<p class="sub"><a href="status.txt">text version</a></p>',
         f'<p class="meta">generated at: {esc(data.generated)}</p>',

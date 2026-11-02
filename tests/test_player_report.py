@@ -116,7 +116,7 @@ class SlugTest(unittest.TestCase):
         self.assertEqual(player_slug("a/b?c"), "a_b_c")
         self.assertEqual(player_slug("..."), "player")
         self.assertEqual(
-            player_page_href("Fuck Jagex"), "players/Fuck_Jagex.html"
+            player_page_href("Fuck Jagex"), "players/Fuck_Jagex"
         )
 
 
@@ -139,7 +139,7 @@ class RenderTest(unittest.TestCase):
         self.assertLess(
             page.index("generated at:"), page.index("<h2>Current xp</h2>")
         )
-        self.assertIn('href="../status.html"', page)
+        self.assertIn('href="../status"', page)
         self.assertIn('href="Fuck_Jagex.txt">text version</a>', page)
         self.assertIn('class="player"', page)
 
@@ -153,7 +153,7 @@ class RenderTest(unittest.TestCase):
 
         priority = render_player_page(fake_data(), is_priority=True)
         self.assertIn(
-            '<p class="priority-link"><a href="../priority/Fuck_Jagex.html">'
+            '<p class="priority-link"><a href="../priority/Fuck_Jagex">'
             "priority report</a></p>",
             priority,
         )

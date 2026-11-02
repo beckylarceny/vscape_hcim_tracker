@@ -92,7 +92,7 @@ def player_slug(username: str) -> str:
 
 def player_page_href(username: str) -> str:
     slug = player_slug(username)
-    return f"players/{urllib.parse.quote(slug, safe='')}.html"
+    return f"players/{urllib.parse.quote(slug, safe='')}"
 
 
 def highscores_url(username: str) -> str:
@@ -623,8 +623,8 @@ def render_player_page(
         f"{style_tag()}</head>",
         '<body id="top" class="player">',
         '<div class="backlinks">'
-        '<p class="sub"><a href="../general.html">general tracking</a> · '
-        '<a href="../status.html">status</a></p>'
+        '<p class="sub"><a href="../general">general tracking</a> · '
+        '<a href="../status">status</a></p>'
         "</div>",
         f"<h1>{esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}">'
@@ -632,7 +632,7 @@ def render_player_page(
         *(
             [
                 '<p class="priority-link"><a href="../priority/'
-                f'{urllib.parse.quote(player_slug(data.username))}.html">'
+                f'{urllib.parse.quote(player_slug(data.username))}">'
                 "priority report</a></p>"
             ]
             if is_priority else []

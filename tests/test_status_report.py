@@ -374,8 +374,8 @@ class PageTest(unittest.TestCase):
         page = render_status_page(collect())
         backlinks = (
             '<div class="backlinks"><p class="sub">'
-            '<a href="general.html">general tracking</a> · '
-            '<a href="priority/index.html">priority tracking</a></p></div>'
+            '<a href="general">general tracking</a> · '
+            '<a href="priority/">priority tracking</a></p></div>'
         )
         self.assertIn(backlinks, page)
         self.assertLess(page.index('<div class="backlinks">'), page.index("<h1>"))
@@ -388,7 +388,7 @@ class PageTest(unittest.TestCase):
         self.assertNotIn("text report", page)
         self.assertNotIn('href="latest.txt"', page)
         self.assertNotIn(
-            "</h1>\n<p class=\"sub\"><a href=\"general.html\">", page
+            "</h1>\n<p class=\"sub\"><a href=\"general\">", page
         )
         self.assertIn(
             ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
