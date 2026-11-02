@@ -85,6 +85,10 @@ table.current{width:auto;max-width:32rem;margin-left:auto;margin-right:auto}
 body.wide{max-width:72rem}
 
 .rankings h2,.rankings h3,.rankings h4{text-align:center}
+.rankings h3{font-size:1.4rem}
+.rankings h4{font-size:1.15rem}
+.rankings .tables + h3{margin-top:2.5rem;padding-top:1.5rem;
+        border-top:1px solid #8884}
 .rankings .tables{display:grid;align-items:start;
         grid-template-columns:repeat(auto-fit,minmax(min(32rem,100%),1fr));
         gap:.75rem 2rem}
@@ -109,6 +113,10 @@ body.wide{max-width:72rem}
 .rankings table.best.day th:nth-child(4),.rankings table.best.day td:nth-child(4){width:26%}
 
 .player .stats h2,.player .stats h3,.player .stats h4{text-align:center}
+.player .stats h3{font-size:1.4rem}
+.player .stats h4{font-size:1.15rem}
+.player .gain-tables>div+div{border-left:1px solid #8884;
+        padding-left:2rem}
 .player .subheading{font-size:1rem;font-weight:400;margin:.2rem 0 .8rem;
                     border:0;padding:0}
 .player .priority-link{margin:.1rem 0 .9rem}
@@ -147,6 +155,8 @@ p.note{color:#888;font-size:.85rem;margin:.2rem 0 .6rem}
 }
 @media (max-width:52rem){
   .charts,.gain-tables{grid-template-columns:1fr}
+  .player .gain-tables>div+div{border-left:0;padding-left:0;
+        border-top:1px solid #8884;padding-top:1rem}
 }
 @media (max-width:40rem){
   body.player{padding:1.25rem .85rem}
