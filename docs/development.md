@@ -190,7 +190,7 @@ priority players.
 | `tests/test_player_report.py` | Player data, levels, records and charts. |
 | `tests/test_priority_report.py` | Priority data, events, pages and feeds. |
 | `tests/test_status_report.py` | Status data, Docker rows, coverage and text output. |
-| `tests/test_web.py` | Root URL redirect. |
+| `tests/test_web.py` | Clean URLs and static serving. |
 
 ## Related documentation
 
