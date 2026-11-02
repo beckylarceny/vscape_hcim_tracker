@@ -1,7 +1,8 @@
 # Development
 
 The project is plain Python with PostgreSQL. There is no build step and no
-frontend toolchain. HTML, CSS and SVG charts are generated in Python.
+frontend toolchain. HTML and SVG charts are generated in Python. CSS is edited
+in `src/web/report.css` and copied into each generated page.
 
 ## Local setup
 
@@ -48,26 +49,59 @@ is unset. It skips when that database cannot be reached.
 
 ## Module map
 
+### Entry points
+
 | Path | Responsibility |
 | --- | --- |
-| `src/main.py` | Default entry point. Runs the collector. |
-| `src/collector/api.py` | HTTP access, retries and JSON parsing. |
-| `src/collector/collection.py` | Discovery, current xp and backfill writes. |
-| `src/collector/grid.py` | Backfill and retry timestamp grid. |
-| `src/collector/priority.py` | Priority thread and priority tables. |
-| `src/collector/rate.py` | Global request pacing. |
-| `src/collector/run.py` | One collection run and run accounting. |
+| `src/__main__.py` | Entry point for `python -m src`. |
+| `src/main.py` | Default entry point. Delegates to the collector. |
+| `src/collector/__main__.py` | Entry point for `python -m src.collector`. |
+| `src/web/__main__.py` | Entry point for `python -m src.web`. |
+| `src/db/__main__.py` | Entry point for `python -m src.db`. |
+
+### Common
+
+Shared code used by every service.
+
+| Path | Responsibility |
+| --- | --- |
 | `src/common/cli.py` | Shared argument parser. |
 | `src/common/priority.py` | Priority player selection. |
 | `src/common/storage.py` | SQL helpers and schema calls. |
 | `src/common/utility.py` | Config loading, DSN building, durations, time slots. |
-| `src/db/schema.py` | `CREATE TABLE` and index statements. |
+
+### Collector
+
+| Path | Responsibility |
+| --- | --- |
+| `src/collector/api.py` | HTTP access, retries and JSON parsing. |
+| `src/collector/cli.py` | Collector argument parser. |
+| `src/collector/collection.py` | Discovery, current xp and backfill writes. |
+| `src/collector/grid.py` | Backfill and retry timestamp grid. |
+| `src/collector/main.py` | Collection loop, signal handling and service wiring. |
+| `src/collector/priority.py` | Priority thread and priority tables. |
+| `src/collector/rate.py` | Global request pacing. |
+| `src/collector/run.py` | One collection run and run accounting. |
+
+### Database
+
+| Path | Responsibility |
+| --- | --- |
 | `src/db/main.py` | One-shot schema command. |
+| `src/db/schema.py` | `CREATE TABLE` and index statements. |
+
+### Web
+
+| Path | Responsibility |
+| --- | --- |
 | `src/web/chart.py` | Inline SVG charts. |
+| `src/web/cli.py` | Web argument parser. |
 | `src/web/format.py` | Duration and count formatting. |
-| `src/web/html.py` | Escaping, CSS, tabs and atomic writes. |
+| `src/web/html.py` | Escaping, tabs, atomic writes and inline page style. |
+| `src/web/main.py` | Report startup, server startup and service loop. |
 | `src/web/player_report.py` | Player data, best windows and player pages. |
 | `src/web/priority_report.py` | Priority pages and RSS feeds. |
+| `src/web/report.css` | Page styles. Edited here and copied into generated pages. |
 | `src/web/report.py` | General rankings, text report and HTML report. |
 | `src/web/reporting.py` | Report orchestration, caching and incremental writes. |
 | `src/web/server.py` | Static HTTP server. |

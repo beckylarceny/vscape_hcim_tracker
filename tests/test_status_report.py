@@ -296,10 +296,17 @@ class PageTest(unittest.TestCase):
     def test_every_section_and_moved_metadata(self) -> None:
         page = render_status_page(collect())
         for heading in (
-            "service", "database", "collection", "players", "snapshots",
-            "data coverage", "recent runs",
+            "data coverage", "service", "database", "backfill", "live",
+            "priority", "players", "snapshots", "recent runs",
         ):
             self.assertIn(f"<h2>{heading}</h2>", page)
+        self.assertLess(
+            page.index("<h2>data coverage</h2>"),
+            page.index("<h2>service</h2>"),
+        )
+        self.assertLess(
+            page.index('class="coverage"'), page.index("<h2>service</h2>")
+        )
         for label in (
             "players logged", "backfill interval", "live interval",
             "priority interval", "lookback interval",
@@ -325,6 +332,19 @@ class PageTest(unittest.TestCase):
         self.assertNotIn("<th>user</th>", page)
         self.assertIn("python ", page)
         self.assertIn("class=\"status\"", page)
+
+    def test_rows_sit_under_their_own_headings(self) -> None:
+        page = render_status_page(collect())
+        backfill = page.index("<h2>backfill</h2>")
+        live = page.index("<h2>live</h2>")
+        priority = page.index("<h2>priority</h2>")
+        players = page.index("<h2>players</h2>")
+        self.assertLess(backfill, page.index("backfill interval"))
+        self.assertLess(page.index("last run ended"), live)
+        self.assertLess(live, page.index("next live fetch"))
+        self.assertLess(page.index("next live fetch"), priority)
+        self.assertLess(priority, page.index("next priority fetch"))
+        self.assertLess(page.index("next priority fetch"), players)
 
     def test_backlinks_sit_above_the_title(self) -> None:
         page = render_status_page(collect())
@@ -533,10 +553,13 @@ class PageTest(unittest.TestCase):
         data = collect()
         text = render_status_text(data)
         for heading in (
-            "SERVICE", "DATABASE", "TABLES", "COLLECTION", "PLAYERS",
-            "SNAPSHOTS", "CHECKPOINTS", "DATA COVERAGE", "RECENT RUNS",
+            "DATA COVERAGE", "SERVICE", "DATABASE", "TABLES", "BACKFILL",
+            "LIVE", "PRIORITY", "PLAYERS", "SNAPSHOTS", "CHECKPOINTS",
+            "RECENT RUNS",
         ):
             self.assertIn(heading, text)
+        self.assertNotIn("COLLECTION", text)
+        self.assertLess(text.index("DATA COVERAGE"), text.index("SERVICE"))
         self.assertNotIn("<", text)
         line = next(
             line for line in text.splitlines()
