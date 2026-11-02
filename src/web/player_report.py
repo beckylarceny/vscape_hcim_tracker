@@ -37,8 +37,6 @@ from .html import (
     style_tag,
 )
 
-PLAYER_HIGHSCORES_URL = "https://vidyaplace.org/highscores?player={username}"
-
 _UNSAFE_SLUG = re.compile(r"[^A-Za-z0-9._-]+")
 
 # Total xp needed for levels 1-99, from the OSRS experience table:
@@ -97,9 +95,8 @@ def player_page_href(username: str) -> str:
 
 
 def highscores_url(username: str) -> str:
-    return PLAYER_HIGHSCORES_URL.format(
-        username=urllib.parse.quote(username, safe="")
-    )
+    name = urllib.parse.quote(username, safe="")
+    return f"https://vidyaplace.org/highscores?player={name}"
 
 
 def level_for_xp(xp: int) -> int:
