@@ -14,6 +14,7 @@ details.
 Quick links:
 
 - [First start](operations.md#first-start)
+- [Upgrading from vscape_hcim_tracker](operations.md#upgrading-from-vscape_hcim_tracker)
 - [Daily commands](operations.md#daily-commands)
 - [Backups](operations.md#backups)
 - [Collector configuration](configuration.md#collectoryaml)
