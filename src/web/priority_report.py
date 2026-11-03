@@ -16,13 +16,7 @@ from ..common.utility import (
     DEFAULT_PRIORITY_RETENTION_SECONDS,
     SKILLS,
 )
-from .chart import (
-    ChartData,
-    StackedBar,
-    chart_svg,
-    stacked_legend_html,
-    thin,
-)
+from .chart import ChartData, StackedBar, chart_svg, thin
 from .format import plural
 from .html import (
     SITE_NAME,
@@ -32,6 +26,7 @@ from .html import (
     skill_panel_open,
     skill_tabs_html,
     style_tag,
+    tooltip_html,
 )
 from .player_report import (
     current_line,
@@ -473,17 +468,17 @@ def render_priority_page(
             if is_overall
             else '<span class="key area-key">xp/h</span>'
         )
-        legend = stacked_legend_html() if is_overall else ""
         parts.append(
             '<figure class="big"><figcaption><b>last 24 hours</b>'
             '<span class="key line-key">total xp</span>'
             f"{gain_key}{regular_key}</figcaption>"
-            f"{legend}{chart_html}"
+            f"{chart_html}"
             "</figure>"
         )
         parts.append("</section>")
 
     parts.append("</div>")
+    parts.append(tooltip_html(".priority svg .bar[data-tip]", "bar-tip"))
     parts.append(SKILL_TAB_SCRIPT)
     parts.append(
         '<a class="to-top" href="#top" aria-label="back to top">'

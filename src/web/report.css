@@ -171,11 +171,8 @@ body.wide{max-width:72rem}
 .priority .skill-runecrafting{--skill-color:#5c940d}
 .priority .skill-hunter{--skill-color:#e8590c}
 .priority .skill-construction{--skill-color:#495057}
-.priority svg .bar{fill:var(--skill-color,#888);shape-rendering:crispEdges}
-.skill-legend{display:flex;flex-wrap:wrap;gap:.15rem .55rem;margin:.2rem 0 .45rem;
-              font-size:.7rem;color:#888}
-.skill-legend .key{margin-left:0}
-.key.skill-key::before{background:var(--skill-color,#888)}
+.priority svg .bar{fill:var(--skill-color,#888);fill-opacity:.28;
+                  shape-rendering:crispEdges}
 .key.bar-key::before{background:linear-gradient(90deg,#e05c5c,#5c7cfa,#f08c00)}
 .priority svg .line.regular{stroke:#f59e0b;stroke-dasharray:4 3}
 .priority svg .area.regular{fill:#f59e0b33;stroke:#f59e0b33}

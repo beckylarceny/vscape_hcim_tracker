@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import NamedTuple, TypeVar
 
 from ..common.storage import as_datetime
-from ..common.utility import SKILLS
 from .html import date, esc, short_number
 
 _Number = TypeVar("_Number", int, float)
@@ -48,15 +47,22 @@ def thin(
     return thinned
 
 
-def stacked_legend_html() -> str:
-    """Colour key for the overall priority bar chart."""
-    items = "".join(
-        f'<span class="key skill-key skill-{esc(skill)}">'
-        f"{esc(skill)}</span>"
-        for skill in SKILLS
-        if skill != "overall"
+def _bar_tip(
+    skill: str, rate: float, start_epoch: int, end_epoch: int
+) -> str:
+    """Skill, xp gain, rate and UTC window for one stacked bar segment."""
+    elapsed = max(0, end_epoch - start_epoch)
+    gain = rate * elapsed / 3600
+    first = as_datetime(start_epoch)
+    last = as_datetime(end_epoch)
+    if first.date() == last.date():
+        when = f"{first:%H:%M}-{last:%H:%M}"
+    else:
+        when = f"{first:%m-%d %H:%M}-{last:%m-%d %H:%M}"
+    return (
+        f"{skill}: +{short_number(gain)} xp, "
+        f"{short_number(rate)} xp/h ({when} UTC)"
     )
-    return f'<div class="skill-legend">{items}</div>'
 
 
 def chart_svg(
@@ -156,13 +162,13 @@ def chart_svg(
                     continue
                 segment_height = plot_height * rate / gain_span
                 top_y = bottom - segment_height
+                tip = _bar_tip(skill, rate, bar.start_epoch, bar.end_epoch)
                 parts.append(
                     f'<rect class="bar skill-{esc(skill)}" '
+                    f'data-tip="{esc(tip)}" '
                     f'x="{bar_start:.1f}" y="{top_y:.1f}" '
                     f'width="{bar_end - bar_start:.1f}" '
-                    f'height="{segment_height:.1f}">'
-                    f"<title>{esc(skill)}: "
-                    f"{esc(short_number(rate))} xp/h</title></rect>"
+                    f'height="{segment_height:.1f}"/>'
                 )
                 bottom = top_y
     elif chart.gains:

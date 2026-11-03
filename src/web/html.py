@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import json
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -54,6 +55,56 @@ def atomic_write(path: Path, text: str) -> None:
     temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temp.write_text(text, encoding="utf-8")
     os.replace(temp, path)
+
+
+def tooltip_html(selector: str, tip_id: str) -> str:
+    """Tooltip element and script for elements with a `data-tip` attribute."""
+    selector_json = json.dumps(selector)
+    tip_json = json.dumps(tip_id)
+    return (
+        f'<div class="tip" id="{esc(tip_id)}" role="tooltip" hidden></div>'
+        "<script>(function(){"
+        f"var tip=document.getElementById({tip_json});"
+        "if(!tip){return;}"
+        "function place(x,y){"
+        "tip.style.left='0px';tip.style.top='0px';"
+        "var box=tip.getBoundingClientRect(),pad=8;"
+        "var left=Math.min(Math.max(pad,x-box.width/2),"
+        "window.innerWidth-box.width-pad);"
+        "var top=y-box.height-14;"
+        "if(top<pad){top=y+18;}"
+        "tip.style.left=left+'px';tip.style.top=top+'px';}"
+        "function show(item,x,y){"
+        "tip.textContent=item.getAttribute('data-tip');"
+        "tip.hidden=false;place(x,y);}"
+        "function hide(){tip.hidden=true;tip.removeAttribute('data-target');}"
+        "var coarse=window.matchMedia&&"
+        "window.matchMedia('(hover: none)').matches;"
+        f"var items=document.querySelectorAll({selector_json});"
+        "Array.prototype.forEach.call(items,function(item){"
+        "if(coarse){"
+        "item.addEventListener('click',function(event){"
+        "event.preventDefault();"
+        "var target=item.getAttribute('data-tip');"
+        "var same=!tip.hidden&&"
+        "tip.getAttribute('data-target')===target;"
+        "if(same){hide();return;}"
+        "tip.setAttribute('data-target',target);"
+        "show(item,event.clientX,event.clientY);});"
+        "}else{"
+        "item.addEventListener('mouseenter',function(event){"
+        "show(item,event.clientX,event.clientY);});"
+        "item.addEventListener('mousemove',function(event){"
+        "place(event.clientX,event.clientY);});"
+        "item.addEventListener('mouseleave',hide);"
+        "}});"
+        "document.addEventListener('click',function(event){"
+        "var target=event.target;"
+        "if(!target.closest||"
+        f"!target.closest({selector_json}))"
+        "{hide();}});"
+        "})();</script>"
+    )
 
 
 SKILL_TAB_SCRIPT = (

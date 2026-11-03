@@ -210,9 +210,15 @@ class PageTest(unittest.TestCase):
         self.assertIn("priority report: 10-minute updates", page)
         self.assertIn("generated at:", page)
         self.assertIn('class="bar skill-attack"', page)
-        self.assertIn("<title>attack: 400 xp/h</title>", page)
+        self.assertIn(
+            'data-tip="attack: +9.6k xp, 400 xp/h (', page
+        )
+        self.assertNotIn("<title>attack:", page)
+        self.assertIn('id="bar-tip"', page)
+        self.assertIn("priority svg .bar[data-tip]", page)
         self.assertIn("xp/h by skill", page)
-        self.assertIn('class="skill-legend"', page)
+        self.assertNotIn("skill-legend", page)
+        self.assertIn("fill-opacity:.28", page)
         version = "software version abc1234, updated 2026-11-01 13:00 UTC"
         tagged = render_priority_page(self.make_data(), version)
         self.assertIn(f'<footer class="version">{version}</footer>', tagged)

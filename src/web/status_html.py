@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .html import SITE_NAME, date, esc, style_tag
+from .html import SITE_NAME, date, esc, style_tag, tooltip_html
 from .status_queries import (
     FrequencyStatus,
     StatusData,
@@ -127,49 +127,7 @@ def coverage_legend() -> str:
 
 
 def coverage_tip_html() -> str:
-    return (
-        '<div class="tip" id="coverage-tip" role="tooltip" hidden></div>'
-        "<script>(function(){"
-        "var tip=document.getElementById('coverage-tip');"
-        "if(!tip){return;}"
-        "function place(x,y){"
-        "tip.style.left='0px';tip.style.top='0px';"
-        "var box=tip.getBoundingClientRect(),pad=8;"
-        "var left=Math.min(Math.max(pad,x-box.width/2),"
-        "window.innerWidth-box.width-pad);"
-        "var top=y-box.height-14;"
-        "if(top<pad){top=y+18;}"
-        "tip.style.left=left+'px';tip.style.top=top+'px';}"
-        "function show(span,x,y){"
-        "tip.textContent=span.getAttribute('data-tip');"
-        "tip.hidden=false;place(x,y);}"
-        "function hide(){tip.hidden=true;tip.removeAttribute('data-target');}"
-        "var coarse=window.matchMedia&&"
-        "window.matchMedia('(hover: none)').matches;"
-        "var spans=document.querySelectorAll('.coverage span[data-tip]');"
-        "Array.prototype.forEach.call(spans,function(span){"
-        "if(coarse){"
-        "span.addEventListener('click',function(event){"
-        "event.preventDefault();"
-        "var target=span.getAttribute('data-tip');"
-        "var same=!tip.hidden&&"
-        "tip.getAttribute('data-target')===target;"
-        "if(same){hide();return;}"
-        "tip.setAttribute('data-target',target);"
-        "show(span,event.clientX,event.clientY);});"
-        "}else{"
-        "span.addEventListener('mouseenter',function(event){"
-        "show(span,event.clientX,event.clientY);});"
-        "span.addEventListener('mousemove',function(event){"
-        "place(event.clientX,event.clientY);});"
-        "span.addEventListener('mouseleave',hide);"
-        "}});"
-        "document.addEventListener('click',function(event){"
-        "var target=event.target;"
-        "if(!target.closest||"
-        "!target.closest('.coverage span[data-tip]')){hide();}});"
-        "})();</script>"
-    )
+    return tooltip_html(".coverage span[data-tip]", "coverage-tip")
 
 
 def render_status_page(data: StatusData) -> str:
