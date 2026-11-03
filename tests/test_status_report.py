@@ -252,6 +252,8 @@ class CoverageTest(unittest.TestCase):
         self.assertIn('class="zero"', bar)
         self.assertIn('class="density-hourly"', bar)
         self.assertIn('class="coverage-legend"', bar)
+        self.assertIn("repeating-linear-gradient(45deg", page)
+        self.assertNotIn("repeating-linear-gradient(90deg", page)
         self.assertIn("min-width:1em", page)
         self.assertIn('id="coverage-tip"', page)
         self.assertIn("(hover: none)", page)

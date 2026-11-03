@@ -138,8 +138,8 @@ PostgreSQL planner estimate.
 
 The coverage bar fades with the share of players that hold a checkpoint in each
 slice. Its colour and pattern show fetch density: solid for hourly checkpoints,
-striped for 6-hour, dotted for daily and grey for sparse data. Tooltips show the
-slice range, player count and density.
+diagonal stripes for 6-hour, finer diagonal stripes for daily and grey for sparse
+data. Tooltips show the slice range, player count and density.
 
 The container table comes from the Docker API through the read-only socket
 mount. When the API is unavailable the page still renders and shows the error.
