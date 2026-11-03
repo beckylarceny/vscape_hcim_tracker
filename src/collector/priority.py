@@ -11,8 +11,8 @@ from ..common.priority import refresh_priority_players, tracked_priority_names
 from ..common.utility import (
     DEFAULT_PRIORITY_INTERVAL_SECONDS,
     DEFAULT_PRIORITY_RETENTION_SECONDS,
-    HCIM,
     SKILLS,
+    TRACKED_ACCOUNT_CODES,
 )
 from . import api
 from .collection import add_stats, zero_stats
@@ -52,14 +52,14 @@ def collect_priority_player(
             return stats
 
         ironman, xp_now = fetched
-        if ironman != HCIM:
+        storage.upsert_players(conn, [(username, ironman)])
+        if ironman not in TRACKED_ACCOUNT_CODES:
             log.info(
-                "skipping priority %r: ironman status is %d, not hardcore",
+                "skipping priority %r: account type %d is not tracked",
                 username, ironman,
             )
             return stats
 
-        storage.upsert_players(conn, [(username, ironman)])
         stats["players"] = 1
 
         age = max(0, int(time.time() - timestamp))

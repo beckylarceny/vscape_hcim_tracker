@@ -41,9 +41,7 @@ restart.
 | Key | Type | Meaning |
 | --- | --- | --- |
 | `skills` | list of strings | Skills stored and reported. `overall` is included. |
-| `account_filter_codes` | mapping | Named ironman codes. `HARDCORE_IRONMAN` must be `2`. |
-| `urls.player_highscores` | string | Current xp URL. Supports `{username}`. |
-| `urls.player_tracker` | string | Gained xp URL. Supports `{username}` and `{seconds}`. |
+| `account_types` | list of strings | Account filters to track. Default `HARDCORE_IRONMAN`. |
 | `defaults.interval_seconds` | integer | Coarse backfill step. |
 | `defaults.collect_interval_seconds` | integer | Live collection step. |
 | `defaults.retry_window_seconds` | integer | Recent window always rechecked. |
@@ -58,6 +56,28 @@ restart.
 The shipped defaults are 24-hour backfill, 1-hour live collection, 7-day retry
 window, 2 workers, 4 requests per second, 10-minute priority interval, 24-hour
 priority retention and the top 5 overall players.
+
+`account_types` accepts these names:
+
+| Name | API filter | Accepted account codes |
+| --- | --- | --- |
+| `NOFILTER` | `0` | `0, 1, 2, 3` |
+| `ALL_IRONMAN` | `1` | `1, 3` |
+| `HARDCORE_IRONMAN` | `2` | `2` |
+| `ULTIMATE_IRONMAN` | `3` | `3` |
+
+Multiple names are combined. Every fetched player is re-checked against the
+configured set, so a de-ironed player stops being collected. The stored account
+type is refreshed on every successful fetch. Reports show only players whose
+stored type is still configured.
+
+Example:
+
+```yaml
+account_types:
+  - HARDCORE_IRONMAN
+  - ULTIMATE_IRONMAN
+```
 
 The priority scheduler and pruning use `priority.interval_seconds` and
 `priority.retention_seconds` from the loaded config. Report labels and the feed

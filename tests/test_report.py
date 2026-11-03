@@ -270,9 +270,9 @@ class ReportCacheTest(unittest.TestCase):
     def test_ranking_data_is_reused_until_table_counts_change(self) -> None:
         conn = MagicMock()
         conn.execute.return_value.fetchone.side_effect = [
-            (371, 400, 600),
-            (371, 400, 600),
-            (371, 401, 600),
+            (371, 371, 400, 600),
+            (371, 371, 400, 600),
+            (371, 371, 401, 600),
         ]
         data = ReportData(
             generated="2026-01-01 00:00 UTC",

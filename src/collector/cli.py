@@ -12,8 +12,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vscape_tracker.collector",
         description=(
-            "Collect hardcore ironman xp history from the highscores API "
-            "into PostgreSQL."
+            "Collect xp history for the configured account types from the "
+            "highscores API into PostgreSQL."
         ),
     )
     add_common_arguments(parser)

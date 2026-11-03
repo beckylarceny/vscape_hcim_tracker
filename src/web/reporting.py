@@ -17,6 +17,7 @@ from ..common.priority import (
 from ..common.utility import (
     DEFAULT_BASE_URL,
     DEFAULT_RETRY_WINDOW_SECONDS,
+    TRACKED_ACCOUNT_CODES,
     effective_lookback,
 )
 from .render.html import atomic_write
@@ -37,7 +38,7 @@ def _remove_old_reports(report_dir: Path) -> None:
             path.unlink(missing_ok=True)
 
 
-_PlayerMark = tuple[int, object, int, object]
+_PlayerMark = tuple[int, int, object, int, object]
 _PLAYER_WATERMARKS: dict[Path, dict[str, _PlayerMark]] = {}
 _PLAYER_PRIORITY_STATE: dict[Path, frozenset[str]] = {}
 
@@ -46,7 +47,7 @@ _PLAYER_PRIORITY_STATE: dict[Path, frozenset[str]] = {}
 # table counts move. Window-boundary drift within an hour is immaterial.
 _CACHE_TOLERANCE_SECONDS = 3600
 _REPORT_CACHE: dict[
-    tuple, tuple[tuple[int, int, int], int, general.ReportData]
+    tuple, tuple[tuple[int, int, int, int], int, general.ReportData]
 ] = {}
 _REPORT_CACHE_SIZE = 4
 
@@ -55,15 +56,17 @@ def _timestamp() -> str:
     return dt.datetime.now(tz=dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
-def _data_version(conn) -> tuple[int, int, int]:
+def _data_version(conn) -> tuple[int, int, int, int]:
     row = conn.execute(
         """
         SELECT (SELECT count(*) FROM players),
+               (SELECT count(*) FROM players WHERE ironman = ANY(%s)),
                (SELECT count(*) FROM snapshots),
                (SELECT count(*) FROM checkpoints)
-        """
+        """,
+        (list(TRACKED_ACCOUNT_CODES),),
     ).fetchone()
-    return (int(row[0]), int(row[1]), int(row[2]))
+    return (int(row[0]), int(row[1]), int(row[2]), int(row[3]))
 
 
 def report_data(
@@ -120,21 +123,24 @@ def _player_watermarks(conn) -> dict[str, _PlayerMark]:
             FROM priority_snapshots
             GROUP BY username
         )
-        SELECT p.username,
+        SELECT p.username, p.ironman,
                coalesce(r.rows, 0), r.newest,
                coalesce(q.rows, 0), q.newest
         FROM players p
         LEFT JOIN regular r ON r.username = p.username
         LEFT JOIN priority q ON q.username = p.username
-        """
+        WHERE p.ironman = ANY(%s)
+        """,
+        (list(TRACKED_ACCOUNT_CODES),),
     ).fetchall()
     return {
         username: (
+            int(ironman),
             int(regular_rows), regular_newest,
             int(priority_rows), priority_newest,
         )
         for (
-            username, regular_rows, regular_newest,
+            username, ironman, regular_rows, regular_newest,
             priority_rows, priority_newest,
         ) in rows
     }
@@ -298,7 +304,10 @@ def write_current_report(args, dsn: str) -> None:
     """Render the page from existing data, e.g. before the first run."""
     conn = storage.connect(dsn)
     try:
-        row = conn.execute("SELECT count(*) FROM players").fetchone()
+        row = conn.execute(
+            "SELECT count(*) FROM players WHERE ironman = ANY(%s)",
+            (list(TRACKED_ACCOUNT_CODES),),
+        ).fetchone()
         verified = int(row[0])
         row = conn.execute(
             "SELECT max(candidate_count) FROM runs"

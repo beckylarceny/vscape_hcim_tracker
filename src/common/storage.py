@@ -140,33 +140,73 @@ def latest_xp_by_skill_many(
     return result
 
 
-def top_players_by_xp(
-    conn: psycopg.Connection, skill: str, limit: int
+def players_with_codes(
+    conn: psycopg.Connection, codes: Iterable[int]
 ) -> list[str]:
-    """Players with the highest latest xp in one skill, highest first."""
-    if limit <= 0:
+    """Stored players whose last verified account type is in `codes`."""
+    codes = list(codes)
+    if not codes:
         return []
     rows = conn.execute(
         """
-        SELECT DISTINCT ON (username) username, xp
-        FROM snapshots
-        WHERE skill = %s
-        ORDER BY username, observed_at DESC
+        SELECT username
+        FROM players
+        WHERE ironman = ANY(%s)
+        ORDER BY username
         """,
-        (skill,),
+        (codes,),
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
+def top_players_by_xp(
+    conn: psycopg.Connection,
+    skill: str,
+    limit: int,
+    codes: Iterable[int] | None = None,
+) -> list[str]:
+    """Players with the highest latest xp in one skill, highest first.
+
+    When `codes` is set, only players whose stored account type is in the
+    set are returned.
+    """
+    if limit <= 0:
+        return []
+    codes = list(codes) if codes is not None else None
+    account_filter = "" if codes is None else "AND p.ironman = ANY(%s)"
+    params: list = [skill]
+    if codes is not None:
+        params.append(codes)
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT ON (s.username) s.username, s.xp
+        FROM snapshots s
+        JOIN players p ON p.username = s.username
+        WHERE s.skill = %s {account_filter}
+        ORDER BY s.username, s.observed_at DESC
+        """,
+        params,
     ).fetchall()
     ranked = sorted(rows, key=lambda row: (-int(row[1]), row[0]))
     return [username for username, _ in ranked[:limit]]
 
 
-def priority_snapshot_players(conn: psycopg.Connection) -> list[str]:
+def priority_snapshot_players(
+    conn: psycopg.Connection, codes: Iterable[int] | None = None
+) -> list[str]:
     """Players that still hold unpruned high-frequency rows."""
+    codes = list(codes) if codes is not None else None
+    account_filter = "" if codes is None else "WHERE p.ironman = ANY(%s)"
+    params = [] if codes is None else [codes]
     rows = conn.execute(
-        """
-        SELECT DISTINCT username
-        FROM priority_snapshots
-        ORDER BY username
-        """
+        f"""
+        SELECT DISTINCT s.username
+        FROM priority_snapshots s
+        JOIN players p ON p.username = s.username
+        {account_filter}
+        ORDER BY s.username
+        """,
+        params,
     ).fetchall()
     return [row[0] for row in rows]
 

@@ -9,7 +9,7 @@ the schema and storage.
 | Service | Image | Role |
 | --- | --- | --- |
 | `db` | `postgres:17-alpine` | Stores players, xp snapshots, fetch checkpoints and run history. |
-| `collector` | `vscape_tracker-app:latest` | Discovers hardcore ironman players and fills the checkpoint grid. |
+| `collector` | `vscape_tracker-app:latest` | Discovers configured account types and fills the checkpoint grid. |
 | `web` | `vscape_tracker-app:latest` | Reads the database, writes reports and serves them over HTTP. |
 
 The collector and web service share one image but run different commands:
@@ -25,7 +25,7 @@ python -m src.web --serve-port 8000 --serve-host 0.0.0.0
 
 One collector run does the following:
 
-1. Discover hardcore ironman players.
+1. Discover players in the configured account types.
 2. Fetch current xp for every discovered player.
 3. Build the checkpoint grid.
 4. Walk the grid from newest to oldest.
@@ -35,15 +35,18 @@ One collector run does the following:
 
 ### Player discovery
 
-`src/collector/api.py::list_hcim_players` reads the overall highscores metadata,
-then every page with `ironman=2` (hardcore). It keeps only rows whose `ironman`
-field is still `2`.
+`src/collector/api.py::list_players` reads the configured `account_types`, then
+the overall highscores metadata and pages for each filter. It keeps only rows
+whose `ironman` code belongs to that filter.
 
-Discovery uses the hardcoded `https://vidyaplace.org/api` base. The per-player
-endpoints come from `config/collector.yaml`:
+The account filters and URL templates are constants in `src/common/accounts.py`
+and `src/collector/api.py`. Discovery uses
+`https://vidyaplace.org/api`.
 
-- `urls.player_highscores` for current xp.
-- `urls.player_tracker` for xp gained over a time window.
+Every fetched player is re-checked against the configured account codes. A
+player who de-irons is skipped and their stored type is refreshed. Known players
+whose stored type is still configured are re-fetched even when discovery stops
+returning them, so de-ironing is detected.
 
 The tracker endpoint returns gained xp for a relative age in seconds, not
 historical xp. The collector reconstructs history as:
@@ -192,7 +195,7 @@ Schema creation is idempotent and runs at collector, web and db startup.
 
 | Table | Key | Purpose |
 | --- | --- | --- |
-| `players` | `username` | Verified hardcore ironman accounts. |
+| `players` | `username` | Verified accounts and their last fetched account type. |
 | `snapshots` | `(username, skill, observed_at)` | Sparse xp history. Rows exist only when xp changed. |
 | `checkpoints` | `(username, observed_at)` | Every fetched timestamp, including unchanged xp. |
 | `priority_snapshots` | `(username, skill, observed_at)` | Sparse 10-minute xp history. |
@@ -204,8 +207,10 @@ Indexes:
 - `snapshots_skill_user_time` supports latest-xp and ranking queries.
 - `priority_snapshots_user_time` supports priority page queries.
 
-`players` uses `last_seen = now()` on every verified upsert. Snapshot and
-checkpoint rows cascade when a player is deleted.
+`players` stores the last fetched account type and sets `last_seen = now()` on
+every upsert. A fetched type outside the configured filters updates the stored
+type but does not collect data. Snapshot and checkpoint rows cascade when a
+player is deleted.
 
 ## Timing and time zones
 

@@ -9,7 +9,12 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from ...common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
+from ...common.utility import (
+    DEFAULT_PRIORITY_INTERVAL_SECONDS,
+    SKILLS,
+    SPANS,
+    TRACKED_ACCOUNT_CODES,
+)
 from ..render.format import bucket_count, hours, players_line, years_months
 from ..render.html import (
     SITE_NAME,
@@ -184,7 +189,12 @@ def build_report_data(
     players = tuple(
         row[0]
         for row in conn.execute(
-            "SELECT username FROM players ORDER BY lower(username)"
+            """
+            SELECT username FROM players
+            WHERE ironman = ANY(%s)
+            ORDER BY lower(username)
+            """,
+            (list(TRACKED_ACCOUNT_CODES),),
         ).fetchall()
     )
 

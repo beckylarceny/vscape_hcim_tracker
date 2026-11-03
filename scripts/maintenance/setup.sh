@@ -56,6 +56,7 @@ escape_sed() {
 }
 
 echo "collector" >&2
+account_types=$(ask 'account types, comma separated' HARDCORE_IRONMAN)
 interval=$(to_seconds "$(ask 'backfill interval (24h)' 24h)")
 collect=$(to_seconds "$(ask 'live interval (1h)' 1h)")
 retry=$(to_seconds "$(ask 'retry window (7d)' 7d)")
@@ -83,9 +84,11 @@ if [ "$players" = "none" ] || [ -z "$players" ]; then
 else
     players_yaml="[$(printf '%s' "$players" | sed 's/, */, /g')]"
 fi
+account_yaml="[$(printf '%s' "$account_types" | sed 's/, */, /g')]"
 
 cp "$defaults/collector.yaml" config/collector.yaml
 sed -i \
+    -e "s/^account_types: .*/account_types: $account_yaml/" \
     -e "/^defaults:/,/^priority:/ s/^  interval_seconds: .*/  interval_seconds: $interval/" \
     -e "/^defaults:/,/^priority:/ s/^  collect_interval_seconds: .*/  collect_interval_seconds: $collect/" \
     -e "/^defaults:/,/^priority:/ s/^  retry_window_seconds: .*/  retry_window_seconds: $retry/" \

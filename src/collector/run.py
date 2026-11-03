@@ -6,7 +6,12 @@ import logging
 import time
 
 from ..common import storage
-from ..common.utility import DEFAULT_RETRY_WINDOW_SECONDS, effective_lookback
+from ..common.utility import (
+    ACCOUNT_TYPES,
+    DEFAULT_RETRY_WINDOW_SECONDS,
+    TRACKED_ACCOUNT_CODES,
+    effective_lookback,
+)
 from . import api
 from .collection import collect_all, zero_stats
 from .grid import build_grid
@@ -31,8 +36,9 @@ def run_once(
             args.no_backfill,
         )
 
-        discovered = api.list_hcim_players(wait=limiter.wait)
-        names = list(discovered)
+        discovered = api.list_players(ACCOUNT_TYPES, wait=limiter.wait)
+        known = storage.players_with_codes(conn, TRACKED_ACCOUNT_CODES)
+        names = list(dict.fromkeys([*discovered, *known]))
         if args.limit:
             names = names[: args.limit]
         # Players are inserted only after their account type is verified.

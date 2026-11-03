@@ -71,6 +71,7 @@ Shared code used by every service.
 
 | Path | Responsibility |
 | --- | --- |
+| `src/common/accounts.py` | Account type filters and accepted codes. |
 | `src/common/cli.py` | Shared argument parser. |
 | `src/common/priority.py` | Priority player selection. |
 | `src/common/storage.py` | SQL helpers and schema calls. |

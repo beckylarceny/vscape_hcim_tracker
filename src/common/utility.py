@@ -9,6 +9,12 @@ import urllib.parse
 
 import yaml
 
+from .accounts import (
+    DEFAULT_ACCOUNT_TYPES,
+    parse_account_types,
+    tracked_codes,
+)
+
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 CONFIG_DIR_ENV = "VSCAPE_TRACKER_CONFIG_DIR"
@@ -33,12 +39,10 @@ _WEB = load_config("web")
 _DB = load_config("db")
 
 SKILLS: tuple[str, ...] = tuple(_COLLECTOR["skills"])
-ACCOUNT_FILTER_CODES: dict[str, int] = dict(
-    _COLLECTOR["account_filter_codes"]
+ACCOUNT_TYPES: tuple[str, ...] = parse_account_types(
+    _COLLECTOR.get("account_types", DEFAULT_ACCOUNT_TYPES)
 )
-HCIM = ACCOUNT_FILTER_CODES["HARDCORE_IRONMAN"]
-PLAYER_HIGHSCORES_URL: str = _COLLECTOR["urls"]["player_highscores"]
-PLAYER_TRACKER_URL: str = _COLLECTOR["urls"]["player_tracker"]
+TRACKED_ACCOUNT_CODES: frozenset[int] = tracked_codes(ACCOUNT_TYPES)
 
 _COLLECTOR_DEFAULTS: dict = _COLLECTOR["defaults"]
 DEFAULT_INTERVAL_SECONDS = int(_COLLECTOR_DEFAULTS["interval_seconds"])
