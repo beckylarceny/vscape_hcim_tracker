@@ -190,10 +190,19 @@ class HtmlReportTest(unittest.TestCase):
             "</h1>\n<p class=\"sub\"><a href=\"status\">", page
         )
         self.assertIn(
-            ".backlinks{margin:-2rem 0 1.75rem;text-align:center}", page
+            ".backlinks {\n"
+            "    margin: -2rem 0 1.75rem;\n"
+            "    text-align: center;\n"
+            "}",
+            page,
         )
         self.assertIn(
-            ".backlinks .sub{margin:0;padding:0;border:0;font-size:.9rem}",
+            ".backlinks .sub {\n"
+            "    margin: 0;\n"
+            "    padding: 0;\n"
+            "    border: 0;\n"
+            "    font-size: .9rem;\n"
+            "}",
             page,
         )
 

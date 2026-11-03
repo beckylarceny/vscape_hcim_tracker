@@ -218,7 +218,7 @@ class PageTest(unittest.TestCase):
         self.assertIn("priority svg .bar[data-tip]", page)
         self.assertIn("xp/h by skill", page)
         self.assertNotIn("skill-legend", page)
-        self.assertIn("fill-opacity:.28", page)
+        self.assertIn("fill-opacity: .28", page)
         version = "software version abc1234, updated 2026-11-01 13:00 UTC"
         tagged = render_priority_page(self.make_data(), version)
         self.assertIn(f'<footer class="version">{version}</footer>', tagged)
