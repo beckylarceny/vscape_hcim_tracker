@@ -8,7 +8,7 @@ import logging
 import threading
 from pathlib import Path
 
-log = logging.getLogger("vscape_hcim_tracker.web.server")
+log = logging.getLogger("vscape_tracker.web.server")
 
 
 class ReportRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -69,7 +69,7 @@ def start_server(
     handler = functools.partial(ReportRequestHandler, directory=str(directory))
     server = http.server.ThreadingHTTPServer((host, port), handler)
     thread = threading.Thread(
-        target=server.serve_forever, name="vscape_hcim_tracker-http", daemon=True
+        target=server.serve_forever, name="vscape_tracker-http", daemon=True
     )
     thread.start()
     return server

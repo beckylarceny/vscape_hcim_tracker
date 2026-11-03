@@ -9,8 +9,8 @@ the schema and storage.
 | Service | Image | Role |
 | --- | --- | --- |
 | `db` | `postgres:17-alpine` | Stores players, xp snapshots, fetch checkpoints and run history. |
-| `collector` | `vscape_hcim_tracker-app:latest` | Discovers hardcore ironman players and fills the checkpoint grid. |
-| `web` | `vscape_hcim_tracker-app:latest` | Reads the database, writes reports and serves them over HTTP. |
+| `collector` | `vscape_tracker-app:latest` | Discovers hardcore ironman players and fills the checkpoint grid. |
+| `web` | `vscape_tracker-app:latest` | Reads the database, writes reports and serves them over HTTP. |
 
 The collector and web service share one image but run different commands:
 

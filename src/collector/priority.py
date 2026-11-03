@@ -19,7 +19,7 @@ from .collection import add_stats, zero_stats
 from .rate import RateLimiter
 from ..common.utility import next_slot
 
-log = logging.getLogger("vscape_hcim_tracker.collector.priority")
+log = logging.getLogger("vscape_tracker.collector.priority")
 
 
 def collect_priority_player(
@@ -171,7 +171,7 @@ def start_priority_thread(
     thread = threading.Thread(
         target=_priority_loop,
         args=(args, dsn, limiter, stop),
-        name="vscape_hcim_tracker-priority",
+        name="vscape_tracker-priority",
         daemon=True,
     )
     thread.start()

@@ -11,7 +11,7 @@ from ..common.utility import HCIM, SKILLS
 from . import api
 from .rate import RateLimiter
 
-log = logging.getLogger("vscape_hcim_tracker.collector")
+log = logging.getLogger("vscape_tracker.collector")
 
 
 def zero_stats() -> dict[str, int]:

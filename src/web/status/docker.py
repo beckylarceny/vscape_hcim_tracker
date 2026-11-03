@@ -9,10 +9,10 @@ import socket
 from typing import NamedTuple
 
 DOCKER_SOCKET = os.environ.get(
-    "VSCAPE_HCIM_TRACKER_DOCKER_SOCKET", "/var/run/docker.sock"
+    "VSCAPE_TRACKER_DOCKER_SOCKET", "/var/run/docker.sock"
 )
 COMPOSE_PROJECT = os.environ.get(
-    "VSCAPE_HCIM_TRACKER_COMPOSE_PROJECT", "vscape_hcim_tracker"
+    "VSCAPE_TRACKER_COMPOSE_PROJECT", "vscape_tracker"
 )
 
 

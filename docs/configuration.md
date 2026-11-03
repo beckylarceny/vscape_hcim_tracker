@@ -18,7 +18,7 @@ config/
     db.yaml
 ```
 
-`VSCAPE_HCIM_TRACKER_CONFIG_DIR` replaces the whole directory. Relative overrides
+`VSCAPE_TRACKER_CONFIG_DIR` replaces the whole directory. Relative overrides
 are resolved from the process working directory, so an absolute path is safer in
 containers.
 
@@ -97,18 +97,18 @@ In Compose, `PGHOST=db` and the other `PG*` variables override these values.
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
-| `VSCAPE_HCIM_TRACKER_CONFIG_DIR` | all services | Replace the config directory. |
-| `VSCAPE_HCIM_TRACKER_DSN` | collector, web, db | Full PostgreSQL connection string. |
+| `VSCAPE_TRACKER_CONFIG_DIR` | all services | Replace the config directory. |
+| `VSCAPE_TRACKER_DSN` | collector, web, db | Full PostgreSQL connection string. |
 | `PGHOST` | all services | PostgreSQL host. |
 | `PGPORT` | all services | PostgreSQL port. |
 | `PGUSER` | all services | PostgreSQL user. |
 | `PGPASSWORD` | all services | PostgreSQL password. |
 | `PGDATABASE` | all services | PostgreSQL database. |
-| `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS` | collector, web | Comma-separated priority players. |
-| `VSCAPE_HCIM_TRACKER_BASE_URL` | web | Public base URL for RSS links. |
-| `VSCAPE_HCIM_TRACKER_DOCKER_SOCKET` | web | Docker socket path for the status page. |
-| `VSCAPE_HCIM_TRACKER_COMPOSE_PROJECT` | web | Compose project name fallback for container listing. |
-| `VSCAPE_HCIM_TRACKER_TEST_DSN` | tests | Disposable database for database tests. |
+| `VSCAPE_TRACKER_PRIORITY_PLAYERS` | collector, web | Comma-separated priority players. |
+| `VSCAPE_TRACKER_BASE_URL` | web | Public base URL for RSS links. |
+| `VSCAPE_TRACKER_DOCKER_SOCKET` | web | Docker socket path for the status page. |
+| `VSCAPE_TRACKER_COMPOSE_PROJECT` | web | Compose project name fallback for container listing. |
+| `VSCAPE_TRACKER_TEST_DSN` | tests | Disposable database for database tests. |
 
 Compose also reads these from `docker/.env` for interpolation:
 
@@ -117,10 +117,10 @@ Compose also reads these from `docker/.env` for interpolation:
 | `POSTGRES_PASSWORD` | Required database password. |
 | `POSTGRES_DB` | Database name, default `xp_tracker`. |
 | `POSTGRES_USER` | Database user, default `xp_tracker`. |
-| `COMPOSE_PROJECT_NAME` | Compose project name, default `vscape_hcim_tracker`. |
-| `VSCAPE_HCIM_TRACKER_LOG_LEVEL` | Service log level. |
-| `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS` | Priority players passed to both services. |
-| `VSCAPE_HCIM_TRACKER_BASE_URL` | Base URL passed to the web service. |
+| `COMPOSE_PROJECT_NAME` | Compose project name, default `vscape_tracker`. |
+| `VSCAPE_TRACKER_LOG_LEVEL` | Service log level. |
+| `VSCAPE_TRACKER_PRIORITY_PLAYERS` | Priority players passed to both services. |
+| `VSCAPE_TRACKER_BASE_URL` | Base URL passed to the web service. |
 
 `POSTGRES_PASSWORD` only initializes the `pgdata` volume. Changing it later does
 not change the database role. See [Operations](operations.md#password-rotation).
@@ -134,7 +134,7 @@ share the collection flags.
 
 | Flag | Meaning | Default |
 | --- | --- | --- |
-| `--dsn` | PostgreSQL connection string. | `VSCAPE_HCIM_TRACKER_DSN` or `PG*` / `db.yaml`. |
+| `--dsn` | PostgreSQL connection string. | `VSCAPE_TRACKER_DSN` or `PG*` / `db.yaml`. |
 | `--interval` | Coarse backfill step. | `24h` |
 | `--collect-interval` | Live collection step. | `1h` |
 | `--retry-window` | Recent window always rechecked. | `7d` |
@@ -201,13 +201,13 @@ date.
 
 ## Precedence
 
-- DSN: `--dsn`, then `VSCAPE_HCIM_TRACKER_DSN`, then `PG*` variables and
+- DSN: `--dsn`, then `VSCAPE_TRACKER_DSN`, then `PG*` variables and
   `db.yaml`.
 - Priority players: `--priority`, then
-  `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS`, then `collector.yaml`.
-- Base URL: `--base-url`, then `VSCAPE_HCIM_TRACKER_BASE_URL`, then
+  `VSCAPE_TRACKER_PRIORITY_PLAYERS`, then `collector.yaml`.
+- Base URL: `--base-url`, then `VSCAPE_TRACKER_BASE_URL`, then
   `web.yaml`.
-- Config directory: `VSCAPE_HCIM_TRACKER_CONFIG_DIR`, then `config/`.
+- Config directory: `VSCAPE_TRACKER_CONFIG_DIR`, then `config/`.
 
 Compose passes environment values into the containers. A command-line flag set
 in `docker/compose.yaml` wins over the environment-derived default.

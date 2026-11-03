@@ -1,4 +1,4 @@
-# vscape_hcim_tracker
+# vscape_tracker
 
 Tracks Vidyascape hardcore ironman xp history in PostgreSQL and serves text and
 HTML rankings.

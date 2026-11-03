@@ -11,7 +11,7 @@ import yaml
 
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
-CONFIG_DIR_ENV = "VSCAPE_HCIM_TRACKER_CONFIG_DIR"
+CONFIG_DIR_ENV = "VSCAPE_TRACKER_CONFIG_DIR"
 DEFAULT_CONFIG_DIR = _PROJECT_ROOT / "config"
 
 
@@ -65,7 +65,7 @@ DEFAULT_REPORT_INTERVAL_SECONDS = int(
     _WEB_DEFAULTS["report_interval_seconds"]
 )
 DEFAULT_BASE_URL = os.environ.get(
-    "VSCAPE_HCIM_TRACKER_BASE_URL", _WEB_DEFAULTS["base_url"]
+    "VSCAPE_TRACKER_BASE_URL", _WEB_DEFAULTS["base_url"]
 )
 
 
@@ -81,7 +81,7 @@ def _dedupe(names) -> tuple[str, ...]:
 def build_dsn(database: str | None = None) -> str | None:
     """Connection string from DSN, PG* variables or db.yaml."""
     if database is None:
-        explicit = os.environ.get("VSCAPE_HCIM_TRACKER_DSN")
+        explicit = os.environ.get("VSCAPE_TRACKER_DSN")
         if explicit:
             return explicit
     host = os.environ.get("PGHOST") or _DB.get("host")
@@ -116,7 +116,7 @@ def parse_priority_players(values: list[str] | None) -> tuple[str, ...]:
     """Usernames from CLI values, the environment, or collector.yaml."""
     if values is None:
         raw = os.environ.get(
-            "VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS", ""
+            "VSCAPE_TRACKER_PRIORITY_PLAYERS", ""
         ).strip()
         if not raw:
             return _configured_priority_players()

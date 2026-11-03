@@ -21,7 +21,7 @@ Requirements:
 Set a database and run a service:
 
 ```sh
-export VSCAPE_HCIM_TRACKER_DSN="postgresql://user:pass@localhost:5432/xp_tracker"
+export VSCAPE_TRACKER_DSN="postgresql://user:pass@localhost:5432/xp_tracker"
 python -m src.db
 python -m src.collector --no-backfill --limit 10 --log-level DEBUG
 python -m src.web --report-interval 0 --serve-host 127.0.0.1
@@ -46,7 +46,7 @@ Database tests are skipped unless a disposable database is reachable. They
 truncate tables, so never point them at production data.
 
 ```sh
-VSCAPE_HCIM_TRACKER_TEST_DSN="postgresql://user:pass@localhost:5432/xp_tracker_test" \
+VSCAPE_TRACKER_TEST_DSN="postgresql://user:pass@localhost:5432/xp_tracker_test" \
   python -m unittest tests.test_storage -v
 ```
 

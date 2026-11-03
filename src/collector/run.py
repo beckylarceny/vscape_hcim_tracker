@@ -12,7 +12,7 @@ from .collection import collect_all, zero_stats
 from .grid import build_grid
 from .rate import RateLimiter
 
-log = logging.getLogger("vscape_hcim_tracker.collector.run")
+log = logging.getLogger("vscape_tracker.collector.run")
 
 
 def run_once(

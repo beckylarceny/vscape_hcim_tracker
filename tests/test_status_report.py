@@ -38,16 +38,16 @@ PRIORITY = 600
 
 DOCKER = DockerStatus((
     ContainerInfo(
-        "collector", "vscape_hcim_tracker-collector-1",
-        "running", "Up 40 minutes", "vscape_hcim_tracker-app:latest",
+        "collector", "vscape_tracker-collector-1",
+        "running", "Up 40 minutes", "vscape_tracker-app:latest",
     ),
     ContainerInfo(
-        "db", "vscape_hcim_tracker-db-1",
+        "db", "vscape_tracker-db-1",
         "running", "Up 41 minutes", "postgres:17-alpine",
     ),
     ContainerInfo(
-        "web", "vscape_hcim_tracker-web-1",
-        "running", "Up 39 minutes", "vscape_hcim_tracker-app:latest",
+        "web", "vscape_tracker-web-1",
+        "running", "Up 39 minutes", "vscape_tracker-app:latest",
     ),
 ))
 
@@ -165,12 +165,12 @@ class DockerTest(unittest.TestCase):
         payload = [
             {
                 "Id": "bbb",
-                "Names": ["/vscape_hcim_tracker-web-1"],
+                "Names": ["/vscape_tracker-web-1"],
                 "State": "running",
                 "Status": "Up 39 minutes",
                 "Image": "app:latest",
                 "Labels": {
-                    "com.docker.compose.project": "vscape_hcim_tracker",
+                    "com.docker.compose.project": "vscape_tracker",
                     "com.docker.compose.service": "web",
                 },
             },
@@ -181,7 +181,7 @@ class DockerTest(unittest.TestCase):
                 "Status": "Up 40 minutes",
                 "Image": "app:latest",
                 "Labels": {
-                    "com.docker.compose.project": "vscape_hcim_tracker",
+                    "com.docker.compose.project": "vscape_tracker",
                     "com.docker.compose.service": "collector",
                 },
             },
@@ -198,19 +198,19 @@ class DockerTest(unittest.TestCase):
             },
         ]
         self.assertEqual(
-            container_rows(payload, "vscape_hcim_tracker"),
+            container_rows(payload, "vscape_tracker"),
             (
                 ContainerInfo(
                     "collector", "aaa", "running", "Up 40 minutes",
                     "app:latest",
                 ),
                 ContainerInfo(
-                    "web", "vscape_hcim_tracker-web-1", "running",
+                    "web", "vscape_tracker-web-1", "running",
                     "Up 39 minutes", "app:latest",
                 ),
             ),
         )
-        self.assertEqual(container_rows("not a list", "vscape_hcim_tracker"), ())
+        self.assertEqual(container_rows("not a list", "vscape_tracker"), ())
 
         payload = [
             {
@@ -567,7 +567,7 @@ class PageTest(unittest.TestCase):
             "docker api unavailable: permission denied", page
         )
         self.assertIn('<td class=empty colspan="5">', page)
-        self.assertNotIn("vscape_hcim_tracker-collector-1", page)
+        self.assertNotIn("vscape_tracker-collector-1", page)
 
         empty = render_status_page(
             collect()._replace(containers=DockerStatus(()))
@@ -585,7 +585,7 @@ class PageTest(unittest.TestCase):
         self.assertIn("CONTAINERS", text)
         self.assertLess(text.index("SERVICE"), text.index("CONTAINERS"))
         self.assertLess(text.index("CONTAINERS"), text.index("DATABASE"))
-        self.assertIn("vscape_hcim_tracker-collector-1", text)
+        self.assertIn("vscape_tracker-collector-1", text)
 
 
     def test_table_alignment_and_header(self) -> None:

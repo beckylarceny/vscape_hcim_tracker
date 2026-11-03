@@ -1,4 +1,4 @@
-"""Database tests. Skipped unless VSCAPE_HCIM_TRACKER_TEST_DSN points at a disposable DB."""
+"""Database tests. Skipped unless VSCAPE_TRACKER_TEST_DSN points at a disposable DB."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from src.common.utility import SKILLS, build_dsn
 from src.web import reporting
 from src.web.reports import general as report
 
-DSN = os.environ.get("VSCAPE_HCIM_TRACKER_TEST_DSN") or build_dsn(
+DSN = os.environ.get("VSCAPE_TRACKER_TEST_DSN") or build_dsn(
     "xp_tracker_test"
 )
 T1 = 1_700_000_000
@@ -21,7 +21,7 @@ T2 = T1 + 86400
 
 def connect_or_skip():
     if not DSN:
-        raise unittest.SkipTest("set VSCAPE_HCIM_TRACKER_TEST_DSN to run database tests")
+        raise unittest.SkipTest("set VSCAPE_TRACKER_TEST_DSN to run database tests")
     try:
         conn = storage.connect(DSN)
     except Exception as error:  # noqa: BLE001 - missing server means skip

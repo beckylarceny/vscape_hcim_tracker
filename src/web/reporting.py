@@ -23,7 +23,7 @@ from .render.html import atomic_write
 from .reports import general, index, player, priority
 from .status import report as status_report
 
-log = logging.getLogger("vscape_hcim_tracker.web.reporting")
+log = logging.getLogger("vscape_tracker.web.reporting")
 
 _REPORT_LOCK = threading.Lock()
 
@@ -338,7 +338,7 @@ def start_report_thread(args, dsn: str) -> threading.Event | None:
     thread = threading.Thread(
         target=_report_loop,
         args=(args, dsn, stop),
-        name="vscape_hcim_tracker-report",
+        name="vscape_tracker-report",
         daemon=True,
     )
     thread.start()

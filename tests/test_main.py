@@ -269,7 +269,7 @@ class DsnTest(unittest.TestCase):
     def test_dsn_precedence_and_encoding(self) -> None:
         with patch.dict(
             os.environ,
-            {"VSCAPE_HCIM_TRACKER_DSN": "postgresql:///x"},
+            {"VSCAPE_TRACKER_DSN": "postgresql:///x"},
             clear=True,
         ):
             self.assertEqual(build_dsn(), "postgresql:///x")
@@ -293,7 +293,7 @@ class DsnTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "VSCAPE_HCIM_TRACKER_DSN": "postgresql:///main",
+                "VSCAPE_TRACKER_DSN": "postgresql:///main",
                 "PGHOST": "db",
                 "PGUSER": "u",
                 "PGPASSWORD": "p@ss",
@@ -332,7 +332,7 @@ class PriorityListTest(unittest.TestCase):
 
         with patch.dict(
             os.environ,
-            {"VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS": "x, y"},
+            {"VSCAPE_TRACKER_PRIORITY_PLAYERS": "x, y"},
         ):
             self.assertEqual(parse_priority_players(None), ("x", "y"))
 

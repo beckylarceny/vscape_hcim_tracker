@@ -111,7 +111,7 @@ Regular snapshots fill gaps in the priority series and are drawn in a different
 colour, so periods without 10-minute collection are still visible.
 
 The RSS feed contains changed xp grouped by priority fetch time, newest first.
-Feed links use `base_url` or `VSCAPE_HCIM_TRACKER_BASE_URL`. The link points to
+Feed links use `base_url` or `VSCAPE_TRACKER_BASE_URL`. The link points to
 the priority page and the feed itself.
 
 Players who leave the priority set remain in the index until their high-frequency

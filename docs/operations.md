@@ -53,6 +53,37 @@ URLs:
 - priority report: <http://localhost:8000/priority/>
 - text versions: `reports/latest.txt`, `reports/status.txt`
 
+## Renaming from vscape_hcim_tracker
+
+The project and Compose project are now `vscape_tracker`. Existing data lives in
+the old `vscape_hcim_tracker_pgdata` volume. Copy it before the first start:
+
+```sh
+docker compose -p vscape_hcim_tracker -f docker/compose.yaml down
+docker volume create vscape_tracker_pgdata
+docker run --rm \
+  -v vscape_hcim_tracker_pgdata:/from:ro \
+  -v vscape_tracker_pgdata:/to \
+  alpine:3 sh -c 'cp -a /from/. /to/'
+```
+
+Do not use `docker compose down -v`. It removes the old data volume.
+
+Update `docker/.env` to the new names:
+
+| Old | New |
+| --- | --- |
+| `VSCAPE_HCIM_TRACKER_LOG_LEVEL` | `VSCAPE_TRACKER_LOG_LEVEL` |
+| `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS` | `VSCAPE_TRACKER_PRIORITY_PLAYERS` |
+| `VSCAPE_HCIM_TRACKER_BASE_URL` | `VSCAPE_TRACKER_BASE_URL` |
+| `COMPOSE_PROJECT_NAME=vscape_hcim_tracker` | `COMPOSE_PROJECT_NAME=vscape_tracker` |
+
+Build the new image and start the renamed project:
+
+```sh
+./scripts/rebuild.sh
+```
+
 ## Daily commands
 
 ```sh
@@ -238,8 +269,8 @@ this only on trusted hosts.
 To disable the mount, remove it from `docker/compose.yaml`. The status page
 degrades to `docker api unavailable`.
 
-`VSCAPE_HCIM_TRACKER_DOCKER_SOCKET` changes the socket path.
-`VSCAPE_HCIM_TRACKER_COMPOSE_PROJECT` changes the project name used when the
+`VSCAPE_TRACKER_DOCKER_SOCKET` changes the socket path.
+`VSCAPE_TRACKER_COMPOSE_PROJECT` changes the project name used when the
 container cannot identify its own project.
 
 ## Health checks
@@ -268,7 +299,7 @@ Common problems:
 | --- | --- |
 | Web responds but pages are empty | Collector has not discovered players yet, or the database has no snapshots. Check collector logs. |
 | Status says database unreachable | `db` health, `POSTGRES_PASSWORD`, and `PG*` values. |
-| Status says docker api unavailable | Socket mount, socket permissions, or the `VSCAPE_HCIM_TRACKER_COMPOSE_PROJECT` fallback. |
+| Status says docker api unavailable | Socket mount, socket permissions, or the `VSCAPE_TRACKER_COMPOSE_PROJECT` fallback. |
 | Collector logs many failures | API limits, rate, network access, or HTTP 503 responses. Lower `--rate` or `--workers`. |
 | Reports are stale | `web` log, report interval, and disk permissions on `reports/`. |
 | No priority pages | Priority thread only runs with `--loop`; check the collector command. |

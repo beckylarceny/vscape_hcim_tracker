@@ -19,7 +19,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
         default=build_dsn(),
         help=(
             "PostgreSQL connection string "
-            "(default: $VSCAPE_HCIM_TRACKER_DSN or PGHOST/PGUSER/PGPASSWORD)"
+            "(default: $VSCAPE_TRACKER_DSN or PGHOST/PGUSER/PGPASSWORD)"
         ),
     )
     parser.add_argument(
@@ -50,7 +50,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
         "--priority", action="append", default=None,
         help=(
             "priority player username; repeat or comma-separate "
-            "(default: $VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS)"
+            "(default: $VSCAPE_TRACKER_PRIORITY_PLAYERS)"
         ),
     )
     parser.add_argument(
