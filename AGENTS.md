@@ -114,7 +114,10 @@ Layout example:
 ```text
 src/common/       reusable: config, storage, CLI
 src/collector/    collection: api, grid, priority, run
-src/web/          reporting: report, player_report, status_report
+src/web/          service: reporting, server
+src/web/render/   charts, formatting, HTML, CSS
+src/web/reports/  general, index, player, priority
+src/web/status/   queries, docker, HTML, text
 src/db/           schema and one-shot schema command
 ```
 

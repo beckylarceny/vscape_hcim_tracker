@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
-from .format import bucket_count, hours, players_line, years_months
-from .html import (
+from ...common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
+from ..render.format import bucket_count, hours, players_line, years_months
+from ..render.html import (
     SITE_NAME,
     SKILL_TAB_SCRIPT,
     date,
@@ -20,12 +20,12 @@ from .html import (
     skill_tabs_html,
     style_tag,
 )
-from .player_report import (
+from .player import (
     Record,
     player_page_href,
     scan_player_points as _scan_player_points,
 )
-from ..common.storage import (
+from ...common.storage import (
     CoverageSlice,
     as_datetime,
     coverage_buckets,

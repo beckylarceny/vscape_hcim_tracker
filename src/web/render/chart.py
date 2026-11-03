@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import NamedTuple, TypeVar
 
-from ..common.storage import as_datetime
+from ...common.storage import as_datetime
 from .html import date, esc, short_number
 
 _Number = TypeVar("_Number", int, float)

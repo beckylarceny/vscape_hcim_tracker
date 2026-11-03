@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from ..common.utility import (
+from ...common.utility import (
     DEFAULT_PRIORITY_INTERVAL_SECONDS,
     DEFAULT_PRIORITY_RETENTION_SECONDS,
     SKILLS,
 )
-from .chart import ChartData, StackedBar, chart_svg, thin
-from .format import plural
-from .html import (
+from ..render.chart import ChartData, StackedBar, chart_svg, thin
+from ..render.format import plural
+from ..render.html import (
     SITE_NAME,
     SKILL_TAB_SCRIPT,
     atomic_write,
@@ -28,13 +28,13 @@ from .html import (
     style_tag,
     tooltip_html,
 )
-from .player_report import (
+from .player import (
     current_line,
     group_points,
     highscores_url,
     player_slug,
 )
-from ..common.storage import as_datetime, canonical_username
+from ...common.storage import as_datetime, canonical_username
 
 WINDOW_SECONDS = DEFAULT_PRIORITY_RETENTION_SECONDS
 MAX_FEED_EVENTS = (

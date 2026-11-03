@@ -9,8 +9,8 @@ import unittest
 from pathlib import Path
 
 from src.common.utility import SKILLS
-from src.web.chart import ChartData, StackedBar
-from src.web.priority_report import (
+from src.web.render.chart import ChartData, StackedBar
+from src.web.reports.priority import (
     Event,
     PriorityData,
     collect_events,

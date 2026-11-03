@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .html import SITE_NAME
-from .status_queries import (
+from ..render.html import SITE_NAME
+from .queries import (
     FrequencyStatus,
     RunInfo,
     StatusData,

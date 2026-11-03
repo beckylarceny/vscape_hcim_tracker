@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from ..common.utility import (
+from ...common.utility import (
     DATA_START_EPOCH,
     DEFAULT_PRIORITY_INTERVAL_SECONDS,
     SKILLS,
     SPANS,
 )
-from ..common.storage import as_datetime
-from .chart import (
+from ...common.storage import as_datetime
+from ..render.chart import (
     CHART_POINTS,
     MISSING_AFTER_SECONDS,
     WIDE_CHART_POINTS,
@@ -26,8 +26,8 @@ from .chart import (
     chart_svg,
     thin,
 )
-from .format import frequency_name, years_months
-from .html import (
+from ..render.format import frequency_name, years_months
+from ..render.html import (
     SITE_NAME,
     SKILL_TAB_SCRIPT,
     date,

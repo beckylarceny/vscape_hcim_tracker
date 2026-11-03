@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .html import SITE_NAME, atomic_write, esc, style_tag
+from ..render.html import SITE_NAME, atomic_write, esc, style_tag
 
 
 def render_index(

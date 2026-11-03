@@ -8,8 +8,8 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from ..common.storage import as_datetime
-from ..common.utility import SKILLS
+from ...common.storage import as_datetime
+from ...common.utility import SKILLS
 
 _CSS_PATH = Path(__file__).with_name("report.css")
 

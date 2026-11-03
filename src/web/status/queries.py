@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from ..common.storage import CoverageSlice, as_datetime
-from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, next_slot
-from .format import frequency_name, hours, players_line, plural, years_months
-from .html import date
-from .status_docker import DockerStatus, container_status
+from ...common.storage import CoverageSlice, as_datetime
+from ...common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, next_slot
+from ..render.format import frequency_name, hours, players_line, plural, years_months
+from ..render.html import date
+from .docker import DockerStatus, container_status
 
 PROCESS_STARTED_EPOCH = int(time.time())
 

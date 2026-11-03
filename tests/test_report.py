@@ -8,10 +8,10 @@ from unittest.mock import MagicMock, patch
 from src.common.storage import CoverageSlice
 from src.common.utility import SKILLS, SPANS, parse_duration
 from src.web import reporting
-from src.web.format import hours as _hours
-from src.web.index_report import render_index
-from src.web.format import years_months as _years_months
-from src.web.report import (
+from src.web.render.format import hours as _hours
+from src.web.reports.index import render_index
+from src.web.render.format import years_months as _years_months
+from src.web.reports.general import (
     Record,
     ReportData,
     _scan_player_points,
@@ -200,7 +200,7 @@ class HtmlReportTest(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from src.web.report import read_version
+        from src.web.reports.general import read_version
 
         version = "software version abc1234, updated 2026-11-01 13:00 UTC"
         data = self.make_data()._replace(version=version)
@@ -278,7 +278,7 @@ class ReportCacheTest(unittest.TestCase):
             coverage=[],
         )
         with patch.object(
-            reporting.report, "build_report_data", return_value=data
+            reporting.general, "build_report_data", return_value=data
         ) as build:
             first = reporting.report_data(
                 conn, NOW, 86400, LOOKBACK, 5, 371, 21600, 371

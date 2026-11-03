@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .html import atomic_write
-from .status_html import render_status_page
-from .status_queries import collect_status
-from .status_text import render_status_text
+from ..render.html import atomic_write
+from .html import render_status_page
+from .queries import collect_status
+from .text import render_status_text
 
 
 def write_status_page(conn, report_dir, **kwargs) -> Path:

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .html import SITE_NAME, date, esc, style_tag, tooltip_html
-from .status_queries import (
+from ..render.html import SITE_NAME, date, esc, style_tag, tooltip_html
+from .queries import (
     FrequencyStatus,
     StatusData,
     backfill_rows,

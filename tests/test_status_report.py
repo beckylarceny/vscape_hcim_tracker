@@ -10,15 +10,15 @@ from types import SimpleNamespace
 from unittest import mock
 
 from src.common.storage import CoverageSlice
-from src.web.status_docker import (
+from src.web.status.docker import (
     ContainerInfo,
     DockerStatus,
     container_rows,
     container_status,
     self_project,
 )
-from src.web.status_html import coverage_bar, render_status_page
-from src.web.status_queries import (
+from src.web.status.html import coverage_bar, render_status_page
+from src.web.status.queries import (
     collect_status,
     coverage_runs,
     elapsed,
@@ -27,8 +27,8 @@ from src.web.status_queries import (
     size,
     until,
 )
-from src.web.status_report import write_status_page
-from src.web.status_text import render_status_text
+from src.web.status.report import write_status_page
+from src.web.status.text import render_status_text
 
 NOW = 1_800_000_000
 DAY = 86400
@@ -155,7 +155,7 @@ def collect(conn: FakeConn | None = None, **overrides):
     )
     kwargs.update(overrides)
     with mock.patch(
-        "src.web.status_queries.container_status", return_value=DOCKER
+        "src.web.status.queries.container_status", return_value=DOCKER
     ):
         return collect_status(conn or FakeConn(), **kwargs)
 
@@ -223,17 +223,17 @@ class DockerTest(unittest.TestCase):
             },
         ]
         with mock.patch(
-            "src.web.status_docker.socket.gethostname", return_value="abc123"
+            "src.web.status.docker.socket.gethostname", return_value="abc123"
         ):
             self.assertEqual(self_project(payload), "mine")
         with mock.patch(
-            "src.web.status_docker.socket.gethostname", return_value="zzz"
+            "src.web.status.docker.socket.gethostname", return_value="zzz"
         ):
             self.assertIsNone(self_project(payload))
         self.assertIsNone(self_project("not a list"))
 
         with mock.patch(
-            "src.web.status_docker._docker_get",
+            "src.web.status.docker._docker_get",
             side_effect=OSError("no socket"),
         ):
             self.assertEqual(
@@ -625,7 +625,7 @@ class PageTest(unittest.TestCase):
 
     def test_write_status_page(self) -> None:
         with tempfile.TemporaryDirectory() as directory, mock.patch(
-            "src.web.status_queries.container_status", return_value=DOCKER
+            "src.web.status.queries.container_status", return_value=DOCKER
         ):
             path = write_status_page(
                 FakeConn(), Path(directory),

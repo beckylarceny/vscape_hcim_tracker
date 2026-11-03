@@ -9,7 +9,8 @@ from pathlib import Path
 
 from src.common import storage
 from src.common.utility import SKILLS, build_dsn
-from src.web import report, reporting
+from src.web import reporting
+from src.web.reports import general as report
 
 DSN = os.environ.get("VSCAPE_HCIM_TRACKER_TEST_DSN") or build_dsn(
     "xp_tracker_test"

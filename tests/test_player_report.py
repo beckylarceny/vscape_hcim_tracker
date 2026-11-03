@@ -11,10 +11,10 @@ from types import SimpleNamespace
 
 from src.common.utility import DATA_START_EPOCH, SKILLS, SPANS
 from src.web import reporting
-from src.web.chart import ChartData
-from src.web.chart import chart_svg as _chart_svg
-from src.web.chart import thin as _thin
-from src.web.player_report import (
+from src.web.render.chart import ChartData
+from src.web.render.chart import chart_svg as _chart_svg
+from src.web.render.chart import thin as _thin
+from src.web.reports.player import (
     PlayerData,
     Record,
     _frequency_info,
@@ -219,7 +219,7 @@ class RenderTest(unittest.TestCase):
 
 class ChartTest(unittest.TestCase):
     def test_chart_gaps_and_gain_shape(self) -> None:
-        from src.web.player_report import _missing_ranges
+        from src.web.reports.player import _missing_ranges
 
         self.assertEqual(_missing_ranges([], 0, 100, 10), ((0, 100),))
         self.assertEqual(_missing_ranges([50], 0, 100, 100), ())
@@ -238,7 +238,7 @@ class ChartTest(unittest.TestCase):
         svg = _chart_svg(chart, "gaps")
         self.assertIn('class="gap"', svg)
 
-        from src.web.player_report import _missing_ranges
+        from src.web.reports.player import _missing_ranges
 
         six_hourly = [0, 21600, 43200, 64800, 86400]
         self.assertEqual(_missing_ranges(six_hourly, 0, DAY, 2 * DAY), ())

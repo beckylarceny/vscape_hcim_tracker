@@ -1,7 +1,7 @@
 __pycache__/
 *.py[cod]
 .env
-reports/
+/reports/
 ai_sessions/
 *.log
 backups/
