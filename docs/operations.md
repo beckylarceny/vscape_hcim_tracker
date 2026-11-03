@@ -80,6 +80,39 @@ Use this when the instance was last updated before the project rename,
 configurable account types and site title changes. The database schema does not
 change.
 
+### Automated migration
+
+From the new checkout, run:
+
+```sh
+./scripts/maintenance/migrate.sh
+```
+
+The script backs up the old database, stops the old stack, copies the pgdata
+volume, renames environment variables, updates `config/collector.yaml` and
+`config/web.yaml`, then builds and starts the new project. It keeps the old
+volume and image for rollback.
+
+| Flag | Meaning |
+| --- | --- |
+| `--replace-new-volume` | Remove an existing `vscape_tracker_pgdata` volume. Use only after a failed first start, and only when the volume is empty. |
+| `--skip-backup` | Skip the database dump. Use only when a recent backup exists. |
+
+The script also reads these optional environment variables:
+
+| Variable | Default |
+| --- | --- |
+| `OLD_PROJECT` | `COMPOSE_PROJECT_NAME` in `docker/.env`, then `vscape_hcim_tracker`. |
+| `NEW_PROJECT` | `vscape_tracker`. |
+| `OLD_VOLUME` | `${OLD_PROJECT}_pgdata`. |
+| `NEW_VOLUME` | `${NEW_PROJECT}_pgdata`. |
+
+The script stops when the daily update job is installed. Remove it first with
+`./scripts/maintenance/install-cron.sh --remove`.
+
+The numbered steps below are the manual equivalent. Use them when the script
+cannot run or when you need to inspect each change.
+
 ### 1. Back up and pause updates
 
 From the old checkout:
@@ -318,6 +351,7 @@ Specialized commands are in `scripts/maintenance/`:
 
 - `setup.sh`, `reset-config.sh`
 - `backup.sh`, `restore.sh`
+- `migrate.sh`
 - `install-cron.sh`
 
 The container entrypoint is `scripts/internal/docker-entrypoint.sh`.
