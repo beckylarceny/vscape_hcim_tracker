@@ -173,6 +173,9 @@ share the collection flags.
 | `--loop` | Run forever and fetch a new checkpoint every collect interval. |
 | `--limit N` | Process only the first N players. Useful for testing. |
 
+Combine `--no-backfill --retry-window 0` to fetch only the current checkpoint.
+`scripts/start_nobackfill.sh --live-only` does this for the Compose collector.
+
 ### Web flags
 
 | Flag | Meaning | Default |

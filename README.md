@@ -26,6 +26,8 @@ checkpoint and retry recent gaps.
 
 ```sh
 ./scripts/start.sh
+./scripts/start_nobackfill.sh
+./scripts/start_nobackfill.sh --live-only
 ./scripts/stop.sh
 ./scripts/restart.sh
 ./scripts/update.sh
@@ -37,6 +39,9 @@ checkpoint and retry recent gaps.
 
 `update.sh` pulls `main` before rebuilding. `rebuild.sh` builds the current
 branch without pulling, for testing non-main branches.
+
+`start_nobackfill.sh` skips the full historical grid but keeps the recent retry
+window. Add `--live-only` to fetch only the current checkpoint.
 
 The compose file is in `docker/`. Pass `-f docker/compose.yaml` to manual compose
 commands, or `export COMPOSE_FILE=docker/compose.yaml` once per shell. The

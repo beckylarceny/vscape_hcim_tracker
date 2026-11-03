@@ -53,6 +53,27 @@ URLs:
 - priority report: <http://localhost:8000/priority/>
 - text versions: `reports/latest.txt`, `reports/status.txt`
 
+## Starting without backfill
+
+Use `start_nobackfill.sh` for a new collector that should not rebuild the full
+history:
+
+```sh
+./scripts/start_nobackfill.sh
+```
+
+This keeps the recent retry window. Failed or missed checkpoints inside that
+window are still retried.
+
+For true live-only collection, fetch only the current checkpoint:
+
+```sh
+./scripts/start_nobackfill.sh --live-only
+```
+
+Both modes start `db`, `collector` and `web`. The script selects a Compose
+override file and leaves the base `docker/compose.yaml` unchanged.
+
 ## Renaming from vscape_hcim_tracker
 
 The project and Compose project are now `vscape_tracker`. Existing data lives in
@@ -88,6 +109,8 @@ Build the new image and start the renamed project:
 
 ```sh
 ./scripts/start.sh
+./scripts/start_nobackfill.sh
+./scripts/start_nobackfill.sh --live-only
 ./scripts/stop.sh
 ./scripts/restart.sh
 ./scripts/rebuild.sh
@@ -105,7 +128,7 @@ With `COMPOSE_FILE` exported, drop the `-f` argument.
 
 Basic service commands stay in `scripts/`:
 
-- `start.sh`, `stop.sh`, `restart.sh`
+- `start.sh`, `start_nobackfill.sh`, `stop.sh`, `restart.sh`
 - `update.sh`, `rebuild.sh`
 - `logs.sh`, `ps.sh`
 
