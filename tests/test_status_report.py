@@ -290,6 +290,33 @@ class CoverageTest(unittest.TestCase):
             ],
         )
 
+    def test_density_accounts_for_bucket_width(self) -> None:
+        # A bucket wider than a day holds two or three daily checkpoints.
+        # It must not fall below the daily class when it holds only two.
+        wide = 186048  # 2.15 days, from a 646-day lookback in 300 buckets
+        self.assertEqual(
+            coverage_runs([
+                CoverageSlice(0, 50, 100),
+                CoverageSlice(wide, 50, 150),
+                CoverageSlice(2 * wide, 50, 50),
+            ], bucket_seconds=wide),
+            [
+                (0, 2, 50, "daily"),
+                (2, 1, 50, "sparse"),
+            ],
+        )
+        # Hourly and six-hour cadences keep their class in a wide bucket.
+        self.assertEqual(
+            coverage_runs([
+                CoverageSlice(0, 10, 520),
+                CoverageSlice(wide, 10, 80),
+            ], bucket_seconds=wide),
+            [
+                (0, 1, 10, "hourly"),
+                (1, 1, 10, "six-hour"),
+            ],
+        )
+
 
 class FormatTest(unittest.TestCase):
     def test_format_helpers(self) -> None:

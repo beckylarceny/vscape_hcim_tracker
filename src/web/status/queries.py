@@ -566,23 +566,30 @@ DENSITY_LABELS = {
     "sparse": "sparse checkpoints",
 }
 
+DENSITY_INTERVALS = (
+    ("hourly", 3600),
+    ("six-hour", 21600),
+    ("daily", 86400),
+)
+
 
 def coverage_density(
     coverage: CoverageSlice, bucket_seconds: int
 ) -> str:
-    """Fetch density class from checkpoints per player per day."""
+    """Fetch density class from checkpoints per player in one bucket.
+
+    Compare against the checkpoints each cadence puts in a bucket of this
+    width. A bucket holds a whole number of checkpoints, so a cadence that
+    does not divide the width can land one checkpoint short. Allow that one
+    before falling to a coarser class.
+    """
     if not coverage.players:
         return "none"
-    per_day = (
-        coverage.checkpoints / coverage.players
-        * 86400 / max(1, bucket_seconds)
-    )
-    if per_day >= 12:
-        return "hourly"
-    if per_day >= 3:
-        return "six-hour"
-    if per_day >= 1:
-        return "daily"
+    width = max(1, bucket_seconds)
+    per_player = coverage.checkpoints / coverage.players
+    for density, interval in DENSITY_INTERVALS:
+        if per_player >= width / interval - 1:
+            return density
     return "sparse"
 
 
