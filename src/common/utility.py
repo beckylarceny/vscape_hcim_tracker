@@ -64,6 +64,7 @@ DEFAULT_PRIORITY_TOP = int(_PRIORITY["top"])
 
 _WEB_DEFAULTS: dict = _WEB["defaults"]
 SPANS: dict[str, int] = dict(_WEB["spans"])
+SITE_TITLE: str = str(_WEB_DEFAULTS["site_title"])
 DEFAULT_TOP_N = int(_WEB_DEFAULTS["top_n"])
 DEFAULT_REPORT_INTERVAL_SECONDS = int(
     _WEB_DEFAULTS["report_interval_seconds"]

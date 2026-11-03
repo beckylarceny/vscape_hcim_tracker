@@ -88,6 +88,7 @@ you also update the report code.
 
 | Key | Type | Meaning |
 | --- | --- | --- |
+| `defaults.site_title` | string | Title in browser titles and every page header. |
 | `defaults.report_interval_seconds` | integer | Report rebuild interval. `0` rebuilds only at startup. |
 | `defaults.top_n` | integer | Rows per ranking table. |
 | `defaults.base_url` | string | Public URL used in RSS links. |

@@ -69,6 +69,7 @@ retention=$(to_seconds "$(ask 'priority retention (24h)' 24h)")
 priority_top=$(ask 'priority top players by overall xp' 5)
 
 echo "web" >&2
+site_title=$(ask 'site title' "vidyascape tracker")
 report=$(to_seconds "$(ask 'report interval (1m)' 1m)")
 top_n=$(ask 'ranking entries' 5)
 base_url=$(ask 'public base url' "http://localhost:8000")
@@ -103,6 +104,7 @@ sed -i \
 
 cp "$defaults/web.yaml" config/web.yaml
 sed -i \
+    -e "s|^  site_title: .*|  site_title: \"$(escape_sed "$site_title")\"|" \
     -e "s/^  report_interval_seconds: .*/  report_interval_seconds: $report/" \
     -e "s/^  top_n: .*/  top_n: $top_n/" \
     -e "s|^  base_url: .*|  base_url: \"$(escape_sed "$base_url")\"|" \

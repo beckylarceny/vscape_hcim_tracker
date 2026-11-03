@@ -124,7 +124,10 @@ class RenderTest(unittest.TestCase):
     def test_header_current_xp_and_text(self) -> None:
         page = render_player_page(fake_data())
         self.assertIn(
-            "<title>fuck jagex - vidyascape hcim xp tracker</title>", page
+            "<title>fuck jagex - vidyascape tracker</title>", page
+        )
+        self.assertIn(
+            '<header class="site">vidyascape tracker</header>', page
         )
         self.assertIn("<h1>Fuck Jagex</h1>", page)
         self.assertIn(
@@ -145,7 +148,7 @@ class RenderTest(unittest.TestCase):
 
         text = render_player_text(fake_data(), version="software version abc")
         self.assertTrue(
-            text.startswith("VIDYASCAPE HCIM XP TRACKER PLAYER REPORT\n")
+            text.startswith("VIDYASCAPE TRACKER PLAYER REPORT\n")
         )
         self.assertIn("player:             Fuck Jagex", text)
         self.assertIn("current xp:", text)

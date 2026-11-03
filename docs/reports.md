@@ -4,10 +4,15 @@ The web service writes static text and HTML files into `reports/` and serves the
 same directory over HTTP. Reports are rebuilt on a timer and are safe to read
 while being replaced.
 
-HTML pages use `vidyascape hcim xp tracker` as the site name in the browser
-title, for example `general tracking - vidyascape hcim xp tracker`. The plain-text
-reports start with `VIDYASCAPE HCIM XP TRACKER REPORT` or
-`VIDYASCAPE HCIM XP TRACKER STATUS`.
+`defaults.site_title` in `config/web.yaml` sets the site name. The default is
+`vidyascape tracker`.
+
+HTML pages show the site title in a header above the page heading. The browser
+title combines the page title and site title, for example
+`general tracking - vidyascape tracker`. The plain-text reports start with
+`VIDYASCAPE TRACKER REPORT` or `VIDYASCAPE TRACKER STATUS`.
+
+The home page heading is `home`. The site header is plain text, not a link.
 
 ## Output files
 

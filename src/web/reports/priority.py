@@ -19,10 +19,11 @@ from ...common.utility import (
 from ..render.chart import ChartData, StackedBar, chart_svg, thin
 from ..render.format import plural
 from ..render.html import (
-    SITE_NAME,
+    SITE_TITLE,
     SKILL_TAB_SCRIPT,
     atomic_write,
     esc,
+    site_header,
     skill_panel_open,
     skill_tabs_html,
     style_tag,
@@ -422,7 +423,7 @@ def render_priority_page(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{esc(data.username.lower())} priority - {SITE_NAME}</title>",
+        f"<title>{esc(data.username.lower())} priority - {SITE_TITLE}</title>",
         '<link rel="alternate" type="application/rss+xml" '
         f'title="{esc(data.username)} priority xp" href="{esc(feed_href)}">',
         f"{style_tag()}</head>",
@@ -432,6 +433,7 @@ def render_priority_page(
         '<a href="./">priority tracking</a> · '
         f'<a href="{esc(player_href)}">player page</a> · '
         '<a href="../status">status</a></p></div>',
+        site_header(),
         f"<h1>{esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}">'
         "vidyascape highscores</a></h2>",
@@ -504,12 +506,13 @@ def render_priority_index(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>priority tracking - {SITE_NAME}</title>",
+        f"<title>priority tracking - {SITE_TITLE}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
         '<a href="../general">general tracking</a> · '
         '<a href="../status">status</a></p></div>',
+        site_header(),
         "<h1>priority tracking</h1>",
         '<p class="blurb">the top 5 players by overall xp, and any players '
         "added to the priority list file, are fetched every 10 minutes. "

@@ -282,12 +282,16 @@ class WriteTest(unittest.TestCase):
             self.assertTrue(page.exists())
             self.assertTrue(feed.exists())
             self.assertTrue(index.exists())
+            page_text = page.read_text(encoding="utf-8")
             self.assertIn(
-                "alice priority - vidyascape hcim xp tracker",
-                page.read_text(encoding="utf-8"),
+                "alice priority - vidyascape tracker", page_text
             )
             self.assertIn(
-                "<title>priority tracking - vidyascape hcim xp tracker</title>",
+                '<header class="site">vidyascape tracker</header>',
+                page_text,
+            )
+            self.assertIn(
+                "<title>priority tracking - vidyascape tracker</title>",
                 index.read_text(encoding="utf-8"),
             )
             self.assertIn(

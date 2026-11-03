@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..render.html import SITE_NAME
+from ..render.html import SITE_TITLE
 from .queries import (
     FrequencyStatus,
     RunInfo,
@@ -137,7 +137,7 @@ def _coverage_labels(data: StatusData) -> list[str]:
 
 
 def render_status_text(data: StatusData) -> str:
-    lines = [f"{SITE_NAME.upper()} STATUS"]
+    lines = [f"{SITE_TITLE.upper()} STATUS"]
     lines.extend(_text_facts([("generated at", data.generated)]))
     lines.append("")
     sections = (

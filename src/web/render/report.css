@@ -55,6 +55,13 @@ body.wide {
 
 /* Headings and text blocks */
 
+.site {
+    color: #888;
+    font-size: .85rem;
+    letter-spacing: .04em;
+    margin: 0 0 .35rem;
+}
+
 h1 {
     font-size: 1.9rem;
     margin: 0 0 .35rem;

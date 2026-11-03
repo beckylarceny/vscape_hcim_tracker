@@ -695,14 +695,15 @@ class PageTest(unittest.TestCase):
                 priority_players=0,
             )
             self.assertEqual(path.name, "status.html")
+            page = path.read_text(encoding="utf-8")
             self.assertIn(
-                "vidyascape hcim xp tracker status",
-                path.read_text(encoding="utf-8"),
+                '<header class="site">vidyascape tracker</header>', page
             )
+            self.assertIn("<h1>status</h1>", page)
             text_path = Path(directory) / "status.txt"
             self.assertTrue(text_path.exists())
             text = text_path.read_text(encoding="utf-8")
-            self.assertIn("VIDYASCAPE HCIM XP TRACKER STATUS", text)
+            self.assertIn("VIDYASCAPE TRACKER STATUS", text)
             self.assertIn("RECENT RUNS", text)
             self.assertTrue(text.endswith("software version abc1234\n"))
 

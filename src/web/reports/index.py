@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..render.html import SITE_NAME, atomic_write, esc, style_tag
+from ..render.html import (
+    SITE_TITLE,
+    atomic_write,
+    esc,
+    site_header,
+    style_tag,
+)
 
 
 def render_index(
@@ -41,10 +47,11 @@ def render_index(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{SITE_NAME}</title>",
+        f"<title>{SITE_TITLE}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="home">',
-        f"<h1>{SITE_NAME}</h1>",
+        site_header(),
+        "<h1>home</h1>",
         f'<p class="meta">generated at: {esc(generated)}</p>',
         f'<p class="meta">players tracked: {player_count:,}</p>',
         f'<div class="sections">{links}</div>',

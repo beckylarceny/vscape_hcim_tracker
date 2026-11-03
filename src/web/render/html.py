@@ -9,11 +9,14 @@ from functools import lru_cache
 from pathlib import Path
 
 from ...common.storage import as_datetime
-from ...common.utility import SKILLS
+from ...common.utility import SITE_TITLE, SKILLS
 
 _CSS_PATH = Path(__file__).with_name("report.css")
 
-SITE_NAME = "vidyascape hcim xp tracker"
+
+def site_header() -> str:
+    """Site title shown above every page heading."""
+    return f'<header class="site">{esc(SITE_TITLE)}</header>'
 
 
 @lru_cache(maxsize=1)

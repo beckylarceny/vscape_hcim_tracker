@@ -129,7 +129,7 @@ class HtmlReportTest(unittest.TestCase):
         self.assertNotIn("<bob>", page)
 
         text = render_text(self.make_data())
-        self.assertTrue(text.startswith("VIDYASCAPE HCIM XP TRACKER REPORT\n"))
+        self.assertTrue(text.startswith("VIDYASCAPE TRACKER REPORT\n"))
         self.assertIn("overall", text)
         self.assertLess(text.index("  PAST"), text.index("  BEST"))
         self.assertIn("    Day (24h)", text)
@@ -156,7 +156,10 @@ class HtmlReportTest(unittest.TestCase):
         data = self.make_data()._replace(coverage_total=4)
         page = render_html(data)
         self.assertIn(
-            "<title>general tracking - vidyascape hcim xp tracker</title>", page
+            "<title>general tracking - vidyascape tracker</title>", page
+        )
+        self.assertIn(
+            '<header class="site">vidyascape tracker</header>', page
         )
         self.assertIn("generated at: 2026-01-01 00:00 UTC", page)
         self.assertNotIn("players logged", page)
@@ -235,8 +238,12 @@ class HtmlReportTest(unittest.TestCase):
             "2026-01-01 00:00 UTC", 371, 5, "software version abc"
         )
         self.assertIn(
-            "<title>vidyascape hcim xp tracker</title>", page
+            "<title>vidyascape tracker</title>", page
         )
+        self.assertIn(
+            '<header class="site">vidyascape tracker</header>', page
+        )
+        self.assertIn("<h1>home</h1>", page)
         self.assertIn('href="general"', page)
         self.assertIn('href="priority/"', page)
         self.assertIn('href="status"', page)
