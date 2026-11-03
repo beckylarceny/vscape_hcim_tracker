@@ -404,7 +404,10 @@ class PageTest(unittest.TestCase):
         self.assertIn(backlinks, page)
         self.assertLess(page.index('<div class="backlinks">'), page.index("<h1>"))
 
-        text_version = '<p class="sub"><a href="status.txt">text version</a></p>'
+        text_version = (
+            '<p class="sub"><a href="status.txt" target="_blank" '
+            'rel="noopener">text version</a></p>'
+        )
         self.assertIn(text_version, page)
         self.assertLess(page.index("<h1>"), page.index(text_version))
         self.assertLess(page.index(text_version), page.index("generated at"))
@@ -700,6 +703,11 @@ class PageTest(unittest.TestCase):
                 '<header class="site">vidyascape tracker</header>', page
             )
             self.assertIn("<h1>status</h1>", page)
+            self.assertIn(
+                '<a href="status.txt" target="_blank" rel="noopener">'
+                "text version</a>",
+                page,
+            )
             text_path = Path(directory) / "status.txt"
             self.assertTrue(text_path.exists())
             text = text_path.read_text(encoding="utf-8")

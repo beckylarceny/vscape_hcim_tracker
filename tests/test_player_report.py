@@ -131,8 +131,8 @@ class RenderTest(unittest.TestCase):
         )
         self.assertIn("<h1>Fuck Jagex</h1>", page)
         self.assertIn(
-            f'<a href="{highscores_url("Fuck Jagex")}">'
-            "Vidyascape highscores</a>",
+            f'<a href="{highscores_url("Fuck Jagex")}" '
+            'target="_blank" rel="noopener">Vidyascape highscores</a>',
             page,
         )
         link_row = re.search(
@@ -140,6 +140,7 @@ class RenderTest(unittest.TestCase):
         ).group(1)
         self.assertIn("Vidyascape highscores", link_row)
         self.assertIn("text version", link_row)
+        self.assertEqual(link_row.count('target="_blank"'), 2)
         self.assertIn("generated at: 2026-01-01 00:00 UTC", page)
         self.assertNotIn("data coverage:", page)
         self.assertNotIn('class="coverage"', page)
@@ -148,7 +149,11 @@ class RenderTest(unittest.TestCase):
             page.index("generated at:"), page.index("<h2>Current xp</h2>")
         )
         self.assertIn('href="../status"', page)
-        self.assertIn('href="Fuck_Jagex.txt">text version</a>', page)
+        self.assertIn(
+            'href="Fuck_Jagex.txt" target="_blank" rel="noopener">'
+            "text version</a>",
+            page,
+        )
         self.assertIn('class="player"', page)
 
         text = render_player_text(fake_data(), version="software version abc")
@@ -165,6 +170,7 @@ class RenderTest(unittest.TestCase):
         ).group(1)
         self.assertIn("priority report", priority_row)
         self.assertIn("text version", priority_row)
+        self.assertEqual(priority_row.count('target="_blank"'), 3)
         self.assertNotIn("priority report", page)
 
         escaped = render_player_page(fake_data(username="<bob>"))

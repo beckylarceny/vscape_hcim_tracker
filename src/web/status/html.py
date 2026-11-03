@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..render.html import (
+    NEW_TAB_ATTRS,
     SITE_TITLE,
     date,
     esc,
@@ -167,7 +168,8 @@ def render_status_page(data: StatusData) -> str:
         '<a href="priority/">priority tracking</a></p></div>',
         site_header(),
         "<h1>status</h1>",
-        '<p class="sub"><a href="status.txt">text version</a></p>',
+        f'<p class="sub"><a href="status.txt"{NEW_TAB_ATTRS}>'
+        "text version</a></p>",
         f'<p class="meta">generated at: {esc(data.generated)}</p>',
         "<h2>data coverage</h2>",
         '<p class="note">each segment is an equal slice of the lookback '

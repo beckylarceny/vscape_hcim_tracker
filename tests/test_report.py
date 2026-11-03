@@ -147,7 +147,10 @@ class HtmlReportTest(unittest.TestCase):
         page = render_html(
             data._replace(gains=gains, players=("Alice", "Fuck Jagex"))
         )
-        self.assertIn('href="players/Fuck_Jagex"', page)
+        self.assertIn(
+            'href="players/Fuck_Jagex" target="_blank" rel="noopener"',
+            page,
+        )
         self.assertIn(">Fuck Jagex</a>", page)
         self.assertIn('<option value="Alice">', page)
         self.assertIn('"fuck jagex": "players/Fuck_Jagex"', page)
@@ -178,9 +181,13 @@ class HtmlReportTest(unittest.TestCase):
             '<a href="status">status</a></p></div>'
         )
         self.assertIn(backlinks, page)
+        self.assertNotIn('target="_blank"', backlinks)
         self.assertLess(page.index('<div class="backlinks">'), page.index("<h1>"))
 
-        text_version = '<p class="sub"><a href="latest.txt">text version</a></p>'
+        text_version = (
+            '<p class="sub"><a href="latest.txt" target="_blank" '
+            'rel="noopener">text version</a></p>'
+        )
         self.assertIn(text_version, page)
         self.assertLess(page.index("<h1>"), page.index(text_version))
         self.assertLess(page.index(text_version), page.index("generated at"))
@@ -244,9 +251,15 @@ class HtmlReportTest(unittest.TestCase):
             '<header class="site">vidyascape tracker</header>', page
         )
         self.assertIn("<h1>home</h1>", page)
-        self.assertIn('href="general"', page)
-        self.assertIn('href="priority/"', page)
-        self.assertIn('href="status"', page)
+        self.assertIn(
+            'href="general" target="_blank" rel="noopener"', page
+        )
+        self.assertIn(
+            'href="priority/" target="_blank" rel="noopener"', page
+        )
+        self.assertIn(
+            'href="status" target="_blank" rel="noopener"', page
+        )
         self.assertIn("players tracked: 371", page)
         self.assertIn("software version abc", page)
 

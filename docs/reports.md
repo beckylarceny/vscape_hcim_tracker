@@ -14,6 +14,9 @@ title combines the page title and site title, for example
 
 The home page heading is `home`. The site header is plain text, not a link.
 
+Links outside the backlinks navbar open in a new tab. Backlinks and the
+scroll-to-top control stay in the current tab.
+
 ## Output files
 
 | Path | Content |

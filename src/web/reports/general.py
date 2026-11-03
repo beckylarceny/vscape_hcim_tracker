@@ -17,6 +17,7 @@ from ...common.utility import (
 )
 from ..render.format import bucket_count, hours, players_line, years_months
 from ..render.html import (
+    NEW_TAB_ATTRS,
     SITE_TITLE,
     SKILL_TAB_SCRIPT,
     date,
@@ -274,7 +275,10 @@ def render_text(data: ReportData) -> str:
 
 
 def _player_link(username: str) -> str:
-    return f'<a href="{esc(player_page_href(username))}">{esc(username)}</a>'
+    return (
+        f'<a href="{esc(player_page_href(username))}"{NEW_TAB_ATTRS}>'
+        f"{esc(username)}</a>"
+    )
 
 
 def _table(css: str, header: str, rows: list[str], colspan: int) -> str:
@@ -384,7 +388,8 @@ def render_html(data: ReportData) -> str:
         '<a href="status">status</a></p></div>',
         site_header(),
         "<h1>General Tracking</h1>",
-        '<p class="sub"><a href="latest.txt">text version</a></p>',
+        f'<p class="sub"><a href="latest.txt"{NEW_TAB_ATTRS}>'
+        "text version</a></p>",
         metas,
         _player_finder(data),
     ]

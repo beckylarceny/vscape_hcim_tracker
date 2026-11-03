@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..render.html import (
+    NEW_TAB_ATTRS,
     SITE_TITLE,
     atomic_write,
     esc,
@@ -39,7 +40,7 @@ def render_index(
         ),
     )
     links = "".join(
-        f'<a class="section" href="{esc(href)}">'
+        f'<a class="section" href="{esc(href)}"{NEW_TAB_ATTRS}>'
         f"<h2>{esc(title)}</h2><p>{esc(description)}</p></a>"
         for href, title, description in sections
     )
