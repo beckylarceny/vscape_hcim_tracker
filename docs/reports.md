@@ -92,9 +92,9 @@ gaps are compared with the smallest nearby gap, so a missed live fetch is
 flagged while a normal 24-hour backfill gap is not. Stretches that were fetched
 and had no xp change stay unshaded.
 
-Each player page links to a plain-text version at `players/<slug>.txt`. The
-text file has the same current xp, past gains, best windows and snapshot
-counts. Player pages and text files are rebuilt only when that player's stored
+Each player page shows the highscores, priority report and plain-text links in
+one row under the player name. The text version is at `players/<slug>.txt` and
+has the same current xp, past gains, best windows and snapshot counts. Player pages and text files are rebuilt only when that player's stored
 xp changes, when either file is missing, or when the priority set changes.
 Checkpoint-only changes do not rewrite inactive players.
 

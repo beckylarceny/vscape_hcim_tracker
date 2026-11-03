@@ -616,6 +616,17 @@ def render_player_page(
     is_priority: bool = False,
     version: str = "software version unknown",
 ) -> str:
+    slug = urllib.parse.quote(player_slug(data.username))
+    links = [
+        f'<a href="{esc(highscores_url(data.username))}">'
+        "Vidyascape highscores</a>"
+    ]
+    if is_priority:
+        links.append(
+            f'<a href="../priority/{esc(slug)}">priority report</a>'
+        )
+    links.append(f'<a href="{esc(slug)}.txt">text version</a>')
+
     parts: list[str] = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
@@ -629,20 +640,8 @@ def render_player_page(
         "</div>",
         site_header(),
         f"<h1>{esc(data.username)}</h1>",
-        f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}">'
-        "Vidyascape highscores</a></h2>",
-        *(
-            [
-                '<p class="priority-link"><a href="../priority/'
-                f'{urllib.parse.quote(player_slug(data.username))}">'
-                "priority report</a></p>"
-            ]
-            if is_priority else []
-        ),
+        f'<p class="sub links">{" · ".join(links)}</p>',
         f'<p class="meta">generated at: {esc(data.generated)}</p>',
-        '<p class="sub"><a href="'
-        f'{urllib.parse.quote(player_slug(data.username))}.txt">text version</a>'
-        "</p>",
         _frequency_meta(data),
         '<div class="stats">',
         "<h2>Current xp</h2>",

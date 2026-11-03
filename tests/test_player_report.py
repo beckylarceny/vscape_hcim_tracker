@@ -131,10 +131,15 @@ class RenderTest(unittest.TestCase):
         )
         self.assertIn("<h1>Fuck Jagex</h1>", page)
         self.assertIn(
-            '<h2 class="subheading"><a href="'
-            f'{highscores_url("Fuck Jagex")}">Vidyascape highscores</a></h2>',
+            f'<a href="{highscores_url("Fuck Jagex")}">'
+            "Vidyascape highscores</a>",
             page,
         )
+        link_row = re.search(
+            r'<p class="sub links">(.*?)</p>', page
+        ).group(1)
+        self.assertIn("Vidyascape highscores", link_row)
+        self.assertIn("text version", link_row)
         self.assertIn("generated at: 2026-01-01 00:00 UTC", page)
         self.assertNotIn("data coverage:", page)
         self.assertNotIn('class="coverage"', page)
@@ -155,11 +160,11 @@ class RenderTest(unittest.TestCase):
         self.assertTrue(text.endswith("software version abc\n"))
 
         priority = render_player_page(fake_data(), is_priority=True)
-        self.assertIn(
-            '<p class="priority-link"><a href="../priority/Fuck_Jagex">'
-            "priority report</a></p>",
-            priority,
-        )
+        priority_row = re.search(
+            r'<p class="sub links">(.*?)</p>', priority
+        ).group(1)
+        self.assertIn("priority report", priority_row)
+        self.assertIn("text version", priority_row)
         self.assertNotIn("priority report", page)
 
         escaped = render_player_page(fake_data(username="<bob>"))

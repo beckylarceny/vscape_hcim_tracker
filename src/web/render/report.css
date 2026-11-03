@@ -632,10 +632,6 @@ table.current {
     padding: 0;
 }
 
-.player .priority-link {
-    margin: .1rem 0 .9rem;
-}
-
 .player table.past th:nth-child(1),
 .player table.past td:nth-child(1) {
     width: 45%;
