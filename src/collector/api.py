@@ -12,16 +12,18 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any
 
-from ..common.utility import (
-    HCIM,
-    PLAYER_HIGHSCORES_URL,
-    PLAYER_TRACKER_URL,
-    SKILLS,
-)
+from ..common.accounts import ACCOUNT_FILTER_CODES, ACCOUNT_FILTER_MEMBERS
+from ..common.utility import SKILLS
 
 log = logging.getLogger(__name__)
 
 API_BASE = "https://vidyaplace.org/api"
+PLAYER_HIGHSCORES_URL = (
+    "https://vidyaplace.org/api/highscores/player/{username}"
+)
+PLAYER_TRACKER_URL = (
+    "https://vidyaplace.org/api/tracker/player/{username}?time={seconds}"
+)
 USER_AGENT = "xp-tracker/1.0"
 
 # The backend answers with 503 under concurrent load, so these are worth retrying.
@@ -106,25 +108,33 @@ def _quote(username: str) -> str:
     return urllib.parse.quote(username, safe="")
 
 
-def list_hcim_players(wait: Waiter | None = None) -> dict[str, int]:
-    """Return {username: current overall xp} for every tracked hardcore ironman."""
-    meta = _get_json(
-        f"{API_BASE}/highscores/pages/overall?ironman={HCIM}", wait=wait
-    )
-    pages = int(meta["Pages"]) if meta else 0
+def list_players(
+    account_types: tuple[str, ...], wait: Waiter | None = None
+) -> dict[str, int]:
+    """Return {username: current overall xp} for every configured account type."""
     players: dict[str, int] = {}
-    for page in range(1, pages + 1):
-        rows = _get_json(
-            f"{API_BASE}/highscores/skill/overall/{page}?ironman={HCIM}",
-            wait=wait,
+    for name in account_types:
+        code = ACCOUNT_FILTER_CODES[name]
+        accepted = ACCOUNT_FILTER_MEMBERS[name]
+        meta = _get_json(
+            f"{API_BASE}/highscores/pages/overall?ironman={code}", wait=wait
         )
-        if not rows:
-            continue
-        for row in rows:
-            if int(row.get("ironman") or 0) != HCIM:
+        pages = int(meta["Pages"]) if meta else 0
+        for page in range(1, pages + 1):
+            rows = _get_json(
+                f"{API_BASE}/highscores/skill/overall/{page}?ironman={code}",
+                wait=wait,
+            )
+            if not rows:
                 continue
-            players[row["username"]] = int(row.get("overall_xp") or 0)
-    log.info("discovered %d hardcore ironman players", len(players))
+            for row in rows:
+                if int(row.get("ironman") or 0) not in accepted:
+                    continue
+                players[row["username"]] = int(row.get("overall_xp") or 0)
+        log.info(
+            "discovered %d players for %s", len(players), name
+        )
+    log.info("discovered %d players", len(players))
     return players
 
 

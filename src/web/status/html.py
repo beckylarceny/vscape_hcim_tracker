@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from ..render.html import SITE_NAME, date, esc, style_tag, tooltip_html
+from ..render.html import (
+    NEW_TAB_ATTRS,
+    SITE_TITLE,
+    date,
+    esc,
+    site_header,
+    style_tag,
+    tooltip_html,
+)
 from .queries import (
     FrequencyStatus,
     StatusData,
@@ -152,14 +160,16 @@ def render_status_page(data: StatusData) -> str:
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>status - {SITE_NAME}</title>",
+        f"<title>status - {SITE_TITLE}</title>",
         style_tag() + "</head>",
         '<body id="top" class="status">',
         '<div class="backlinks"><p class="sub">'
         '<a href="general">general tracking</a> · '
         '<a href="priority/">priority tracking</a></p></div>',
-        f"<h1>{SITE_NAME} status</h1>",
-        '<p class="sub"><a href="status.txt">text version</a></p>',
+        site_header(),
+        "<h1>status</h1>",
+        f'<p class="sub"><a href="status.txt"{NEW_TAB_ATTRS}>'
+        "text version</a></p>",
         f'<p class="meta">generated at: {esc(data.generated)}</p>',
         "<h2>data coverage</h2>",
         '<p class="note">each segment is an equal slice of the lookback '

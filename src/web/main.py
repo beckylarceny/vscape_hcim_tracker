@@ -16,7 +16,7 @@ from .reporting import (
 )
 from .server import start_server
 
-log = logging.getLogger("vscape_hcim_tracker.web")
+log = logging.getLogger("vscape_tracker.web")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.dsn:
         log.error(
             "no database configured: pass --dsn or set "
-            "VSCAPE_HCIM_TRACKER_DSN / PGHOST"
+            "VSCAPE_TRACKER_DSN / PGHOST"
         )
         return 2
 

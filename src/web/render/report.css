@@ -55,6 +55,13 @@ body.wide {
 
 /* Headings and text blocks */
 
+.site {
+    color: #888;
+    font-size: .85rem;
+    letter-spacing: .04em;
+    margin: 0 0 .35rem;
+}
+
 h1 {
     font-size: 1.9rem;
     margin: 0 0 .35rem;
@@ -623,10 +630,6 @@ table.current {
     margin: .2rem 0 .8rem;
     border: 0;
     padding: 0;
-}
-
-.player .priority-link {
-    margin: .1rem 0 .9rem;
 }
 
 .player table.past th:nth-child(1),

@@ -13,7 +13,7 @@ from .priority import start_priority_thread
 from .rate import RateLimiter
 from .run import run_once
 
-log = logging.getLogger("vscape_hcim_tracker.collector")
+log = logging.getLogger("vscape_tracker.collector")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.dsn:
         log.error(
             "no database configured: pass --dsn or set "
-            "VSCAPE_HCIM_TRACKER_DSN / PGHOST"
+            "VSCAPE_TRACKER_DSN / PGHOST"
         )
         return 2
 

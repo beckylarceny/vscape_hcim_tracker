@@ -1,7 +1,7 @@
-name: vscape_hcim_tracker
+name: vscape_tracker
 
 x-app: &app
-  image: vscape_hcim_tracker-app:latest
+  image: vscape_tracker-app:latest
   pull_policy: never
   build:
     context: ..
@@ -12,10 +12,10 @@ x-app: &app
     PGUSER: ${POSTGRES_USER:-xp_tracker}
     PGPASSWORD: ${POSTGRES_PASSWORD}
     PGDATABASE: ${POSTGRES_DB:-xp_tracker}
-    VSCAPE_HCIM_TRACKER_LOG_LEVEL: ${VSCAPE_HCIM_TRACKER_LOG_LEVEL:-INFO}
-    VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS: ${VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS:-}
-    VSCAPE_HCIM_TRACKER_BASE_URL: ${VSCAPE_HCIM_TRACKER_BASE_URL:-http://localhost:8000}
-    VSCAPE_HCIM_TRACKER_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-vscape_hcim_tracker}
+    VSCAPE_TRACKER_LOG_LEVEL: ${VSCAPE_TRACKER_LOG_LEVEL:-INFO}
+    VSCAPE_TRACKER_PRIORITY_PLAYERS: ${VSCAPE_TRACKER_PRIORITY_PLAYERS:-}
+    VSCAPE_TRACKER_BASE_URL: ${VSCAPE_TRACKER_BASE_URL:-http://localhost:8000}
+    VSCAPE_TRACKER_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-vscape_tracker}
   depends_on:
     db:
       condition: service_healthy
@@ -59,7 +59,7 @@ services:
       - --rate
       - "4"
       - --log-level
-      - ${VSCAPE_HCIM_TRACKER_LOG_LEVEL:-INFO}
+      - ${VSCAPE_TRACKER_LOG_LEVEL:-INFO}
     volumes:
       - ../config:/app/config:ro
     stop_grace_period: 30s
@@ -79,7 +79,7 @@ services:
       - --report-interval
       - 1m
       - --log-level
-      - ${VSCAPE_HCIM_TRACKER_LOG_LEVEL:-INFO}
+      - ${VSCAPE_TRACKER_LOG_LEVEL:-INFO}
     volumes:
       - ../config:/app/config:ro
       - ../reports:/app/reports

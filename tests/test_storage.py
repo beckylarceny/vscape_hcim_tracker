@@ -1,4 +1,4 @@
-"""Database tests. Skipped unless VSCAPE_HCIM_TRACKER_TEST_DSN points at a disposable DB."""
+"""Database tests. Skipped unless VSCAPE_TRACKER_TEST_DSN points at a disposable DB."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from src.common.utility import SKILLS, build_dsn
 from src.web import reporting
 from src.web.reports import general as report
 
-DSN = os.environ.get("VSCAPE_HCIM_TRACKER_TEST_DSN") or build_dsn(
+DSN = os.environ.get("VSCAPE_TRACKER_TEST_DSN") or build_dsn(
     "xp_tracker_test"
 )
 T1 = 1_700_000_000
@@ -21,7 +21,7 @@ T2 = T1 + 86400
 
 def connect_or_skip():
     if not DSN:
-        raise unittest.SkipTest("set VSCAPE_HCIM_TRACKER_TEST_DSN to run database tests")
+        raise unittest.SkipTest("set VSCAPE_TRACKER_TEST_DSN to run database tests")
     try:
         conn = storage.connect(DSN)
     except Exception as error:  # noqa: BLE001 - missing server means skip
@@ -40,7 +40,7 @@ class DatabaseTest(unittest.TestCase):
         )
         self.conn.commit()
 
-    def add_player(self, username: str = "alice", ironman: int = 1) -> None:
+    def add_player(self, username: str = "alice", ironman: int = 2) -> None:
         storage.upsert_players(self.conn, [(username, ironman)])
 
     def add_snapshot(
@@ -98,6 +98,14 @@ class PlayerTest(DatabaseTest):
             storage.canonical_username(self.conn, "cojultad"), "Cojultad"
         )
         self.assertIsNone(storage.canonical_username(self.conn, "nobody"))
+        self.assertEqual(
+            set(storage.players_with_codes(self.conn, [2])),
+            {"Cojultad", "bob"},
+        )
+        self.assertEqual(
+            storage.players_with_codes(self.conn, [1, 3]), ["alice"]
+        )
+        self.assertEqual(storage.players_with_codes(self.conn, []), [])
 
 
 class SnapshotTest(DatabaseTest):
@@ -157,6 +165,17 @@ class SnapshotTest(DatabaseTest):
             {"alice": 200, "bob": 50},
         )
 
+        self.add_player("carol", 1)
+        self.add_snapshot("carol", "overall", T2, 999)
+        self.assertEqual(
+            storage.top_players_by_xp(self.conn, "overall", 2, [2]),
+            ["alice", "bob"],
+        )
+        self.assertEqual(
+            storage.top_players_by_xp(self.conn, "overall", 2, [1]),
+            ["carol"],
+        )
+
         storage.insert_checkpoints(self.conn, "alice", [T1, T2])
         storage.insert_checkpoints(self.conn, "bob", [T1])
         buckets = storage.coverage_buckets(self.conn, T1, T2, 2)
@@ -164,7 +183,10 @@ class SnapshotTest(DatabaseTest):
         self.assertEqual(buckets[1], storage.CoverageSlice(T2, 1, 1))
 
         by_skill = storage.xp_by_skill_at_or_before(self.conn, T2)
-        self.assertEqual(by_skill["overall"], {"alice": 200, "bob": 50})
+        self.assertEqual(
+            by_skill["overall"],
+            {"alice": 200, "bob": 50, "carol": 999},
+        )
         self.assertEqual(by_skill["attack"], {"alice": 50})
         self.assertEqual(
             storage.latest_xp_by_skill_many(self.conn, ["alice", "bob"]),
@@ -194,6 +216,13 @@ class PriorityStorageTest(DatabaseTest):
         self.assertEqual(
             storage.priority_snapshot_players(self.conn), ["alice", "bob"]
         )
+        self.assertEqual(
+            storage.priority_snapshot_players(self.conn, [2]),
+            ["alice", "bob"],
+        )
+        self.assertEqual(
+            storage.priority_snapshot_players(self.conn, [1]), []
+        )
 
         storage.prune_priority_data(self.conn, T2)
         snapshots = self.conn.execute(
@@ -218,14 +247,14 @@ class ReportTest(DatabaseTest):
         self.add_snapshot("alice", "overall", T2, 200)
         after = reporting._player_watermarks(self.conn)
         self.assertNotEqual(after, before)
-        self.assertEqual(after["alice"][0], 2)
+        self.assertEqual(after["alice"][1], 2)
 
         storage.insert_priority_snapshots(
             self.conn, [("alice", "overall", storage.as_datetime(T1), 300)]
         )
         priority = reporting._player_watermarks(self.conn)
         self.assertNotEqual(priority, after)
-        self.assertEqual(priority["alice"][2], 1)
+        self.assertEqual(priority["alice"][3], 1)
 
         now = 1_800_000_000
         self.add_player("alice")

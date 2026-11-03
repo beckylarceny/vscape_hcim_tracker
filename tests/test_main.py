@@ -15,16 +15,22 @@ from src.collector import priority as collector_priority
 from src.collector.grid import build_grid
 from src.collector.rate import RateLimiter
 from src.common import priority as common_priority
+from src.common.accounts import (
+    ACCOUNT_FILTER_CODES,
+    parse_account_types,
+    tracked_codes,
+)
 from src.common.priority import refresh_priority_players
 from src.common.utility import (
     DATA_START_EPOCH,
-    HCIM,
     CONFIG_DIR_ENV,
     SKILLS,
     build_dsn,
     effective_lookback,
     parse_priority_players,
 )
+
+HARDCORE = ACCOUNT_FILTER_CODES["HARDCORE_IRONMAN"]
 
 COLLECT = 6 * 3600
 DAY = 24 * 3600
@@ -62,6 +68,56 @@ class GridTest(unittest.TestCase):
             NOW + COLLECT, DAY, COLLECT, 365 * DAY, 7 * DAY, True
         )
         self.assertIn(current, later)
+
+
+class AccountTypesTest(unittest.TestCase):
+    def test_configured_codes_and_validation(self) -> None:
+        self.assertEqual(
+            parse_account_types([" HARDCORE_IRONMAN ", "HARDCORE_IRONMAN"]),
+            ("HARDCORE_IRONMAN",),
+        )
+        self.assertEqual(
+            tracked_codes(["HARDCORE_IRONMAN"]), frozenset({2})
+        )
+        self.assertEqual(
+            tracked_codes(["ALL_IRONMAN"]), frozenset({1, 3})
+        )
+        self.assertEqual(
+            tracked_codes(["NOFILTER"]), frozenset({0, 1, 2, 3})
+        )
+        self.assertEqual(
+            tracked_codes(["ALL_IRONMAN", "HARDCORE_IRONMAN"]),
+            frozenset({1, 2, 3}),
+        )
+        with self.assertRaises(ValueError):
+            parse_account_types(["UNKNOWN"])
+
+    def test_discovery_uses_the_configured_filters(self) -> None:
+        rows = {
+            1: [
+                {"username": "regular", "ironman": 1, "overall_xp": 10},
+                {"username": "hardcore", "ironman": 2, "overall_xp": 20},
+                {"username": "ultimate", "ironman": 3, "overall_xp": 30},
+            ],
+            2: [
+                {"username": "hardcore", "ironman": 2, "overall_xp": 20},
+            ],
+        }
+
+        def get_json(url, wait=None):
+            if "/pages/overall" in url:
+                return {"Pages": 1}
+            code = int(url.rsplit("ironman=", 1)[1])
+            return rows[code]
+
+        with patch.object(api, "_get_json", side_effect=get_json):
+            players = api.list_players(
+                ("ALL_IRONMAN", "HARDCORE_IRONMAN")
+            )
+
+        self.assertEqual(
+            players, {"regular": 10, "hardcore": 20, "ultimate": 30}
+        )
 
 
 class RateLimiterTest(unittest.TestCase):
@@ -142,13 +198,13 @@ class CollectAllTest(unittest.TestCase):
         stats, upsert, insert, pairs = self.run_collect(
             ["alice", "bob"],
             [T2, T1],
-            lambda name: (HCIM, xp(1000)),
+            lambda name: (HARDCORE, xp(1000)),
             lambda name, timestamp: xp(10),
         )
         self.assertEqual(stats["players"], 2)
         self.assertEqual(stats["rows"], 2 * len(SKILLS))
         upsert.assert_called_once_with(
-            self.conn, [("alice", HCIM), ("bob", HCIM)]
+            self.conn, [("alice", HARDCORE), ("bob", HARDCORE)]
         )
         self.assertEqual(
             self.calls,
@@ -159,6 +215,20 @@ class CollectAllTest(unittest.TestCase):
             [[("alice", T2), ("bob", T2)], [("alice", T1), ("bob", T1)]],
         )
 
+    def test_configured_account_codes_are_collected(self) -> None:
+        with patch.object(
+            collection, "TRACKED_ACCOUNT_CODES", frozenset({1, 2})
+        ):
+            stats, upsert, insert, pairs = self.run_collect(
+                ["alice"],
+                [T2],
+                lambda name: (1, xp(1000)),
+                lambda name, timestamp: xp(10),
+            )
+        self.assertEqual(stats["players"], 1)
+        upsert.assert_called_once_with(self.conn, [("alice", 1)])
+        self.assertEqual(pairs.call_args.args[1], [("alice", T2)])
+
     def test_failures_storage_and_skipped_fetches(self) -> None:
         def fetch_xp(name):
             if name == "bob":
@@ -167,7 +237,7 @@ class CollectAllTest(unittest.TestCase):
                 raise api.ApiError("503")
             if name == "dave":
                 return (1, xp(1000))
-            return (HCIM, xp(1000))
+            return (HARDCORE, xp(1000))
 
         stats, upsert, insert, pairs = self.run_collect(
             ["alice", "bob", "carol", "dave"],
@@ -177,7 +247,9 @@ class CollectAllTest(unittest.TestCase):
         )
         self.assertEqual(stats["players"], 1)
         self.assertEqual(stats["failures"], 2)
-        upsert.assert_called_once_with(self.conn, [("alice", HCIM)])
+        upsert.assert_called_once_with(
+            self.conn, [("alice", HARDCORE), ("dave", 1)]
+        )
         self.assertEqual(self.calls, [("alice", T2)])
         self.assertEqual(pairs.call_args.args[1], [("alice", T2)])
 
@@ -185,7 +257,7 @@ class CollectAllTest(unittest.TestCase):
         stats, _, insert, pairs = self.run_collect(
             ["alice"],
             [T2],
-            lambda name: (HCIM, xp(1000)),
+            lambda name: (HARDCORE, xp(1000)),
             lambda name, timestamp: xp(0),
             last={"alice": xp(1000)},
         )
@@ -197,7 +269,7 @@ class CollectAllTest(unittest.TestCase):
         stats, _, insert, _ = self.run_collect(
             ["alice"],
             [T2],
-            lambda name: (HCIM, xp(1000)),
+            lambda name: (HARDCORE, xp(1000)),
             lambda name, timestamp: {**xp(0), "overall": 5},
             last={"alice": xp(1000)},
         )
@@ -216,7 +288,7 @@ class CollectAllTest(unittest.TestCase):
         stats, _, insert, pairs = self.run_collect(
             ["alice"],
             [T2, T1],
-            lambda name: (HCIM, xp(1000)),
+            lambda name: (HARDCORE, xp(1000)),
             gains,
         )
         self.assertEqual(stats["failures"], 1)
@@ -229,7 +301,7 @@ class CollectAllTest(unittest.TestCase):
         stats, _, _, pairs = self.run_collect(
             ["alice", "bob"],
             [T2],
-            lambda name: (HCIM, xp(1000)),
+            lambda name: (HARDCORE, xp(1000)),
             lambda name, timestamp: xp(10),
             done={"alice": {T2}},
         )
@@ -254,7 +326,10 @@ class RunOnceTest(unittest.TestCase):
         with patch.object(run.storage, "connect", return_value=conn), \
                 patch.object(run.storage, "ensure_schema"), \
                 patch.object(
-                    run.api, "list_hcim_players", return_value={"a": 1}
+                    run.api, "list_players", return_value={"a": 1}
+                ), \
+                patch.object(
+                    run.storage, "players_with_codes", return_value=[]
                 ), \
                 patch.object(run, "collect_all", return_value=totals) as collect, \
                 patch.object(run.storage, "start_run", return_value=1), \
@@ -269,7 +344,7 @@ class DsnTest(unittest.TestCase):
     def test_dsn_precedence_and_encoding(self) -> None:
         with patch.dict(
             os.environ,
-            {"VSCAPE_HCIM_TRACKER_DSN": "postgresql:///x"},
+            {"VSCAPE_TRACKER_DSN": "postgresql:///x"},
             clear=True,
         ):
             self.assertEqual(build_dsn(), "postgresql:///x")
@@ -293,7 +368,7 @@ class DsnTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "VSCAPE_HCIM_TRACKER_DSN": "postgresql:///main",
+                "VSCAPE_TRACKER_DSN": "postgresql:///main",
                 "PGHOST": "db",
                 "PGUSER": "u",
                 "PGPASSWORD": "p@ss",
@@ -332,7 +407,7 @@ class PriorityListTest(unittest.TestCase):
 
         with patch.dict(
             os.environ,
-            {"VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS": "x, y"},
+            {"VSCAPE_TRACKER_PRIORITY_PLAYERS": "x, y"},
         ):
             self.assertEqual(parse_priority_players(None), ("x", "y"))
 
@@ -414,7 +489,7 @@ class PriorityCollectTest(unittest.TestCase):
 
     def test_priority_collection_and_pruning(self) -> None:
         stats, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)), [xp(100)]
+            (HARDCORE, xp(1000)), [xp(100)]
         )
         self.assertEqual(stats["players"], 1)
         self.assertEqual(stats["rows"], len(SKILLS))
@@ -422,7 +497,7 @@ class PriorityCollectTest(unittest.TestCase):
         self.assertEqual(checkpoints.call_args.args[2], [T1])
 
         stats, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)), [xp(100)], canonical="Cojultad"
+            (HARDCORE, xp(1000)), [xp(100)], canonical="Cojultad"
         )
         self.assertTrue(
             all(row[0] == "Cojultad" for row in insert.call_args.args[1])
@@ -430,7 +505,7 @@ class PriorityCollectTest(unittest.TestCase):
         self.assertEqual(checkpoints.call_args.args[1], "Cojultad")
 
         stats, insert, checkpoints = self.collect(
-            (HCIM, xp(1000)), [xp(0)], last_xp=xp(1000)
+            (HARDCORE, xp(1000)), [xp(0)], last_xp=xp(1000)
         )
         self.assertEqual(stats["rows"], 0)
         insert.assert_not_called()

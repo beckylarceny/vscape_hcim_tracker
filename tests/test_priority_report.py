@@ -224,7 +224,8 @@ class PageTest(unittest.TestCase):
         self.assertIn(f'<footer class="version">{version}</footer>', tagged)
         self.assertLess(tagged.index('class="to-top"'), tagged.index(version))
         self.assertIn(
-            '<h2 class="subheading"><a href="alice.xml">rss feed</a></h2>',
+            '<h2 class="subheading"><a href="alice.xml" target="_blank" '
+            'rel="noopener">rss feed</a></h2>',
             page,
         )
         self.assertIn('href="../players/alice"', page)
@@ -282,13 +283,32 @@ class WriteTest(unittest.TestCase):
             self.assertTrue(page.exists())
             self.assertTrue(feed.exists())
             self.assertTrue(index.exists())
+            page_text = page.read_text(encoding="utf-8")
             self.assertIn(
-                "alice priority - vidyascape hcim xp tracker",
-                page.read_text(encoding="utf-8"),
+                "alice priority - vidyascape tracker", page_text
             )
             self.assertIn(
-                "<title>priority tracking - vidyascape hcim xp tracker</title>",
-                index.read_text(encoding="utf-8"),
+                '<header class="site">vidyascape tracker</header>',
+                page_text,
+            )
+            self.assertIn(
+                'href="alice.xml" target="_blank" rel="noopener"',
+                page_text,
+            )
+            self.assertIn(
+                '<a href="../players/alice">player page</a>', page_text
+            )
+            index_text = index.read_text(encoding="utf-8")
+            self.assertIn(
+                "<title>priority tracking - vidyascape tracker</title>",
+                index_text,
+            )
+            self.assertIn(
+                'href="alice" target="_blank" rel="noopener"', index_text
+            )
+            self.assertIn(
+                'href="alice.xml" target="_blank" rel="noopener"',
+                index_text,
             )
             self.assertIn(
                 "the top 5 players by overall xp",

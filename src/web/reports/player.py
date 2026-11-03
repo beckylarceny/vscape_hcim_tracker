@@ -28,11 +28,13 @@ from ..render.chart import (
 )
 from ..render.format import frequency_name, years_months
 from ..render.html import (
-    SITE_NAME,
+    NEW_TAB_ATTRS,
+    SITE_TITLE,
     SKILL_TAB_SCRIPT,
     date,
     esc,
     num,
+    site_header,
     skill_panel_open,
     skill_tabs_html,
     style_tag,
@@ -570,7 +572,7 @@ def render_player_text(
     version: str = "software version unknown",
 ) -> str:
     """Plain-text player report with the same values as the HTML page."""
-    lines = [f"{SITE_NAME.upper()} PLAYER REPORT", ""]
+    lines = [f"{SITE_TITLE.upper()} PLAYER REPORT", ""]
     lines.append(f"{'player:':<20}{data.username}")
     lines.append(f"{'generated at:':<20}{data.generated}")
     lines.append(f"{'lookback:':<20}{years_months(data.lookback)}")
@@ -615,32 +617,35 @@ def render_player_page(
     is_priority: bool = False,
     version: str = "software version unknown",
 ) -> str:
+    slug = urllib.parse.quote(player_slug(data.username))
+    links = [
+        f'<a href="{esc(highscores_url(data.username))}"{NEW_TAB_ATTRS}>'
+        "Vidyascape highscores</a>"
+    ]
+    if is_priority:
+        links.append(
+            f'<a href="../priority/{esc(slug)}"{NEW_TAB_ATTRS}>'
+            "priority report</a>"
+        )
+    links.append(
+        f'<a href="{esc(slug)}.txt"{NEW_TAB_ATTRS}>text version</a>'
+    )
+
     parts: list[str] = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{esc(data.username.lower())} - {SITE_NAME}</title>",
+        f"<title>{esc(data.username.lower())} - {SITE_TITLE}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="player">',
         '<div class="backlinks">'
         '<p class="sub"><a href="../general">general tracking</a> · '
         '<a href="../status">status</a></p>'
         "</div>",
+        site_header(),
         f"<h1>{esc(data.username)}</h1>",
-        f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}">'
-        "Vidyascape highscores</a></h2>",
-        *(
-            [
-                '<p class="priority-link"><a href="../priority/'
-                f'{urllib.parse.quote(player_slug(data.username))}">'
-                "priority report</a></p>"
-            ]
-            if is_priority else []
-        ),
+        f'<p class="sub links">{" · ".join(links)}</p>',
         f'<p class="meta">generated at: {esc(data.generated)}</p>',
-        '<p class="sub"><a href="'
-        f'{urllib.parse.quote(player_slug(data.username))}.txt">text version</a>'
-        "</p>",
         _frequency_meta(data),
         '<div class="stats">',
         "<h2>Current xp</h2>",

@@ -18,7 +18,7 @@ config/
     db.yaml
 ```
 
-`VSCAPE_HCIM_TRACKER_CONFIG_DIR` replaces the whole directory. Relative overrides
+`VSCAPE_TRACKER_CONFIG_DIR` replaces the whole directory. Relative overrides
 are resolved from the process working directory, so an absolute path is safer in
 containers.
 
@@ -41,9 +41,7 @@ restart.
 | Key | Type | Meaning |
 | --- | --- | --- |
 | `skills` | list of strings | Skills stored and reported. `overall` is included. |
-| `account_filter_codes` | mapping | Named ironman codes. `HARDCORE_IRONMAN` must be `2`. |
-| `urls.player_highscores` | string | Current xp URL. Supports `{username}`. |
-| `urls.player_tracker` | string | Gained xp URL. Supports `{username}` and `{seconds}`. |
+| `account_types` | list of strings | Account filters to track. Default `HARDCORE_IRONMAN`. |
 | `defaults.interval_seconds` | integer | Coarse backfill step. |
 | `defaults.collect_interval_seconds` | integer | Live collection step. |
 | `defaults.retry_window_seconds` | integer | Recent window always rechecked. |
@@ -59,6 +57,28 @@ The shipped defaults are 24-hour backfill, 1-hour live collection, 7-day retry
 window, 2 workers, 4 requests per second, 10-minute priority interval, 24-hour
 priority retention and the top 5 overall players.
 
+`account_types` accepts these names:
+
+| Name | API filter | Accepted account codes |
+| --- | --- | --- |
+| `NOFILTER` | `0` | `0, 1, 2, 3` |
+| `ALL_IRONMAN` | `1` | `1, 3` |
+| `HARDCORE_IRONMAN` | `2` | `2` |
+| `ULTIMATE_IRONMAN` | `3` | `3` |
+
+Multiple names are combined. Every fetched player is re-checked against the
+configured set, so a de-ironed player stops being collected. The stored account
+type is refreshed on every successful fetch. Reports show only players whose
+stored type is still configured.
+
+Example:
+
+```yaml
+account_types:
+  - HARDCORE_IRONMAN
+  - ULTIMATE_IRONMAN
+```
+
 The priority scheduler and pruning use `priority.interval_seconds` and
 `priority.retention_seconds` from the loaded config. Report labels and the feed
 event cap still assume 10 minutes and 24 hours. Keep the default values unless
@@ -68,6 +88,7 @@ you also update the report code.
 
 | Key | Type | Meaning |
 | --- | --- | --- |
+| `defaults.site_title` | string | Title in browser titles and every page header. |
 | `defaults.report_interval_seconds` | integer | Report rebuild interval. `0` rebuilds only at startup. |
 | `defaults.top_n` | integer | Rows per ranking table. |
 | `defaults.base_url` | string | Public URL used in RSS links. |
@@ -97,18 +118,18 @@ In Compose, `PGHOST=db` and the other `PG*` variables override these values.
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
-| `VSCAPE_HCIM_TRACKER_CONFIG_DIR` | all services | Replace the config directory. |
-| `VSCAPE_HCIM_TRACKER_DSN` | collector, web, db | Full PostgreSQL connection string. |
+| `VSCAPE_TRACKER_CONFIG_DIR` | all services | Replace the config directory. |
+| `VSCAPE_TRACKER_DSN` | collector, web, db | Full PostgreSQL connection string. |
 | `PGHOST` | all services | PostgreSQL host. |
 | `PGPORT` | all services | PostgreSQL port. |
 | `PGUSER` | all services | PostgreSQL user. |
 | `PGPASSWORD` | all services | PostgreSQL password. |
 | `PGDATABASE` | all services | PostgreSQL database. |
-| `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS` | collector, web | Comma-separated priority players. |
-| `VSCAPE_HCIM_TRACKER_BASE_URL` | web | Public base URL for RSS links. |
-| `VSCAPE_HCIM_TRACKER_DOCKER_SOCKET` | web | Docker socket path for the status page. |
-| `VSCAPE_HCIM_TRACKER_COMPOSE_PROJECT` | web | Compose project name fallback for container listing. |
-| `VSCAPE_HCIM_TRACKER_TEST_DSN` | tests | Disposable database for database tests. |
+| `VSCAPE_TRACKER_PRIORITY_PLAYERS` | collector, web | Comma-separated priority players. |
+| `VSCAPE_TRACKER_BASE_URL` | web | Public base URL for RSS links. |
+| `VSCAPE_TRACKER_DOCKER_SOCKET` | web | Docker socket path for the status page. |
+| `VSCAPE_TRACKER_COMPOSE_PROJECT` | web | Compose project name fallback for container listing. |
+| `VSCAPE_TRACKER_TEST_DSN` | tests | Disposable database for database tests. |
 
 Compose also reads these from `docker/.env` for interpolation:
 
@@ -117,10 +138,10 @@ Compose also reads these from `docker/.env` for interpolation:
 | `POSTGRES_PASSWORD` | Required database password. |
 | `POSTGRES_DB` | Database name, default `xp_tracker`. |
 | `POSTGRES_USER` | Database user, default `xp_tracker`. |
-| `COMPOSE_PROJECT_NAME` | Compose project name, default `vscape_hcim_tracker`. |
-| `VSCAPE_HCIM_TRACKER_LOG_LEVEL` | Service log level. |
-| `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS` | Priority players passed to both services. |
-| `VSCAPE_HCIM_TRACKER_BASE_URL` | Base URL passed to the web service. |
+| `COMPOSE_PROJECT_NAME` | Compose project name, default `vscape_tracker`. |
+| `VSCAPE_TRACKER_LOG_LEVEL` | Service log level. |
+| `VSCAPE_TRACKER_PRIORITY_PLAYERS` | Priority players passed to both services. |
+| `VSCAPE_TRACKER_BASE_URL` | Base URL passed to the web service. |
 
 `POSTGRES_PASSWORD` only initializes the `pgdata` volume. Changing it later does
 not change the database role. See [Operations](operations.md#password-rotation).
@@ -134,7 +155,7 @@ share the collection flags.
 
 | Flag | Meaning | Default |
 | --- | --- | --- |
-| `--dsn` | PostgreSQL connection string. | `VSCAPE_HCIM_TRACKER_DSN` or `PG*` / `db.yaml`. |
+| `--dsn` | PostgreSQL connection string. | `VSCAPE_TRACKER_DSN` or `PG*` / `db.yaml`. |
 | `--interval` | Coarse backfill step. | `24h` |
 | `--collect-interval` | Live collection step. | `1h` |
 | `--retry-window` | Recent window always rechecked. | `7d` |
@@ -151,6 +172,9 @@ share the collection flags.
 | `--no-backfill` | Only fetch the retry window. |
 | `--loop` | Run forever and fetch a new checkpoint every collect interval. |
 | `--limit N` | Process only the first N players. Useful for testing. |
+
+Combine `--no-backfill --retry-window 0` to fetch only the current checkpoint.
+`scripts/start_nobackfill.sh --live-only` does this for the Compose collector.
 
 ### Web flags
 
@@ -201,13 +225,13 @@ date.
 
 ## Precedence
 
-- DSN: `--dsn`, then `VSCAPE_HCIM_TRACKER_DSN`, then `PG*` variables and
+- DSN: `--dsn`, then `VSCAPE_TRACKER_DSN`, then `PG*` variables and
   `db.yaml`.
 - Priority players: `--priority`, then
-  `VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS`, then `collector.yaml`.
-- Base URL: `--base-url`, then `VSCAPE_HCIM_TRACKER_BASE_URL`, then
+  `VSCAPE_TRACKER_PRIORITY_PLAYERS`, then `collector.yaml`.
+- Base URL: `--base-url`, then `VSCAPE_TRACKER_BASE_URL`, then
   `web.yaml`.
-- Config directory: `VSCAPE_HCIM_TRACKER_CONFIG_DIR`, then `config/`.
+- Config directory: `VSCAPE_TRACKER_CONFIG_DIR`, then `config/`.
 
 Compose passes environment values into the containers. A command-line flag set
 in `docker/compose.yaml` wins over the environment-derived default.

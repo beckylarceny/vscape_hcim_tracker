@@ -56,6 +56,7 @@ escape_sed() {
 }
 
 echo "collector" >&2
+account_types=$(ask 'account types, comma separated' HARDCORE_IRONMAN)
 interval=$(to_seconds "$(ask 'backfill interval (24h)' 24h)")
 collect=$(to_seconds "$(ask 'live interval (1h)' 1h)")
 retry=$(to_seconds "$(ask 'retry window (7d)' 7d)")
@@ -68,6 +69,7 @@ retention=$(to_seconds "$(ask 'priority retention (24h)' 24h)")
 priority_top=$(ask 'priority top players by overall xp' 5)
 
 echo "web" >&2
+site_title=$(ask 'site title' "vidyascape tracker")
 report=$(to_seconds "$(ask 'report interval (1m)' 1m)")
 top_n=$(ask 'ranking entries' 5)
 base_url=$(ask 'public base url' "http://localhost:8000")
@@ -83,9 +85,11 @@ if [ "$players" = "none" ] || [ -z "$players" ]; then
 else
     players_yaml="[$(printf '%s' "$players" | sed 's/, */, /g')]"
 fi
+account_yaml="[$(printf '%s' "$account_types" | sed 's/, */, /g')]"
 
 cp "$defaults/collector.yaml" config/collector.yaml
 sed -i \
+    -e "s/^account_types: .*/account_types: $account_yaml/" \
     -e "/^defaults:/,/^priority:/ s/^  interval_seconds: .*/  interval_seconds: $interval/" \
     -e "/^defaults:/,/^priority:/ s/^  collect_interval_seconds: .*/  collect_interval_seconds: $collect/" \
     -e "/^defaults:/,/^priority:/ s/^  retry_window_seconds: .*/  retry_window_seconds: $retry/" \
@@ -100,6 +104,7 @@ sed -i \
 
 cp "$defaults/web.yaml" config/web.yaml
 sed -i \
+    -e "s|^  site_title: .*|  site_title: \"$(escape_sed "$site_title")\"|" \
     -e "s/^  report_interval_seconds: .*/  report_interval_seconds: $report/" \
     -e "s/^  top_n: .*/  top_n: $top_n/" \
     -e "s|^  base_url: .*|  base_url: \"$(escape_sed "$base_url")\"|" \

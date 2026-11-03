@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from . import storage
-from .utility import DEFAULT_PRIORITY_TOP, parse_priority_players
+from .utility import (
+    DEFAULT_PRIORITY_TOP,
+    TRACKED_ACCOUNT_CODES,
+    parse_priority_players,
+)
 
 
 def refresh_priority_players(args) -> None:
@@ -19,7 +23,9 @@ def tracked_priority_names(
     """Top players by overall xp plus the manual list, in stored spelling."""
     names: list[str] = []
     candidates = list(
-        storage.top_players_by_xp(conn, "overall", DEFAULT_PRIORITY_TOP)
+        storage.top_players_by_xp(
+            conn, "overall", DEFAULT_PRIORITY_TOP, TRACKED_ACCOUNT_CODES
+        )
     )
     candidates.extend(players)
     for username in candidates:
@@ -34,7 +40,9 @@ def priority_index_names(
 ) -> tuple[str, ...]:
     """Tracked players plus anyone still holding unpruned priority rows."""
     names = list(tracked_priority_names(conn, players))
-    for username in storage.priority_snapshot_players(conn):
+    for username in storage.priority_snapshot_players(
+        conn, TRACKED_ACCOUNT_CODES
+    ):
         if username not in names:
             names.append(username)
     return tuple(names)

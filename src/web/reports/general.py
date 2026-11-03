@@ -9,13 +9,20 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from ...common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
+from ...common.utility import (
+    DEFAULT_PRIORITY_INTERVAL_SECONDS,
+    SKILLS,
+    SPANS,
+    TRACKED_ACCOUNT_CODES,
+)
 from ..render.format import bucket_count, hours, players_line, years_months
 from ..render.html import (
-    SITE_NAME,
+    NEW_TAB_ATTRS,
+    SITE_TITLE,
     SKILL_TAB_SCRIPT,
     date,
     esc,
+    site_header,
     skill_panel_open,
     skill_tabs_html,
     style_tag,
@@ -184,7 +191,12 @@ def build_report_data(
     players = tuple(
         row[0]
         for row in conn.execute(
-            "SELECT username FROM players ORDER BY lower(username)"
+            """
+            SELECT username FROM players
+            WHERE ironman = ANY(%s)
+            ORDER BY lower(username)
+            """,
+            (list(TRACKED_ACCOUNT_CODES),),
         ).fetchall()
     )
 
@@ -218,7 +230,7 @@ def _text_span_block(
 
 
 def render_text(data: ReportData) -> str:
-    lines = [f"{SITE_NAME.upper()} REPORT"]
+    lines = [f"{SITE_TITLE.upper()} REPORT"]
     for name, value in (
         ("generated at", data.generated),
         ("grid end", date(data.now_epoch)),
@@ -263,7 +275,10 @@ def render_text(data: ReportData) -> str:
 
 
 def _player_link(username: str) -> str:
-    return f'<a href="{esc(player_page_href(username))}">{esc(username)}</a>'
+    return (
+        f'<a href="{esc(player_page_href(username))}"{NEW_TAB_ATTRS}>'
+        f"{esc(username)}</a>"
+    )
 
 
 def _table(css: str, header: str, rows: list[str], colspan: int) -> str:
@@ -365,14 +380,16 @@ def render_html(data: ReportData) -> str:
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>general tracking - {SITE_NAME}</title>",
+        f"<title>general tracking - {SITE_TITLE}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="rankings wide">',
         '<div class="backlinks"><p class="sub">'
         '<a href="priority/">priority tracking</a> · '
         '<a href="status">status</a></p></div>',
+        site_header(),
         "<h1>General Tracking</h1>",
-        '<p class="sub"><a href="latest.txt">text version</a></p>',
+        f'<p class="sub"><a href="latest.txt"{NEW_TAB_ATTRS}>'
+        "text version</a></p>",
         metas,
         _player_finder(data),
     ]

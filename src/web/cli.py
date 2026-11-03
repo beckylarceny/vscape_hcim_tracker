@@ -15,10 +15,9 @@ from ..common.utility import (
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="vscape_hcim_tracker.web",
+        prog="vscape_tracker.web",
         description=(
-            "Render hardcore ironman xp reports from PostgreSQL and serve "
-            "them over HTTP."
+            "Render xp reports from PostgreSQL and serve them over HTTP."
         ),
     )
     add_common_arguments(parser)

@@ -38,16 +38,16 @@ PRIORITY = 600
 
 DOCKER = DockerStatus((
     ContainerInfo(
-        "collector", "vscape_hcim_tracker-collector-1",
-        "running", "Up 40 minutes", "vscape_hcim_tracker-app:latest",
+        "collector", "vscape_tracker-collector-1",
+        "running", "Up 40 minutes", "vscape_tracker-app:latest",
     ),
     ContainerInfo(
-        "db", "vscape_hcim_tracker-db-1",
+        "db", "vscape_tracker-db-1",
         "running", "Up 41 minutes", "postgres:17-alpine",
     ),
     ContainerInfo(
-        "web", "vscape_hcim_tracker-web-1",
-        "running", "Up 39 minutes", "vscape_hcim_tracker-app:latest",
+        "web", "vscape_tracker-web-1",
+        "running", "Up 39 minutes", "vscape_tracker-app:latest",
     ),
 ))
 
@@ -165,12 +165,12 @@ class DockerTest(unittest.TestCase):
         payload = [
             {
                 "Id": "bbb",
-                "Names": ["/vscape_hcim_tracker-web-1"],
+                "Names": ["/vscape_tracker-web-1"],
                 "State": "running",
                 "Status": "Up 39 minutes",
                 "Image": "app:latest",
                 "Labels": {
-                    "com.docker.compose.project": "vscape_hcim_tracker",
+                    "com.docker.compose.project": "vscape_tracker",
                     "com.docker.compose.service": "web",
                 },
             },
@@ -181,7 +181,7 @@ class DockerTest(unittest.TestCase):
                 "Status": "Up 40 minutes",
                 "Image": "app:latest",
                 "Labels": {
-                    "com.docker.compose.project": "vscape_hcim_tracker",
+                    "com.docker.compose.project": "vscape_tracker",
                     "com.docker.compose.service": "collector",
                 },
             },
@@ -198,19 +198,19 @@ class DockerTest(unittest.TestCase):
             },
         ]
         self.assertEqual(
-            container_rows(payload, "vscape_hcim_tracker"),
+            container_rows(payload, "vscape_tracker"),
             (
                 ContainerInfo(
                     "collector", "aaa", "running", "Up 40 minutes",
                     "app:latest",
                 ),
                 ContainerInfo(
-                    "web", "vscape_hcim_tracker-web-1", "running",
+                    "web", "vscape_tracker-web-1", "running",
                     "Up 39 minutes", "app:latest",
                 ),
             ),
         )
-        self.assertEqual(container_rows("not a list", "vscape_hcim_tracker"), ())
+        self.assertEqual(container_rows("not a list", "vscape_tracker"), ())
 
         payload = [
             {
@@ -404,7 +404,10 @@ class PageTest(unittest.TestCase):
         self.assertIn(backlinks, page)
         self.assertLess(page.index('<div class="backlinks">'), page.index("<h1>"))
 
-        text_version = '<p class="sub"><a href="status.txt">text version</a></p>'
+        text_version = (
+            '<p class="sub"><a href="status.txt" target="_blank" '
+            'rel="noopener">text version</a></p>'
+        )
         self.assertIn(text_version, page)
         self.assertLess(page.index("<h1>"), page.index(text_version))
         self.assertLess(page.index(text_version), page.index("generated at"))
@@ -567,7 +570,7 @@ class PageTest(unittest.TestCase):
             "docker api unavailable: permission denied", page
         )
         self.assertIn('<td class=empty colspan="5">', page)
-        self.assertNotIn("vscape_hcim_tracker-collector-1", page)
+        self.assertNotIn("vscape_tracker-collector-1", page)
 
         empty = render_status_page(
             collect()._replace(containers=DockerStatus(()))
@@ -585,7 +588,7 @@ class PageTest(unittest.TestCase):
         self.assertIn("CONTAINERS", text)
         self.assertLess(text.index("SERVICE"), text.index("CONTAINERS"))
         self.assertLess(text.index("CONTAINERS"), text.index("DATABASE"))
-        self.assertIn("vscape_hcim_tracker-collector-1", text)
+        self.assertIn("vscape_tracker-collector-1", text)
 
 
     def test_table_alignment_and_header(self) -> None:
@@ -695,14 +698,20 @@ class PageTest(unittest.TestCase):
                 priority_players=0,
             )
             self.assertEqual(path.name, "status.html")
+            page = path.read_text(encoding="utf-8")
             self.assertIn(
-                "vidyascape hcim xp tracker status",
-                path.read_text(encoding="utf-8"),
+                '<header class="site">vidyascape tracker</header>', page
+            )
+            self.assertIn("<h1>status</h1>", page)
+            self.assertIn(
+                '<a href="status.txt" target="_blank" rel="noopener">'
+                "text version</a>",
+                page,
             )
             text_path = Path(directory) / "status.txt"
             self.assertTrue(text_path.exists())
             text = text_path.read_text(encoding="utf-8")
-            self.assertIn("VIDYASCAPE HCIM XP TRACKER STATUS", text)
+            self.assertIn("VIDYASCAPE TRACKER STATUS", text)
             self.assertIn("RECENT RUNS", text)
             self.assertTrue(text.endswith("software version abc1234\n"))
 

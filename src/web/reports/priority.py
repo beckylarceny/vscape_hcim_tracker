@@ -19,10 +19,12 @@ from ...common.utility import (
 from ..render.chart import ChartData, StackedBar, chart_svg, thin
 from ..render.format import plural
 from ..render.html import (
-    SITE_NAME,
+    NEW_TAB_ATTRS,
+    SITE_TITLE,
     SKILL_TAB_SCRIPT,
     atomic_write,
     esc,
+    site_header,
     skill_panel_open,
     skill_tabs_html,
     style_tag,
@@ -422,7 +424,7 @@ def render_priority_page(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{esc(data.username.lower())} priority - {SITE_NAME}</title>",
+        f"<title>{esc(data.username.lower())} priority - {SITE_TITLE}</title>",
         '<link rel="alternate" type="application/rss+xml" '
         f'title="{esc(data.username)} priority xp" href="{esc(feed_href)}">',
         f"{style_tag()}</head>",
@@ -432,10 +434,12 @@ def render_priority_page(
         '<a href="./">priority tracking</a> · '
         f'<a href="{esc(player_href)}">player page</a> · '
         '<a href="../status">status</a></p></div>',
+        site_header(),
         f"<h1>{esc(data.username)}</h1>",
-        f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}">'
-        "vidyascape highscores</a></h2>",
-        f'<h2 class="subheading"><a href="{esc(feed_href)}">rss feed</a></h2>',
+        f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}"'
+        f'{NEW_TAB_ATTRS}>vidyascape highscores</a></h2>',
+        f'<h2 class="subheading"><a href="{esc(feed_href)}"{NEW_TAB_ATTRS}>'
+        "rss feed</a></h2>",
         f'<p class="meta">generated at: {esc(data.generated)}</p>',
         '<p class="meta">priority report: 10-minute updates, last 24 hours</p>',
         skill_tabs_html(flat),
@@ -493,9 +497,10 @@ def render_priority_index(
     players: list[str], version: str = "software version unknown"
 ) -> str:
     items = "".join(
-        f'<li><a href="{urllib.parse.quote(player_slug(name))}">'
-        f"{esc(name)}</a> · "
-        f'<a href="{urllib.parse.quote(player_slug(name))}.xml">rss</a></li>'
+        f'<li><a href="{urllib.parse.quote(player_slug(name))}"'
+        f"{NEW_TAB_ATTRS}>{esc(name)}</a> · "
+        f'<a href="{urllib.parse.quote(player_slug(name))}.xml"'
+        f"{NEW_TAB_ATTRS}>rss</a></li>"
         for name in players
     )
     if not items:
@@ -504,12 +509,13 @@ def render_priority_index(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>priority tracking - {SITE_NAME}</title>",
+        f"<title>priority tracking - {SITE_TITLE}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="player priority">',
         '<div class="backlinks"><p class="sub">'
         '<a href="../general">general tracking</a> · '
         '<a href="../status">status</a></p></div>',
+        site_header(),
         "<h1>priority tracking</h1>",
         '<p class="blurb">the top 5 players by overall xp, and any players '
         "added to the priority list file, are fetched every 10 minutes. "

@@ -7,11 +7,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ..common import storage
-from ..common.utility import HCIM, SKILLS
+from ..common.utility import SKILLS, TRACKED_ACCOUNT_CODES
 from . import api
 from .rate import RateLimiter
 
-log = logging.getLogger("vscape_hcim_tracker.collector")
+log = logging.getLogger("vscape_tracker.collector")
 
 
 def zero_stats() -> dict[str, int]:
@@ -54,6 +54,7 @@ def collect_all(
     conn = storage.connect(dsn)
     try:
         current: dict[str, dict[str, int]] = {}
+        seen: list[tuple[str, int]] = []
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             futures = {
                 pool.submit(_fetch_current, name, limiter): name
@@ -75,15 +76,17 @@ def collect_all(
                     totals["failures"] += 1
                     continue
                 _, ironman, xp_now = result
-                if ironman != HCIM:
+                seen.append((name, ironman))
+                if ironman not in TRACKED_ACCOUNT_CODES:
                     log.info(
-                        "skipping %r: ironman status is %d, not hardcore",
+                        "skipping %r: account type %d is not tracked",
                         name, ironman,
                     )
                     continue
                 current[name] = xp_now
 
-        storage.upsert_players(conn, [(name, HCIM) for name in current])
+        if seen:
+            storage.upsert_players(conn, sorted(seen))
         totals["players"] = len(current)
         if not current:
             return totals

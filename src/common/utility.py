@@ -9,9 +9,15 @@ import urllib.parse
 
 import yaml
 
+from .accounts import (
+    DEFAULT_ACCOUNT_TYPES,
+    parse_account_types,
+    tracked_codes,
+)
+
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
-CONFIG_DIR_ENV = "VSCAPE_HCIM_TRACKER_CONFIG_DIR"
+CONFIG_DIR_ENV = "VSCAPE_TRACKER_CONFIG_DIR"
 DEFAULT_CONFIG_DIR = _PROJECT_ROOT / "config"
 
 
@@ -33,12 +39,10 @@ _WEB = load_config("web")
 _DB = load_config("db")
 
 SKILLS: tuple[str, ...] = tuple(_COLLECTOR["skills"])
-ACCOUNT_FILTER_CODES: dict[str, int] = dict(
-    _COLLECTOR["account_filter_codes"]
+ACCOUNT_TYPES: tuple[str, ...] = parse_account_types(
+    _COLLECTOR.get("account_types", DEFAULT_ACCOUNT_TYPES)
 )
-HCIM = ACCOUNT_FILTER_CODES["HARDCORE_IRONMAN"]
-PLAYER_HIGHSCORES_URL: str = _COLLECTOR["urls"]["player_highscores"]
-PLAYER_TRACKER_URL: str = _COLLECTOR["urls"]["player_tracker"]
+TRACKED_ACCOUNT_CODES: frozenset[int] = tracked_codes(ACCOUNT_TYPES)
 
 _COLLECTOR_DEFAULTS: dict = _COLLECTOR["defaults"]
 DEFAULT_INTERVAL_SECONDS = int(_COLLECTOR_DEFAULTS["interval_seconds"])
@@ -60,12 +64,13 @@ DEFAULT_PRIORITY_TOP = int(_PRIORITY["top"])
 
 _WEB_DEFAULTS: dict = _WEB["defaults"]
 SPANS: dict[str, int] = dict(_WEB["spans"])
+SITE_TITLE: str = str(_WEB_DEFAULTS["site_title"])
 DEFAULT_TOP_N = int(_WEB_DEFAULTS["top_n"])
 DEFAULT_REPORT_INTERVAL_SECONDS = int(
     _WEB_DEFAULTS["report_interval_seconds"]
 )
 DEFAULT_BASE_URL = os.environ.get(
-    "VSCAPE_HCIM_TRACKER_BASE_URL", _WEB_DEFAULTS["base_url"]
+    "VSCAPE_TRACKER_BASE_URL", _WEB_DEFAULTS["base_url"]
 )
 
 
@@ -81,7 +86,7 @@ def _dedupe(names) -> tuple[str, ...]:
 def build_dsn(database: str | None = None) -> str | None:
     """Connection string from DSN, PG* variables or db.yaml."""
     if database is None:
-        explicit = os.environ.get("VSCAPE_HCIM_TRACKER_DSN")
+        explicit = os.environ.get("VSCAPE_TRACKER_DSN")
         if explicit:
             return explicit
     host = os.environ.get("PGHOST") or _DB.get("host")
@@ -116,7 +121,7 @@ def parse_priority_players(values: list[str] | None) -> tuple[str, ...]:
     """Usernames from CLI values, the environment, or collector.yaml."""
     if values is None:
         raw = os.environ.get(
-            "VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS", ""
+            "VSCAPE_TRACKER_PRIORITY_PLAYERS", ""
         ).strip()
         if not raw:
             return _configured_priority_players()

@@ -4,10 +4,18 @@ The web service writes static text and HTML files into `reports/` and serves the
 same directory over HTTP. Reports are rebuilt on a timer and are safe to read
 while being replaced.
 
-HTML pages use `vidyascape hcim xp tracker` as the site name in the browser
-title, for example `general tracking - vidyascape hcim xp tracker`. The plain-text
-reports start with `VIDYASCAPE HCIM XP TRACKER REPORT` or
-`VIDYASCAPE HCIM XP TRACKER STATUS`.
+`defaults.site_title` in `config/web.yaml` sets the site name. The default is
+`vidyascape tracker`.
+
+HTML pages show the site title in a header above the page heading. The browser
+title combines the page title and site title, for example
+`general tracking - vidyascape tracker`. The plain-text reports start with
+`VIDYASCAPE TRACKER REPORT` or `VIDYASCAPE TRACKER STATUS`.
+
+The home page heading is `home`. The site header is plain text, not a link.
+
+Links outside the backlinks navbar open in a new tab. Backlinks and the
+scroll-to-top control stay in the current tab.
 
 ## Output files
 
@@ -87,9 +95,9 @@ gaps are compared with the smallest nearby gap, so a missed live fetch is
 flagged while a normal 24-hour backfill gap is not. Stretches that were fetched
 and had no xp change stay unshaded.
 
-Each player page links to a plain-text version at `players/<slug>.txt`. The
-text file has the same current xp, past gains, best windows and snapshot
-counts. Player pages and text files are rebuilt only when that player's stored
+Each player page shows the highscores, priority report and plain-text links in
+one row under the player name. The text version is at `players/<slug>.txt` and
+has the same current xp, past gains, best windows and snapshot counts. Player pages and text files are rebuilt only when that player's stored
 xp changes, when either file is missing, or when the priority set changes.
 Checkpoint-only changes do not rewrite inactive players.
 
@@ -111,7 +119,7 @@ Regular snapshots fill gaps in the priority series and are drawn in a different
 colour, so periods without 10-minute collection are still visible.
 
 The RSS feed contains changed xp grouped by priority fetch time, newest first.
-Feed links use `base_url` or `VSCAPE_HCIM_TRACKER_BASE_URL`. The link points to
+Feed links use `base_url` or `VSCAPE_TRACKER_BASE_URL`. The link points to
 the priority page and the feed itself.
 
 Players who leave the priority set remain in the index until their high-frequency

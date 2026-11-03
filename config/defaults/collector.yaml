@@ -24,15 +24,7 @@ skills:
   - hunter
   - construction
 
-account_filter_codes:
-  NOFILTER: 0
-  ALL_IRONMAN: 1
-  HARDCORE_IRONMAN: 2
-  ULTIMATE_IRONMAN: 3
-
-urls:
-  player_highscores: "https://vidyaplace.org/api/highscores/player/{username}"
-  player_tracker: "https://vidyaplace.org/api/tracker/player/{username}?time={seconds}"
+account_types: [HARDCORE_IRONMAN]
 
 defaults:
   interval_seconds: 86400

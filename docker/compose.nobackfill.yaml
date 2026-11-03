@@ -1,0 +1,14 @@
+services:
+  collector:
+    command:
+      - python
+      - -m
+      - src.collector
+      - --loop
+      - --workers
+      - "2"
+      - --rate
+      - "4"
+      - --no-backfill
+      - --log-level
+      - ${VSCAPE_TRACKER_LOG_LEVEL:-INFO}
