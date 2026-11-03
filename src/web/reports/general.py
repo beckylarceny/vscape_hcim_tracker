@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from ..common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
-from .format import bucket_count, hours, players_line, years_months
-from .html import (
+from ...common.utility import DEFAULT_PRIORITY_INTERVAL_SECONDS, SKILLS, SPANS
+from ..render.format import bucket_count, hours, players_line, years_months
+from ..render.html import (
+    SITE_NAME,
     SKILL_TAB_SCRIPT,
     date,
     esc,
@@ -19,12 +20,13 @@ from .html import (
     skill_tabs_html,
     style_tag,
 )
-from .player_report import (
+from .player import (
     Record,
     player_page_href,
     scan_player_points as _scan_player_points,
 )
-from ..common.storage import (
+from ...common.storage import (
+    CoverageSlice,
     as_datetime,
     coverage_buckets,
     xp_by_skill_at_or_before,
@@ -41,7 +43,7 @@ class ReportData(NamedTuple):
     coverage_total: int
     gains: dict[str, dict[str, list[tuple[str, int]]]]
     records: dict[str, dict[str, list[Record]]]
-    coverage: list[tuple[int, int]]
+    coverage: list[CoverageSlice]
     players: tuple[str, ...] = ()
     version: str = "software version unknown"
 
@@ -216,7 +218,7 @@ def _text_span_block(
 
 
 def render_text(data: ReportData) -> str:
-    lines = ["XP TRACKER REPORT"]
+    lines = [f"{SITE_NAME.upper()} REPORT"]
     for name, value in (
         ("generated at", data.generated),
         ("grid end", date(data.now_epoch)),
@@ -363,12 +365,12 @@ def render_html(data: ReportData) -> str:
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>general tracking - xp tracker</title>",
+        f"<title>general tracking - {SITE_NAME}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="rankings wide">',
         '<div class="backlinks"><p class="sub">'
-        '<a href="priority/index.html">priority tracking</a> · '
-        '<a href="status.html">status</a></p></div>',
+        '<a href="priority/">priority tracking</a> · '
+        '<a href="status">status</a></p></div>',
         "<h1>General Tracking</h1>",
         '<p class="sub"><a href="latest.txt">text version</a></p>',
         metas,

@@ -5,11 +5,13 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
+from src.common.storage import CoverageSlice
 from src.common.utility import SKILLS, SPANS, parse_duration
 from src.web import reporting
-from src.web.format import hours as _hours
-from src.web.format import years_months as _years_months
-from src.web.report import (
+from src.web.render.format import hours as _hours
+from src.web.reports.index import render_index
+from src.web.render.format import years_months as _years_months
+from src.web.reports.general import (
     Record,
     ReportData,
     _scan_player_points,
@@ -37,7 +39,7 @@ def build_points(burst_after_seconds: int = 100 * 86400) -> list[tuple[int, int]
 
 
 class RecordScanTest(unittest.TestCase):
-    def test_window_lengths_and_unaligned_now(self) -> None:
+    def test_window_scan_and_player_best(self) -> None:
         heaps = {name: [] for name in SPANS}
         _scan_player_points(
             "tester", build_points(), list(SPANS.items()),
@@ -61,7 +63,6 @@ class RecordScanTest(unittest.TestCase):
         )
         self.assertTrue(heaps["year"])
 
-    def test_player_appears_once_with_their_best_gain(self) -> None:
         points: list[tuple[int, int]] = []
         xp = 0
         for step in range(400):
@@ -113,18 +114,22 @@ class HtmlReportTest(unittest.TestCase):
             coverage_total=2,
             gains=gains,
             records=records,
-            coverage=[(NOW - 2 * 86400, 2), (NOW - 86400, 1), (NOW, 0)],
+            coverage=[
+                CoverageSlice(NOW - 2 * 86400, 2, 48),
+                CoverageSlice(NOW - 86400, 1, 4),
+                CoverageSlice(NOW, 0, 0),
+            ],
         )
 
-    def test_escapes_player_names_and_formats_gains(self) -> None:
+    def test_page_content_and_text_report(self) -> None:
         page = render_html(self.make_data())
         self.assertIn("alice", page)
         self.assertIn("1,234", page)
         self.assertIn("&lt;bob&gt;", page)
         self.assertNotIn("<bob>", page)
 
-    def test_text_report_groups_by_skill_then_past_best(self) -> None:
         text = render_text(self.make_data())
+        self.assertTrue(text.startswith("VIDYASCAPE HCIM XP TRACKER REPORT\n"))
         self.assertIn("overall", text)
         self.assertLess(text.index("  PAST"), text.index("  BEST"))
         self.assertIn("    Day (24h)", text)
@@ -136,36 +141,38 @@ class HtmlReportTest(unittest.TestCase):
         self.assertIn("10 minutes", text)
         self.assertIn("1. alice", text)
 
-    def test_player_names_link_to_player_pages_and_finder(self) -> None:
         data = self.make_data()
         gains = {span: dict(skills) for span, skills in data.gains.items()}
         gains["day"]["overall"] = [("Fuck Jagex", 100)]
         page = render_html(
             data._replace(gains=gains, players=("Alice", "Fuck Jagex"))
         )
-        self.assertIn('href="players/Fuck_Jagex.html"', page)
+        self.assertIn('href="players/Fuck_Jagex"', page)
         self.assertIn(">Fuck Jagex</a>", page)
         self.assertIn('<option value="Alice">', page)
-        self.assertIn('"fuck jagex": "players/Fuck_Jagex.html"', page)
+        self.assertIn('"fuck jagex": "players/Fuck_Jagex"', page)
         self.assertIn("window.open(url,'_blank','noopener')", page)
 
-    def test_rankings_page_has_only_generated_metadata(self) -> None:
         data = self.make_data()._replace(coverage_total=4)
         page = render_html(data)
+        self.assertIn(
+            "<title>general tracking - vidyascape hcim xp tracker</title>", page
+        )
         self.assertIn("generated at: 2026-01-01 00:00 UTC", page)
         self.assertNotIn("players logged", page)
         self.assertNotIn("data coverage:", page)
         self.assertNotIn('class="coverage"', page)
         self.assertEqual(page.count("generated at:"), 1)
-        self.assertIn('href="status.html"', page)
+        self.assertIn('href="status"', page)
         self.assertIn('class="rankings wide"', page)
 
-    def test_backlinks_sit_above_the_title(self) -> None:
+
+    def test_page_structure_and_version(self) -> None:
         page = render_html(self.make_data())
         backlinks = (
             '<div class="backlinks"><p class="sub">'
-            '<a href="priority/index.html">priority tracking</a> · '
-            '<a href="status.html">status</a></p></div>'
+            '<a href="priority/">priority tracking</a> · '
+            '<a href="status">status</a></p></div>'
         )
         self.assertIn(backlinks, page)
         self.assertLess(page.index('<div class="backlinks">'), page.index("<h1>"))
@@ -177,10 +184,10 @@ class HtmlReportTest(unittest.TestCase):
 
         self.assertNotIn("text report", page)
         self.assertNotIn(
-            "</h1>\n<p class=\"sub\"><a href=\"priority/index.html\">", page
+            "</h1>\n<p class=\"sub\"><a href=\"priority/\">", page
         )
         self.assertNotIn(
-            "</h1>\n<p class=\"sub\"><a href=\"status.html\">", page
+            "</h1>\n<p class=\"sub\"><a href=\"status\">", page
         )
         self.assertIn(
             ".backlinks {\n"
@@ -199,11 +206,10 @@ class HtmlReportTest(unittest.TestCase):
             page,
         )
 
-    def test_version_footer_and_text_line(self) -> None:
         import tempfile
         from pathlib import Path
 
-        from src.web.report import read_version
+        from src.web.reports.general import read_version
 
         version = "software version abc1234, updated 2026-11-01 13:00 UTC"
         data = self.make_data()._replace(version=version)
@@ -223,7 +229,20 @@ class HtmlReportTest(unittest.TestCase):
             )
             self.assertEqual(read_version(report_dir), version)
 
-    def test_skills_are_tabs(self) -> None:
+
+    def test_index_and_tabs(self) -> None:
+        page = render_index(
+            "2026-01-01 00:00 UTC", 371, 5, "software version abc"
+        )
+        self.assertIn(
+            "<title>vidyascape hcim xp tracker</title>", page
+        )
+        self.assertIn('href="general"', page)
+        self.assertIn('href="priority/"', page)
+        self.assertIn('href="status"', page)
+        self.assertIn("players tracked: 371", page)
+        self.assertIn("software version abc", page)
+
         page = render_html(self.make_data())
         self.assertIn(
             '<div class="tabs" id="skill-tabs" role="tablist">', page
@@ -268,7 +287,7 @@ class ReportCacheTest(unittest.TestCase):
             coverage=[],
         )
         with patch.object(
-            reporting.report, "build_report_data", return_value=data
+            reporting.general, "build_report_data", return_value=data
         ) as build:
             first = reporting.report_data(
                 conn, NOW, 86400, LOOKBACK, 5, 371, 21600, 371

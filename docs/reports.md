@@ -4,24 +4,39 @@ The web service writes static text and HTML files into `reports/` and serves the
 same directory over HTTP. Reports are rebuilt on a timer and are safe to read
 while being replaced.
 
+HTML pages use `vidyascape hcim xp tracker` as the site name in the browser
+title, for example `general tracking - vidyascape hcim xp tracker`. The plain-text
+reports start with `VIDYASCAPE HCIM XP TRACKER REPORT` or
+`VIDYASCAPE HCIM XP TRACKER STATUS`.
+
 ## Output files
 
 | Path | Content |
 | --- | --- |
 | `reports/latest.txt` | Plain-text general report. |
+| `reports/index.html` | Home page linking every report section. |
 | `reports/general.html` | General rankings page. |
 | `reports/status.txt` | Plain-text status page. |
 | `reports/status.html` | Service, database, collection and coverage status. |
 | `reports/players/<slug>.html` | One page per player. |
+| `reports/players/<slug>.txt` | Plain-text player report. |
 | `reports/priority/index.html` | Priority player index. |
 | `reports/priority/<slug>.html` | One 24-hour priority page per player. |
 | `reports/priority/<slug>.xml` | RSS feed for one priority player. |
 | `reports/version` | Software version label written by `scripts/update.sh`. |
 
-The server maps `/`, `/general` and `/general/` to `general.html`.
+Pages are served without the `.html` suffix. `/` serves the home page,
+`/general` the rankings, `/status` the status page, `/players/<slug>` a player
+page and `/priority/<slug>` a priority page. `/priority/` serves the priority
+index. The `.html` paths still work.
 
 `player_slug` replaces characters outside `A-Z a-z 0-9 . _ -` with `_`. Names
 that reduce to an empty slug use `player`.
+
+## Home page
+
+`index.html` links to general tracking, priority tracking and status. It shows
+the generation time, tracked player count and version.
 
 ## General report
 
@@ -68,13 +83,15 @@ while keeping their endpoints.
 
 Missing-data shading marks stretches with fewer checkpoints than expected.
 Edges use 36 hours or twice the live interval, whichever is larger. Interior
-gaps are compared with the smallest nearby gap, so a missed 6-hour fetch is
+gaps are compared with the smallest nearby gap, so a missed live fetch is
 flagged while a normal 24-hour backfill gap is not. Stretches that were fetched
 and had no xp change stay unshaded.
 
-Player pages are rebuilt only when that player's stored xp changes, when the
-file is missing, or when the priority set changes. Checkpoint-only changes do
-not rewrite inactive players.
+Each player page links to a plain-text version at `players/<slug>.txt`. The
+text file has the same current xp, past gains, best windows and snapshot
+counts. Player pages and text files are rebuilt only when that player's stored
+xp changes, when either file is missing, or when the priority set changes.
+Checkpoint-only changes do not rewrite inactive players.
 
 ## Priority reports
 
@@ -86,7 +103,10 @@ Priority tracking covers:
 - Players who still have unpruned priority rows.
 
 Each priority page covers the last 24 hours. It shows current xp and one chart
-per skill with total xp and xp/hour. Priority samples are the base series.
+per skill with total xp and xp/hour. The `overall` chart draws xp/hour as
+variable-width bars, stacked and coloured by skill. Bars use translucent skill
+colours. Hovering a bar shows the skill, xp gain, rate and UTC window. Other
+skill charts use a filled xp/hour area. Priority snapshots are the base series.
 Regular snapshots fill gaps in the priority series and are drawn in a different
 colour, so periods without 10-minute collection are still visible.
 
@@ -117,7 +137,12 @@ The status page has these sections:
 PostgreSQL planner estimate.
 
 The coverage bar fades with the share of players that hold a checkpoint in each
-slice. Tooltips show the slice range and player count.
+slice. Its colour and pattern show fetch density: solid for hourly checkpoints,
+diagonal stripes for 6-hour, finer diagonal stripes for daily and grey for sparse
+data. The bar uses at most 300 slices, so a lookback longer than 300 days gives
+slices wider than a day. Density compares each slice with the checkpoints a
+cadence would leave in it, so two daily checkpoints in a 2-day slice stay daily
+rather than sparse. Tooltips show the slice range, player count and density.
 
 The container table comes from the Docker API through the read-only socket
 mount. When the API is unavailable the page still renders and shows the error.

@@ -29,7 +29,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--collect-interval", type=parse_duration,
         default=DEFAULT_COLLECT_INTERVAL_SECONDS,
-        help="live collection cadence, e.g. 6h (default: 6h)",
+        help="live collection cadence, e.g. 1h (default: 1h)",
     )
     parser.add_argument(
         "--retry-window", type=parse_duration,

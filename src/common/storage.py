@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Iterable, Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     import psycopg
@@ -305,19 +305,25 @@ def xp_by_skill_at_or_before(
     return result
 
 
+class CoverageSlice(NamedTuple):
+    start_epoch: int
+    players: int
+    checkpoints: int
+
+
 def coverage_buckets(
     conn: psycopg.Connection,
     start_epoch: int,
     end_epoch: int,
     buckets: int,
-) -> list[tuple[int, int]]:
-    """Players with a checkpoint in each equal slice of [start, end]."""
+) -> list[CoverageSlice]:
+    """Players and checkpoint rows in each equal slice of [start, end]."""
     if buckets <= 0 or end_epoch <= start_epoch:
         return []
     rows = conn.execute(
         """
         SELECT width_bucket(extract(epoch FROM observed_at), %s, %s, %s) AS b,
-               count(DISTINCT username)
+               count(DISTINCT username), count(*)
         FROM checkpoints
         WHERE observed_at >= %s AND observed_at <= %s
         GROUP BY b
@@ -330,10 +336,17 @@ def coverage_buckets(
             as_datetime(end_epoch),
         ),
     ).fetchall()
-    counts = {int(bucket): int(count) for bucket, count in rows}
+    counts = {
+        int(bucket): (int(players), int(checkpoints))
+        for bucket, players, checkpoints in rows
+    }
     width = (end_epoch + 1 - start_epoch) / buckets
     return [
-        (int(start_epoch + (index - 1) * width), counts.get(index, 0))
+        CoverageSlice(
+            int(start_epoch + (index - 1) * width),
+            counts.get(index, (0, 0))[0],
+            counts.get(index, (0, 0))[1],
+        )
         for index in range(1, buckets + 1)
     ]
 

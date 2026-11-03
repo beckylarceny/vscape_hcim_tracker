@@ -49,8 +49,8 @@ service serves empty or partial reports immediately.
 URLs:
 
 - general report: <http://localhost:8000/>
-- status report: <http://localhost:8000/status.html>
-- priority report: <http://localhost:8000/priority/index.html>
+- status report: <http://localhost:8000/status>
+- priority report: <http://localhost:8000/priority/>
 - text versions: `reports/latest.txt`, `reports/status.txt`
 
 ## Daily commands
@@ -59,6 +59,7 @@ URLs:
 ./scripts/start.sh
 ./scripts/stop.sh
 ./scripts/restart.sh
+./scripts/rebuild.sh
 ./scripts/logs.sh
 ./scripts/logs.sh web
 ./scripts/ps.sh
@@ -74,7 +75,7 @@ With `COMPOSE_FILE` exported, drop the `-f` argument.
 Basic service commands stay in `scripts/`:
 
 - `start.sh`, `stop.sh`, `restart.sh`
-- `update.sh`
+- `update.sh`, `rebuild.sh`
 - `logs.sh`, `ps.sh`
 
 Specialized commands are in `scripts/maintenance/`:
@@ -112,6 +113,25 @@ To install a daily 04:00 update job:
 
 The cron line calls `scripts/update.sh` and appends output to `update.log` in the
 repository root.
+
+## Testing a branch
+
+```sh
+./scripts/rebuild.sh
+```
+
+The script:
+
+1. Skips `git pull`.
+2. Writes `version` with the short commit hash, branch name and UTC time.
+3. Rebuilds the collector image from the current checkout.
+4. Recreates `collector` and `web`.
+5. Leaves `db` running.
+
+The hash gets a `-dirty` suffix when the checkout has uncommitted changes,
+ignoring `version` itself. The branch name appears in the page footer version
+line. If the Docker socket requires root, the script runs the compose commands
+through `sudo`.
 
 ## Backups
 
@@ -206,8 +226,8 @@ rm -rf reports/*
 docker compose -f docker/compose.yaml start web
 ```
 
-`version` is maintained by `scripts/update.sh` and is recreated on the next
-update.
+`version` is maintained by `scripts/update.sh` and `scripts/rebuild.sh`, and is
+recreated on the next rebuild.
 
 ## Docker socket access
 
@@ -231,7 +251,7 @@ docker compose -f docker/compose.yaml ps
 docker compose -f docker/compose.yaml logs --tail=100 db
 docker compose -f docker/compose.yaml logs --tail=100 collector
 docker compose -f docker/compose.yaml logs --tail=100 web
-curl -fsS http://localhost:8000/status.html >/dev/null
+curl -fsS http://localhost:8000/status >/dev/null
 ```
 
 Check `reports/status.txt` for:

@@ -38,7 +38,7 @@ def xp(amount: int) -> dict[str, int]:
 
 
 class GridTest(unittest.TestCase):
-    def test_backfill_uses_day_grid_and_recent_retry_window(self) -> None:
+    def test_backfill_and_recent_windows(self) -> None:
         grid = build_grid(
             NOW, DAY, COLLECT, 365 * DAY, 7 * DAY, no_backfill=False
         )
@@ -49,7 +49,6 @@ class GridTest(unittest.TestCase):
         self.assertIn((NOW // DAY) * DAY, grid)
         self.assertTrue(recent <= set(grid))
 
-    def test_no_backfill_only_covers_retry_window(self) -> None:
         grid = build_grid(
             NOW, DAY, COLLECT, 365 * DAY, 7 * DAY, no_backfill=True
         )
@@ -160,7 +159,7 @@ class CollectAllTest(unittest.TestCase):
             [[("alice", T2), ("bob", T2)], [("alice", T1), ("bob", T1)]],
         )
 
-    def test_verification_and_failures_are_isolated(self) -> None:
+    def test_failures_storage_and_skipped_fetches(self) -> None:
         def fetch_xp(name):
             if name == "bob":
                 return None
@@ -182,7 +181,7 @@ class CollectAllTest(unittest.TestCase):
         self.assertEqual(self.calls, [("alice", T2)])
         self.assertEqual(pairs.call_args.args[1], [("alice", T2)])
 
-    def test_unchanged_xp_is_not_stored(self) -> None:
+        self.calls.clear()
         stats, _, insert, pairs = self.run_collect(
             ["alice"],
             [T2],
@@ -194,6 +193,7 @@ class CollectAllTest(unittest.TestCase):
         insert.assert_not_called()
         self.assertEqual(pairs.call_args.args[1], [("alice", T2)])
 
+        self.calls.clear()
         stats, _, insert, _ = self.run_collect(
             ["alice"],
             [T2],
@@ -206,7 +206,8 @@ class CollectAllTest(unittest.TestCase):
             [row[1] for row in insert.call_args.args[1]], ["overall"]
         )
 
-    def test_checkpoint_failure_is_retried_on_the_next_run(self) -> None:
+        self.calls.clear()
+
         def gains(name, timestamp):
             if timestamp == T2:
                 raise api.ApiError("503")
@@ -224,7 +225,7 @@ class CollectAllTest(unittest.TestCase):
         )
         self.assertEqual(pairs.call_args.args[1], [("alice", T1)])
 
-    def test_already_fetched_timestamps_are_skipped(self) -> None:
+        self.calls.clear()
         stats, _, _, pairs = self.run_collect(
             ["alice", "bob"],
             [T2],
@@ -318,7 +319,7 @@ class DsnTest(unittest.TestCase):
 
 
 class PriorityListTest(unittest.TestCase):
-    def test_cli_values_are_split_and_deduped(self) -> None:
+    def test_priority_sources_and_precedence(self) -> None:
         self.assertEqual(
             parse_priority_players(["a,b", " c ", "a"]),
             ("a", "b", "c"),
@@ -329,7 +330,6 @@ class PriorityListTest(unittest.TestCase):
                 ("alice", "bob"),
             )
 
-    def test_environment_then_config_then_default(self) -> None:
         with patch.dict(
             os.environ,
             {"VSCAPE_HCIM_TRACKER_PRIORITY_PLAYERS": "x, y"},
@@ -346,7 +346,6 @@ class PriorityListTest(unittest.TestCase):
         ):
             self.assertEqual(parse_priority_players(None), ())
 
-    def test_collector_json_priority_players(self) -> None:
         cases = (
             ({"priority": {"players": ["alice", "bob", "alice"]}},
              ("alice", "bob")),
@@ -362,6 +361,7 @@ class PriorityListTest(unittest.TestCase):
                     os.environ, {CONFIG_DIR_ENV: directory}, clear=True
                 ):
                     self.assertEqual(parse_priority_players(None), expected)
+
 
     def test_refresh_reloads_file_unless_cli_pinned(self) -> None:
         args = SimpleNamespace(priority=None, priority_players=("old",))
@@ -412,7 +412,7 @@ class PriorityCollectTest(unittest.TestCase):
             )
         return stats, insert, checkpoints
 
-    def test_hcim_priority_fetch_stores_changes(self) -> None:
+    def test_priority_collection_and_pruning(self) -> None:
         stats, insert, checkpoints = self.collect(
             (HCIM, xp(1000)), [xp(100)]
         )
@@ -436,7 +436,6 @@ class PriorityCollectTest(unittest.TestCase):
         insert.assert_not_called()
         self.assertEqual(checkpoints.call_args.args[2], [T1])
 
-    def test_non_hcim_priority_player_is_skipped(self) -> None:
         stats, insert, checkpoints = self.collect((1, xp(1000)), [xp(0)])
         self.assertEqual(stats["players"], 0)
         self.assertEqual(stats["requests"], 1)
@@ -457,7 +456,6 @@ class PriorityCollectTest(unittest.TestCase):
         self.assertEqual(stats["failures"], 1)
         self.assertEqual(stats["players"], 0)
 
-    def test_collect_once_uses_tracked_players_and_prunes(self) -> None:
         args = SimpleNamespace(priority_players=("alice", "bob"))
         totals = {"requests": 2, "rows": 2, "failures": 0, "players": 1}
         with patch.object(collector_priority.storage, "connect", return_value=self.conn), \

@@ -55,7 +55,7 @@ restart.
 | `priority.retention_seconds` | integer | Priority history retention. |
 | `priority.top` | integer | Number of top `overall` players to track. |
 
-The shipped defaults are 24-hour backfill, 6-hour live collection, 7-day retry
+The shipped defaults are 24-hour backfill, 1-hour live collection, 7-day retry
 window, 2 workers, 4 requests per second, 10-minute priority interval, 24-hour
 priority retention and the top 5 overall players.
 
@@ -136,7 +136,7 @@ share the collection flags.
 | --- | --- | --- |
 | `--dsn` | PostgreSQL connection string. | `VSCAPE_HCIM_TRACKER_DSN` or `PG*` / `db.yaml`. |
 | `--interval` | Coarse backfill step. | `24h` |
-| `--collect-interval` | Live collection step. | `6h` |
+| `--collect-interval` | Live collection step. | `1h` |
 | `--retry-window` | Recent window always rechecked. | `7d` |
 | `--lookback` | Maximum history to cover. | Since 2025-01-26. |
 | `--priority` | Priority player. Repeat or comma-separate. | Environment or `priority.players`. |
@@ -188,7 +188,7 @@ python -m src.db --dsn "postgresql://user:pass@localhost:5432/xp_tracker"
 30
 90s
 10m
-6h
+1h
 7d
 1w
 ```

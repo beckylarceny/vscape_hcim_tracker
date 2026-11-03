@@ -19,8 +19,9 @@ from ..common.utility import (
     DEFAULT_RETRY_WINDOW_SECONDS,
     effective_lookback,
 )
-from . import player_report, priority_report, report, status_report
-from .html import atomic_write
+from .render.html import atomic_write
+from .reports import general, index, player, priority
+from .status import report as status_report
 
 log = logging.getLogger("vscape_hcim_tracker.web.reporting")
 
@@ -28,7 +29,7 @@ _REPORT_LOCK = threading.Lock()
 
 
 def _remove_old_reports(report_dir: Path) -> None:
-    """Only latest.txt and general.html are kept."""
+    """Remove old timestamped reports and temporary files."""
     for pattern in (
         "report_*.txt", "report_*.html", ".general.*.tmp", "players/.*.tmp",
     ):
@@ -45,7 +46,7 @@ _PLAYER_PRIORITY_STATE: dict[Path, frozenset[str]] = {}
 # table counts move. Window-boundary drift within an hour is immaterial.
 _CACHE_TOLERANCE_SECONDS = 3600
 _REPORT_CACHE: dict[
-    tuple, tuple[tuple[int, int, int], int, report.ReportData]
+    tuple, tuple[tuple[int, int, int], int, general.ReportData]
 ] = {}
 _REPORT_CACHE_SIZE = 4
 
@@ -74,7 +75,7 @@ def report_data(
     player_count: int,
     collect_interval: int,
     coverage_total: int | None = None,
-) -> report.ReportData:
+) -> general.ReportData:
     """Ranking data, recomputed only when the stored rows or parameters change."""
     key = (
         interval, lookback, top_n, player_count, collect_interval, coverage_total,
@@ -90,7 +91,7 @@ def report_data(
             now_epoch=now_epoch, generated=_timestamp()
         )
 
-    data = report.build_report_data(
+    data = general.build_report_data(
         conn, now_epoch, interval, lookback, top_n, player_count,
         collect_interval, coverage_total,
     )
@@ -147,48 +148,58 @@ def write_player_pages(
     force: bool = False,
     version: str = "software version unknown",
 ) -> int:
-    """Write one HTML report per player whose stored xp changed."""
+    """Write HTML and text reports for each player whose stored xp changed."""
     directory = report_dir / "players"
     directory.mkdir(parents=True, exist_ok=True)
     priority = set(priority_names)
     entries = [
-        (username, f"{player_report.player_slug(username)}.html")
+        (username, player.player_slug(username))
         for username in data.players
     ]
-    expected = {name for _, name in entries}
+    expected = {
+        f"{stem}{suffix}"
+        for _, stem in entries
+        for suffix in (".html", ".txt")
+    }
     stale = [
         username
-        for username, name in entries
+        for username, stem in entries
         if force
         or previous is None
         or previous.get(username) != watermarks.get(username)
-        or not (directory / name).exists()
+        or not (directory / f"{stem}.html").exists()
+        or not (directory / f"{stem}.txt").exists()
     ]
 
     names = dict(entries)
     written = 0
     for username in stale:
-        name = names[username]
+        stem = names[username]
         try:
-            page_data = player_report.collect_player_data(
+            page_data = player.collect_player_data(
                 conn, username, data.now_epoch, data.lookback,
                 data.interval, data.generated, data.collect_interval,
             )
-            page = player_report.render_player_page(
+            page = player.render_player_page(
+                page_data, is_priority=username in priority, version=version
+            )
+            text = player.render_player_text(
                 page_data, is_priority=username in priority, version=version
             )
         except Exception:  # noqa: BLE001 - one page must not break the rest
             log.exception("could not build the player report for %r", username)
             continue
-        atomic_write(directory / name, page)
+        atomic_write(directory / f"{stem}.html", page)
+        atomic_write(directory / f"{stem}.txt", text)
         written += 1
         if written % 50 == 0:
             log.info(
                 "wrote %d/%d player reports", written, len(stale)
             )
-    for path in directory.glob("*.html"):
-        if path.name not in expected:
-            path.unlink(missing_ok=True)
+    for pattern in ("*.html", "*.txt"):
+        for path in directory.glob(pattern):
+            if path.name not in expected:
+                path.unlink(missing_ok=True)
     return written
 
 
@@ -213,9 +224,9 @@ def write_report(
             conn, now_epoch, interval, lookback, top_n, player_count,
             collect_interval, coverage_total,
         )
-        data = data._replace(version=report.read_version(report_dir))
-        text = report.render_text(data)
-        page = report.render_html(data)
+        data = data._replace(version=general.read_version(report_dir))
+        text = general.render_text(data)
+        page = general.render_html(data)
 
         report_dir.mkdir(parents=True, exist_ok=True)
         text_path = report_dir / "latest.txt"
@@ -226,6 +237,10 @@ def write_report(
 
         key = report_dir.resolve()
         priority_names = tracked_priority_names(conn, priority_players)
+        index.write_index_page(
+            report_dir, data.generated, data.player_count,
+            len(priority_names), data.version,
+        )
         try:
             status_report.write_status_page(
                 conn, report_dir,
@@ -264,7 +279,7 @@ def write_report(
                     report_dir / "players",
                 )
 
-        count = priority_report.write_priority_reports(
+        count = priority.write_priority_reports(
             conn, report_dir,
             priority_index_names(conn, priority_players),
             data.now_epoch, data.generated, base_url,

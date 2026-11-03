@@ -9,8 +9,8 @@ import unittest
 from pathlib import Path
 
 from src.common.utility import SKILLS
-from src.web.chart import ChartData
-from src.web.priority_report import (
+from src.web.render.chart import ChartData, StackedBar
+from src.web.reports.priority import (
     Event,
     PriorityData,
     collect_events,
@@ -61,10 +61,11 @@ def rows(*points) -> list[tuple[str, dt.datetime, int]]:
 
 
 class DataTest(unittest.TestCase):
-    def test_current_xp_and_charts(self) -> None:
+    def test_current_xp_charts_and_regular_fill(self) -> None:
         conn = FakeConn(rows(
             ("overall", NOW - 1800, 1000),
             ("overall", NOW, 2000),
+            ("attack", NOW - 1800, 0),
             ("attack", NOW, 50),
         ))
         data = collect_priority_data(conn, "alice", NOW, "generated")
@@ -74,12 +75,13 @@ class DataTest(unittest.TestCase):
         chart = data.charts["overall"]
         self.assertEqual(chart.xp[-1], (NOW, 2000))
         self.assertAlmostEqual(chart.gains[0][1], 2000.0)
+        self.assertEqual(chart.stacked[0].start_epoch, NOW - 1800)
+        self.assertEqual(chart.stacked[0].segments, (("attack", 100.0),))
 
         missing = data.charts["defence"]
         self.assertEqual(missing.xp, [])
         self.assertEqual(missing.gains, [])
 
-    def test_regular_snapshots_fill_priority_gaps(self) -> None:
         priority = rows(
             ("overall", NOW - 3600, 1000),
             ("overall", NOW, 1100),
@@ -167,6 +169,7 @@ class FeedTest(unittest.TestCase):
         )
         self.assertIn(f"A_B-{NOW}", feed)
         self.assertEqual(feed.count("<item>"), 2)
+        self.assertIn("<link>https://example.test/priority/A_B</link>", feed)
         self.assertIn("https://example.test/priority/A_B.xml", feed)
 
         empty = render_feed("alice", "alice", [], NOW, "http://localhost:8000")
@@ -182,20 +185,40 @@ class PageTest(unittest.TestCase):
             [(NOW - 86400, 400), (NOW, 1000)],
             [(NOW, 600)],
         )
+        charts = {skill: chart for skill in SKILLS}
+        charts["overall"] = chart._replace(
+            stacked=(
+                StackedBar(
+                    NOW - 86400,
+                    NOW,
+                    (("attack", 400.0), ("defence", 200.0)),
+                ),
+            )
+        )
         return PriorityData(
             username="alice",
             generated="2026-01-01 00:00 UTC",
             now_epoch=NOW,
             current={skill: 1000 for skill in SKILLS},
-            charts={skill: chart for skill in SKILLS},
+            charts=charts,
         )
 
-    def test_priority_page_charts_and_axis(self) -> None:
+    def test_page_charts_axis_and_empty_data(self) -> None:
         page = render_priority_page(self.make_data())
         self.assertEqual(page.count("<svg"), len(SKILLS))
         self.assertIn('viewBox="0 0 720 200"', page)
         self.assertIn("priority report: 10-minute updates", page)
         self.assertIn("generated at:", page)
+        self.assertIn('class="bar skill-attack"', page)
+        self.assertIn(
+            'data-tip="attack: +9.6k xp, 400 xp/h (', page
+        )
+        self.assertNotIn("<title>attack:", page)
+        self.assertIn('id="bar-tip"', page)
+        self.assertIn("priority svg .bar[data-tip]", page)
+        self.assertIn("xp/h by skill", page)
+        self.assertNotIn("skill-legend", page)
+        self.assertIn("fill-opacity: .28", page)
         version = "software version abc1234, updated 2026-11-01 13:00 UTC"
         tagged = render_priority_page(self.make_data(), version)
         self.assertIn(f'<footer class="version">{version}</footer>', tagged)
@@ -204,7 +227,7 @@ class PageTest(unittest.TestCase):
             '<h2 class="subheading"><a href="alice.xml">rss feed</a></h2>',
             page,
         )
-        self.assertIn('href="../players/alice.html"', page)
+        self.assertIn('href="../players/alice"', page)
         self.assertIn('type="application/rss+xml"', page)
         labels = re.findall(
             r'<text x="[^"]+" y="\d+" text-anchor="[^"]+">'
@@ -230,7 +253,6 @@ class PageTest(unittest.TestCase):
         self.assertIn('class="line regular"', page)
         self.assertIn('class="area regular"', page)
 
-    def test_no_data_charts(self) -> None:
         data = self.make_data()
         empty = data._replace(
             current={},
@@ -261,8 +283,12 @@ class WriteTest(unittest.TestCase):
             self.assertTrue(feed.exists())
             self.assertTrue(index.exists())
             self.assertIn(
-                "alice priority - xp tracker",
+                "alice priority - vidyascape hcim xp tracker",
                 page.read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "<title>priority tracking - vidyascape hcim xp tracker</title>",
+                index.read_text(encoding="utf-8"),
             )
             self.assertIn(
                 "the top 5 players by overall xp",

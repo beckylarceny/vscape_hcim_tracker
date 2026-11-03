@@ -1,4 +1,4 @@
-"""Per-player HTML reports with inline SVG xp charts."""
+"""Per-player HTML and text reports with inline SVG xp charts."""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import psycopg
 
-from ..common.utility import (
+from ...common.utility import (
     DATA_START_EPOCH,
     DEFAULT_PRIORITY_INTERVAL_SECONDS,
     SKILLS,
     SPANS,
 )
-from ..common.storage import as_datetime
-from .chart import (
+from ...common.storage import as_datetime
+from ..render.chart import (
     CHART_POINTS,
     MISSING_AFTER_SECONDS,
     WIDE_CHART_POINTS,
@@ -26,8 +26,9 @@ from .chart import (
     chart_svg,
     thin,
 )
-from .format import frequency_name, years_months
-from .html import (
+from ..render.format import frequency_name, years_months
+from ..render.html import (
+    SITE_NAME,
     SKILL_TAB_SCRIPT,
     date,
     esc,
@@ -91,7 +92,7 @@ def player_slug(username: str) -> str:
 
 def player_page_href(username: str) -> str:
     slug = player_slug(username)
-    return f"players/{urllib.parse.quote(slug, safe='')}.html"
+    return f"players/{urllib.parse.quote(slug, safe='')}"
 
 
 def highscores_url(username: str) -> str:
@@ -354,8 +355,8 @@ def _missing_ranges(
     """Stretches of the window with fewer checkpoints than expected.
 
     The window edges use `limit`. Interior gaps are compared with the smallest
-    nearby gap, so a skipped fetch inside a 6 hour cadence is flagged while a
-    normal 24 hour backfill day is not.
+    nearby gap, so a missed live fetch is flagged while a normal 24 hour
+    backfill day is not.
     """
     if end_epoch <= start_epoch:
         return ()
@@ -382,7 +383,7 @@ def collect_player_data(
     lookback: int,
     slack: int,
     generated: str,
-    live_interval: int = 6 * 3600,
+    live_interval: int = 3600,
 ) -> PlayerData:
     """Load one player's stored history and derive every displayed value."""
     points_by_skill = _points_by_skill(conn, username, 0)
@@ -526,6 +527,71 @@ def _best_table(data: PlayerData, skill: str) -> str:
     )
 
 
+def _text_frequency(data: PlayerData) -> list[str]:
+    lines: list[str] = []
+    for info in data.frequencies:
+        if info.first_epoch is None:
+            lines.append(f"{info.name} snapshots: 0")
+            continue
+        first = date(info.first_epoch)
+        last = date(info.last_epoch)
+        when = first if first == last else f"{first} to {last}"
+        lines.append(
+            f"{info.name} snapshots: {info.snapshots}, {when}"
+        )
+    return lines
+
+
+def _text_gain_table(data: PlayerData, skill: str) -> list[str]:
+    lines = ["PAST"]
+    for name in SPANS:
+        past = data.past[skill][name]
+        shown = num(past) if past is not None else "-"
+        lines.append(f"    {name.capitalize():<10}{shown:>14}")
+    lines.append("")
+    lines.append("BEST")
+    for name in SPANS:
+        record = data.best[skill][name]
+        if record is None:
+            lines.append(f"    {name.capitalize():<10}{'-':>14}")
+            continue
+        first = date(record.start_epoch)
+        last = date(record.end_epoch)
+        when = first if first == last else f"{first} to {last}"
+        lines.append(
+            f"    {name.capitalize():<10}{num(record.gain):>14}   {when}"
+        )
+    return lines
+
+
+def render_player_text(
+    data: PlayerData,
+    is_priority: bool = False,
+    version: str = "software version unknown",
+) -> str:
+    """Plain-text player report with the same values as the HTML page."""
+    lines = [f"{SITE_NAME.upper()} PLAYER REPORT", ""]
+    lines.append(f"{'player:':<20}{data.username}")
+    lines.append(f"{'generated at:':<20}{data.generated}")
+    lines.append(f"{'lookback:':<20}{years_months(data.lookback)}")
+    if is_priority:
+        lines.append(f"{'priority report:':<20}yes")
+    lines.extend(_text_frequency(data))
+    lines.append("")
+
+    for skill in SKILLS:
+        lines.append("=" * 78)
+        lines.append(skill)
+        lines.append("=" * 78)
+        value = data.current.get(skill)
+        lines.append(f"current xp: {current_line(skill, value, data.current)}")
+        lines.extend(_text_gain_table(data, skill))
+        lines.append("")
+
+    lines.append(version)
+    return "\n".join(lines) + "\n"
+
+
 def _frequency_meta(data: PlayerData) -> str:
     lines: list[str] = []
     for info in data.frequencies:
@@ -553,12 +619,12 @@ def render_player_page(
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{esc(data.username.lower())} - xp tracker</title>",
+        f"<title>{esc(data.username.lower())} - {SITE_NAME}</title>",
         f"{style_tag()}</head>",
         '<body id="top" class="player">',
         '<div class="backlinks">'
-        '<p class="sub"><a href="../general.html">general tracking</a> · '
-        '<a href="../status.html">status</a></p>'
+        '<p class="sub"><a href="../general">general tracking</a> · '
+        '<a href="../status">status</a></p>'
         "</div>",
         f"<h1>{esc(data.username)}</h1>",
         f'<h2 class="subheading"><a href="{esc(highscores_url(data.username))}">'
@@ -566,12 +632,15 @@ def render_player_page(
         *(
             [
                 '<p class="priority-link"><a href="../priority/'
-                f'{urllib.parse.quote(player_slug(data.username))}.html">'
+                f'{urllib.parse.quote(player_slug(data.username))}">'
                 "priority report</a></p>"
             ]
             if is_priority else []
         ),
         f'<p class="meta">generated at: {esc(data.generated)}</p>',
+        '<p class="sub"><a href="'
+        f'{urllib.parse.quote(player_slug(data.username))}.txt">text version</a>'
+        "</p>",
         _frequency_meta(data),
         '<div class="stats">',
         "<h2>Current xp</h2>",

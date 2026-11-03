@@ -2,7 +2,7 @@
 
 The project is plain Python with PostgreSQL. There is no build step and no
 frontend toolchain. HTML and SVG charts are generated in Python. CSS is edited
-in `src/web/report.css` and copied into each generated page.
+in `src/web/render/report.css` and copied into each generated page.
 
 ## Local setup
 
@@ -29,6 +29,12 @@ python -m src.web --report-interval 0 --serve-host 127.0.0.1
 
 The web service defaults to `reports/` and port 8000. `python -m src` runs the
 collector.
+
+To run the current branch in the containers without pulling:
+
+```sh
+./scripts/rebuild.sh
+```
 
 ## Tests
 
@@ -94,18 +100,38 @@ Shared code used by every service.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/web/chart.py` | Inline SVG charts. |
 | `src/web/cli.py` | Web argument parser. |
-| `src/web/format.py` | Duration and count formatting. |
-| `src/web/html.py` | Escaping, tabs, atomic writes and inline page style. |
 | `src/web/main.py` | Report startup, server startup and service loop. |
-| `src/web/player_report.py` | Player data, best windows and player pages. |
-| `src/web/priority_report.py` | Priority pages and RSS feeds. |
-| `src/web/report.css` | Page styles. Edited here and copied into generated pages. |
-| `src/web/report.py` | General rankings, text report and HTML report. |
 | `src/web/reporting.py` | Report orchestration, caching and incremental writes. |
-| `src/web/server.py` | Static HTTP server. |
-| `src/web/status_report.py` | Status page, text version and Docker access. |
+| `src/web/server.py` | Static HTTP server with clean page URLs. |
+
+#### Render helpers
+
+| Path | Responsibility |
+| --- | --- |
+| `src/web/render/chart.py` | Inline SVG charts and tooltips. |
+| `src/web/render/format.py` | Duration and count formatting. |
+| `src/web/render/html.py` | Escaping, tabs, tooltips, atomic writes and inline style. |
+| `src/web/render/report.css` | Page styles. Edited here and copied into generated pages. |
+
+#### Reports
+
+| Path | Responsibility |
+| --- | --- |
+| `src/web/reports/general.py` | General rankings, text report and HTML report. |
+| `src/web/reports/index.py` | Home page linking the report sections. |
+| `src/web/reports/player.py` | Player data, best windows and player HTML and text reports. |
+| `src/web/reports/priority.py` | Priority pages and RSS feeds. |
+
+#### Status
+
+| Path | Responsibility |
+| --- | --- |
+| `src/web/status/docker.py` | Docker API access and container rows. |
+| `src/web/status/html.py` | Status HTML page and coverage bar. |
+| `src/web/status/queries.py` | Status queries, display facts and coverage slices. |
+| `src/web/status/report.py` | Status report writer. |
+| `src/web/status/text.py` | Plain-text status report. |
 
 ## Data flow
 
@@ -120,7 +146,7 @@ src.collector.api  ->  src.collector.collection  ->  PostgreSQL
                                                       |
                               +-----------------------+------------------+
                               |                       |                  |
-                        src.web.report      src.web.player_report  src.web.status_report
+                     src.web.reports.general  src.web.reports.player  src.web.status.report
                               |                       |                  |
                               +-----------------------+------------------+
                                                       |
@@ -185,7 +211,7 @@ priority players.
 | `tests/test_player_report.py` | Player data, levels, records and charts. |
 | `tests/test_priority_report.py` | Priority data, events, pages and feeds. |
 | `tests/test_status_report.py` | Status data, Docker rows, coverage and text output. |
-| `tests/test_web.py` | Root URL redirect. |
+| `tests/test_web.py` | Clean URLs and static serving. |
 
 ## Related documentation
 

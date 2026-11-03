@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import NamedTuple, TypeVar
 
-from ..common.storage import as_datetime
+from ...common.storage import as_datetime
 from .html import date, esc, short_number
 
 _Number = TypeVar("_Number", int, float)
@@ -16,6 +16,12 @@ MISSING_AFTER_SECONDS = 36 * 3600
 WIDE_CHART_POINTS = 160
 
 
+class StackedBar(NamedTuple):
+    start_epoch: int
+    end_epoch: int
+    segments: tuple[tuple[str, float], ...]
+
+
 class ChartData(NamedTuple):
     start_epoch: int
     end_epoch: int
@@ -24,6 +30,7 @@ class ChartData(NamedTuple):
     regular_xp: frozenset[int] = frozenset()
     regular_gains: frozenset[int] = frozenset()
     missing: tuple[tuple[int, int], ...] = ()
+    stacked: tuple[StackedBar, ...] = ()
 
 
 def thin(
@@ -38,6 +45,24 @@ def thin(
         thinned.append(points[int(round(index * step))])
     thinned.append(points[-1])
     return thinned
+
+
+def _bar_tip(
+    skill: str, rate: float, start_epoch: int, end_epoch: int
+) -> str:
+    """Skill, xp gain, rate and UTC window for one stacked bar segment."""
+    elapsed = max(0, end_epoch - start_epoch)
+    gain = rate * elapsed / 3600
+    first = as_datetime(start_epoch)
+    last = as_datetime(end_epoch)
+    if first.date() == last.date():
+        when = f"{first:%H:%M}-{last:%H:%M}"
+    else:
+        when = f"{first:%m-%d %H:%M}-{last:%m-%d %H:%M}"
+    return (
+        f"{skill}: +{short_number(gain)} xp, "
+        f"{short_number(rate)} xp/h ({when} UTC)"
+    )
 
 
 def chart_svg(
@@ -64,9 +89,12 @@ def chart_svg(
 
     xp_values = [value for _, value in chart.xp]
     gain_values = [value for _, value in chart.gains]
+    stack_totals = [
+        sum(rate for _, rate in bar.segments) for bar in chart.stacked
+    ]
     xp_min = min(xp_values) if xp_values else 0
     xp_max = max(xp_values) if xp_values else 0
-    gain_max = max(gain_values) if gain_values else 0
+    gain_max = max(gain_values + stack_totals, default=0)
     xp_span = xp_max - xp_min
     gain_span = gain_max or 1
 
@@ -122,7 +150,28 @@ def chart_svg(
                 f"{as_datetime(timestamp).strftime('%H:%M')}</text>"
             )
 
-    if chart.gains:
+    if chart.stacked:
+        for bar in chart.stacked:
+            bar_start = x(max(bar.start_epoch, chart.start_epoch))
+            bar_end = x(bar.end_epoch)
+            if bar_end <= bar_start:
+                continue
+            bottom = baseline
+            for skill, rate in bar.segments:
+                if rate <= 0:
+                    continue
+                segment_height = plot_height * rate / gain_span
+                top_y = bottom - segment_height
+                tip = _bar_tip(skill, rate, bar.start_epoch, bar.end_epoch)
+                parts.append(
+                    f'<rect class="bar skill-{esc(skill)}" '
+                    f'data-tip="{esc(tip)}" '
+                    f'x="{bar_start:.1f}" y="{top_y:.1f}" '
+                    f'width="{bar_end - bar_start:.1f}" '
+                    f'height="{segment_height:.1f}"/>'
+                )
+                bottom = top_y
+    elif chart.gains:
         if segmented_area:
             previous_time = chart.start_epoch
             for timestamp, value in chart.gains:

@@ -9,7 +9,8 @@ from pathlib import Path
 
 from src.common import storage
 from src.common.utility import SKILLS, build_dsn
-from src.web import report, reporting
+from src.web import reporting
+from src.web.reports import general as report
 
 DSN = os.environ.get("VSCAPE_HCIM_TRACKER_TEST_DSN") or build_dsn(
     "xp_tracker_test"
@@ -100,7 +101,7 @@ class PlayerTest(DatabaseTest):
 
 
 class SnapshotTest(DatabaseTest):
-    def test_snapshot_and_checkpoint_writes(self) -> None:
+    def test_snapshot_checkpoint_and_lookups(self) -> None:
         self.add_player()
         rows = [
             ("alice", skill, storage.as_datetime(T1), 100)
@@ -130,7 +131,6 @@ class SnapshotTest(DatabaseTest):
             {T1, T2},
         )
 
-    def test_lookup_helpers(self) -> None:
         self.add_player("alice")
         self.add_player("bob")
         self.add_snapshot("alice", "overall", T1, 100)
@@ -160,8 +160,8 @@ class SnapshotTest(DatabaseTest):
         storage.insert_checkpoints(self.conn, "alice", [T1, T2])
         storage.insert_checkpoints(self.conn, "bob", [T1])
         buckets = storage.coverage_buckets(self.conn, T1, T2, 2)
-        self.assertEqual(buckets[0], (T1, 2))
-        self.assertEqual(buckets[1][1], 1)
+        self.assertEqual(buckets[0], storage.CoverageSlice(T1, 2, 2))
+        self.assertEqual(buckets[1], storage.CoverageSlice(T2, 1, 1))
 
         by_skill = storage.xp_by_skill_at_or_before(self.conn, T2)
         self.assertEqual(by_skill["overall"], {"alice": 200, "bob": 50})
@@ -206,7 +206,7 @@ class PriorityStorageTest(DatabaseTest):
 
 
 class ReportTest(DatabaseTest):
-    def test_player_watermark_follows_xp_not_checkpoints(self) -> None:
+    def test_watermarks_and_report_output(self) -> None:
         self.add_player("alice")
         self.add_snapshot("alice", "overall", T1, 100)
         storage.insert_checkpoints(self.conn, "alice", [T1])
@@ -227,7 +227,6 @@ class ReportTest(DatabaseTest):
         self.assertNotEqual(priority, after)
         self.assertEqual(priority["alice"][2], 1)
 
-    def test_write_report_ranks_and_prunes(self) -> None:
         now = 1_800_000_000
         self.add_player("alice")
         self.add_player("bob")
@@ -261,8 +260,8 @@ class ReportTest(DatabaseTest):
             self.assertEqual(
                 names,
                 [
-                    "general.html", "latest.txt", "players", "priority",
-                    "status.html", "status.txt",
+                    "general.html", "index.html", "latest.txt", "players",
+                    "priority", "status.html", "status.txt",
                 ],
             )
             page = Path(directory, "general.html").read_text(encoding="utf-8")
@@ -273,6 +272,9 @@ class ReportTest(DatabaseTest):
                 "https://vidyaplace.org/highscores?player=alice", player_html
             )
             self.assertIn("Current xp", player_html)
+            self.assertTrue(
+                Path(directory, "players", "alice.txt").exists()
+            )
             self.assertTrue(
                 Path(directory, "priority", "index.html").exists()
             )

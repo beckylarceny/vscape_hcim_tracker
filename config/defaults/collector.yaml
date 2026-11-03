@@ -36,7 +36,7 @@ urls:
 
 defaults:
   interval_seconds: 86400
-  collect_interval_seconds: 21600
+  collect_interval_seconds: 3600
   retry_window_seconds: 604800
   data_start_epoch: 1737849600
   workers: 2
