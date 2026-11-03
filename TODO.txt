@@ -1,2 +1,1 @@
-- make the data coverage bar fill patterns diagonal
 - split up src/web into subdirectories
